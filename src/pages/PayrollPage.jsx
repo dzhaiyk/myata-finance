@@ -20,6 +20,7 @@ export default function PayrollPage() {
   const [saving, setSaving] = useState(false)
   const [periodId, setPeriodId] = useState(null)
   const [periodStatus, setPeriodStatus] = useState('draft')
+  const [advancesByName, setAdvancesByName] = useState({})
 
   useEffect(() => { loadData() }, [year, month, period])
 
@@ -33,6 +34,33 @@ export default function PayrollPage() {
     setStaff(staffData)
     setPositions(posData)
 
+    // Calculate period date range
+    const startDay = period === 1 ? 1 : 16
+    const endDay = period === 1 ? 15 : new Date(year, month, 0).getDate()
+    const startDate = `${year}-${String(month).padStart(2, '0')}-${String(startDay).padStart(2, '0')}`
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`
+
+    // Load advances from daily reports for this period
+    const { data: reports } = await supabase
+      .from('daily_reports')
+      .select('data, report_date')
+      .gte('report_date', startDate)
+      .lte('report_date', endDate)
+
+    // Sum advances per staff name from daily reports
+    const advancesByName = {}
+    ;(reports || []).forEach(r => {
+      const payrollRows = (r.data?.withdrawals?.payroll) || []
+      payrollRows.forEach(row => {
+        if (row.name && Number(row.amount) > 0) {
+          const key = row.name.trim().toLowerCase()
+          if (!advancesByName[key]) advancesByName[key] = { total: 0, details: [] }
+          advancesByName[key].total += Number(row.amount)
+          advancesByName[key].details.push({ date: r.report_date, amount: Number(row.amount), comment: row.comment || '' })
+        }
+      })
+    })
+
     // Load or create period
     let { data: per } = await supabase
       .from('payroll_periods')
@@ -41,7 +69,6 @@ export default function PayrollPage() {
       .single()
 
     if (!per) {
-      // Auto-create period
       const { data: newPer } = await supabase
         .from('payroll_periods')
         .insert({ year, month, period })
@@ -54,32 +81,55 @@ export default function PayrollPage() {
       setPeriodId(per.id)
       setPeriodStatus(per.status)
 
-      // Load existing details
       const { data: details } = await supabase
         .from('payroll_details')
         .select('*')
         .eq('period_id', per.id)
 
+      const buildRow = (s, pos, existing) => {
+        const dailyRate = s.daily_rate_override || pos?.daily_rate || 0
+        const salesPct = s.sales_pct_override || pos?.sales_pct || 0
+        // Match advances by staff name (case-insensitive)
+        const nameKey = s.full_name.trim().toLowerCase()
+        const autoAdvances = advancesByName[nameKey]?.total || 0
+        const advDetails = advancesByName[nameKey]?.details || []
+
+        if (existing) {
+          // Use saved data but update advances from daily reports
+          const r = { ...existing, daily_rate: dailyRate, sales_pct: salesPct, position_name: pos?.name || '—' }
+          r.advances_from_reports = autoAdvances
+          r.advances_details = advDetails
+          // Only auto-update advances if they haven't been manually overridden
+          if (!existing._manual_advances) {
+            r.advances = autoAdvances
+            r.total_payout = r.total_earned - r.advances - r.deductions
+          }
+          return r
+        }
+
+        const row = makeRow(s, pos, dailyRate, salesPct)
+        row.advances = autoAdvances
+        row.advances_from_reports = autoAdvances
+        row.advances_details = advDetails
+        row.total_payout = row.total_earned - row.advances - row.deductions
+        return row
+      }
+
       if (details && details.length > 0) {
-        // Merge with current staff
         setRows(staffData.map(s => {
           const pos = posData.find(p => p.id === s.position_id)
           const existing = details.find(d => d.staff_id === s.id)
-          const dailyRate = s.daily_rate_override || pos?.daily_rate || 0
-          const salesPct = s.sales_pct_override || pos?.sales_pct || 0
-          if (existing) return { ...existing, daily_rate: dailyRate, sales_pct: salesPct, position_name: pos?.name || '—' }
-          return makeRow(s, pos, dailyRate, salesPct)
+          return buildRow(s, pos, existing)
         }))
       } else {
-        // Initialize rows from staff
         setRows(staffData.map(s => {
           const pos = posData.find(p => p.id === s.position_id)
-          const dailyRate = s.daily_rate_override || pos?.daily_rate || 0
-          const salesPct = s.sales_pct_override || pos?.sales_pct || 0
-          return makeRow(s, pos, dailyRate, salesPct)
+          return buildRow(s, pos, null)
         }))
       }
     }
+
+    setAdvancesByName(advancesByName)
   }
 
   const makeRow = (s, pos, dailyRate, salesPct) => ({
@@ -258,8 +308,28 @@ export default function PayrollPage() {
                     <td className="table-cell text-center text-xs text-slate-500">{r.sales_pct}%</td>
                     <td className="table-cell text-right font-mono text-xs text-purple-400">{fmt(r.sales_bonus)}</td>
                     <td className="table-cell text-right">
-                      <input type="text" inputMode="numeric" value={r.advances || ''} onChange={e => updateRow(r._idx, 'advances', e.target.value.replace(/[^0-9]/g, ''))}
-                        className="input text-xs text-right w-20 py-1 px-1 font-mono" placeholder="0" />
+                      <div className="relative group">
+                        <input type="text" inputMode="numeric" value={r.advances || ''} onChange={e => {
+                          const row = { ...rows[r._idx], advances: Number(e.target.value.replace(/[^0-9]/g, '')) || 0, _manual_advances: true }
+                          row.total_payout = row.total_earned - row.advances - row.deductions
+                          setRows(prev => prev.map((rr, i) => i === r._idx ? row : rr))
+                        }}
+                          className={cn('input text-xs text-right w-20 py-1 px-1 font-mono', r.advances_from_reports > 0 && '!border-yellow-500/40')} placeholder="0" />
+                        {r.advances_details?.length > 0 && (
+                          <div className="hidden group-hover:block absolute right-0 bottom-full mb-1 z-30 bg-slate-800 border border-slate-700 rounded-lg p-2 shadow-xl min-w-[200px]">
+                            <div className="text-[10px] font-semibold text-yellow-400 mb-1">Авансы из отчётов:</div>
+                            {r.advances_details.map((d, i) => (
+                              <div key={i} className="text-[10px] text-slate-400 flex justify-between gap-3">
+                                <span>{d.date}{d.comment ? ` — ${d.comment}` : ''}</span>
+                                <span className="font-mono">{fmt(d.amount)} ₸</span>
+                              </div>
+                            ))}
+                            <div className="text-[10px] font-semibold text-yellow-300 mt-1 pt-1 border-t border-slate-700 flex justify-between">
+                              <span>Итого</span><span className="font-mono">{fmt(r.advances_from_reports)} ₸</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className={cn('table-cell text-right font-mono text-xs font-bold', r.total_payout < 0 ? 'text-red-400' : 'text-brand-400')}>
                       {fmt(r.total_payout)} ₸
@@ -300,7 +370,8 @@ export default function PayrollPage() {
         <div className="text-xs text-slate-400 space-y-1">
           <p><b className="text-slate-300">Период 1 (1–15):</b> выплата 16–17 числа текущего месяца</p>
           <p><b className="text-slate-300">Период 2 (16–конец):</b> выплата 1–2 числа следующего месяца</p>
-          <p><b className="text-slate-300">К выплате</b> = (Дни × Ставка) + (Продажи × %) − Авансы</p>
+          <p><b className="text-slate-300">К выплате</b> = (Дни × Ставка) + (Продажи × %) − Авансы − Удержания</p>
+          <p><b className="text-yellow-400">Авансы</b> подтягиваются автоматически из ежедневных отчётов (секция «ЗП и авансы»). Наведите на поле аванса чтобы увидеть детали. Можно скорректировать вручную.</p>
           <p>Данные продаж вносите из iiko вручную. Ставки и % берутся из справочника «Должности».</p>
         </div>
       </div>

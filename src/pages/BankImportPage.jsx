@@ -1,50 +1,114 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
 import { parseBankStatement } from '@/lib/categorize'
-import { Upload, Trash2, Settings, Plus, X, Filter, Eye, EyeOff, Save } from 'lucide-react'
+import { Upload, Trash2, Settings, Plus, X, Save, ChevronDown, ChevronRight } from 'lucide-react'
 
-const CATEGORIES = {
-  income_kaspi: 'Доход Kaspi', income_other: 'Прочий доход',
-  cogs_kitchen: 'Закуп Кухня', cogs_bar: 'Закуп Бар', cogs_hookah: 'Закуп Кальян',
-  payroll: 'ЗП/Авансы', marketing: 'Маркетинг', rent: 'Аренда',
-  utilities: 'Коммуналка', opex: 'Прочие OpEx', tax: 'Налоги',
-  capex: 'CapEx', dividends: 'Дивиденды', internal: 'Внутренние', fee: 'Комиссия банка',
-  uncategorized: '❓ Не распознано',
+const FIELDS = [
+  { value: 'beneficiary', label: 'Бенефициар' },
+  { value: 'purpose', label: 'Назначение' },
+  { value: 'knp', label: 'КНП' },
+  { value: 'amount', label: 'Сумма' },
+]
+const OPERATORS = {
+  beneficiary: [{ value: 'contains', label: 'содержит' }, { value: 'equals', label: 'равно' }, { value: 'starts_with', label: 'начинается с' }],
+  purpose: [{ value: 'contains', label: 'содержит' }, { value: 'equals', label: 'равно' }, { value: 'starts_with', label: 'начинается с' }],
+  knp: [{ value: 'equals', label: 'равно' }, { value: 'contains', label: 'содержит' }],
+  amount: [{ value: 'gt', label: '>' }, { value: 'lt', label: '<' }, { value: 'equals', label: '=' }],
 }
 
 export default function BankImportPage() {
   const { hasPermission } = useAuthStore()
   const canManage = hasPermission('bank_import.categorize')
   const [transactions, setTransactions] = useState([])
+  const [categories, setCategories] = useState([])
   const [rules, setRules] = useState([])
+  const [ruleConditions, setRuleConditions] = useState([])
   const [showRules, setShowRules] = useState(false)
-  const [hideHidden, setHideHidden] = useState(true)
+  const [showAddRule, setShowAddRule] = useState(false)
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
-  const [newRule, setNewRule] = useState({ field: 'beneficiary', keyword: '', category: 'cogs_kitchen', action: 'categorize' })
+  const [selectedIds, setSelectedIds] = useState(new Set())
+
+  // New rule form
+  const [newRule, setNewRule] = useState({
+    name: '', logic: 'and', category_code: '', action: 'categorize',
+    conditions: [{ field: 'beneficiary', operator: 'contains', value: '' }],
+  })
 
   useEffect(() => { load() }, [])
 
   const load = async () => {
     setLoading(true)
-    const [txRes, rulesRes] = await Promise.all([
+    const [txRes, catRes, rulesRes, condRes] = await Promise.all([
       supabase.from('bank_transactions').select('*').order('transaction_date', { ascending: false }).limit(500),
-      supabase.from('bank_rules').select('*').eq('is_active', true).order('field, keyword'),
+      supabase.from('categories').select('*').eq('is_active', true).order('sort_order'),
+      supabase.from('bank_rules').select('*').eq('is_active', true).order('created_at'),
+      supabase.from('bank_rule_conditions').select('*').order('sort_order'),
     ])
     setTransactions(txRes.data || [])
+    setCategories(catRes.data || [])
     setRules(rulesRes.data || [])
+    setRuleConditions(condRes.data || [])
     setLoading(false)
   }
 
+  // Category lookup
+  const catMap = useMemo(() => {
+    const m = {}
+    categories.forEach(c => { m[c.code] = c })
+    return m
+  }, [categories])
+
+  const catName = (code) => catMap[code]?.name || code
+
+  // Group categories by type for select
+  const catGroups = useMemo(() => {
+    const groups = {}
+    categories.forEach(c => {
+      if (!groups[c.type]) groups[c.type] = []
+      groups[c.type].push(c)
+    })
+    return groups
+  }, [categories])
+
+  const TYPE_LABELS = { income: 'Доходы', cogs: 'Себестоимость', opex: 'Операционные', below_ebitda: 'Ниже EBITDA', other: 'Прочее' }
+
+  // Build full rules with conditions
+  const fullRules = useMemo(() => {
+    return rules.map(r => ({
+      ...r,
+      conditions: ruleConditions.filter(c => c.rule_id === r.id),
+    }))
+  }, [rules, ruleConditions])
+
   // Apply rules to a transaction
-  const applyRules = (tx, rulesList) => {
-    for (const rule of rulesList) {
-      const field = rule.field === 'beneficiary' ? (tx.beneficiary || '') : (tx.purpose || '')
-      if (field.toLowerCase().includes(rule.keyword.toLowerCase())) {
-        return { category: rule.category, action: rule.action, confidence: 'auto' }
-      }
+  const matchCondition = (tx, cond) => {
+    const fieldVal = (() => {
+      if (cond.field === 'beneficiary') return tx.beneficiary || ''
+      if (cond.field === 'purpose') return tx.purpose || ''
+      if (cond.field === 'knp') return tx.knp || ''
+      if (cond.field === 'amount') return String(Math.abs(tx.amount || 0))
+      return ''
+    })()
+
+    switch (cond.operator) {
+      case 'contains': return fieldVal.toLowerCase().includes(cond.value.toLowerCase())
+      case 'equals': return fieldVal.toLowerCase() === cond.value.toLowerCase()
+      case 'starts_with': return fieldVal.toLowerCase().startsWith(cond.value.toLowerCase())
+      case 'gt': return Number(fieldVal) > Number(cond.value)
+      case 'lt': return Number(fieldVal) < Number(cond.value)
+      default: return false
+    }
+  }
+
+  const applyRules = (tx) => {
+    for (const rule of fullRules) {
+      if (rule.conditions.length === 0) continue
+      const matches = rule.conditions.map(c => matchCondition(tx, c))
+      const pass = rule.logic === 'and' ? matches.every(Boolean) : matches.some(Boolean)
+      if (pass) return { category: rule.category_code, action: rule.action }
     }
     return null
   }
@@ -64,13 +128,31 @@ export default function BankImportPage() {
       const batchId = crypto.randomUUID()
       const parsed = parseBankStatement(rows)
 
-      // Apply custom rules
-      const { data: currentRules } = await supabase.from('bank_rules').select('*').eq('is_active', true)
-      const rulesList = currentRules || []
+      // Re-fetch rules for freshness
+      const [rRes, cRes] = await Promise.all([
+        supabase.from('bank_rules').select('*').eq('is_active', true),
+        supabase.from('bank_rule_conditions').select('*'),
+      ])
+      const freshRules = (rRes.data || []).map(r => ({
+        ...r,
+        conditions: (cRes.data || []).filter(c => c.rule_id === r.id),
+      }))
 
-      const toInsert = parsed.map(tx => {
-        const ruleMatch = applyRules(tx, rulesList)
-        return {
+      let hidden = 0
+      const toInsert = []
+      for (const tx of parsed) {
+        // Apply fresh rules
+        let ruleMatch = null
+        for (const rule of freshRules) {
+          if (rule.conditions.length === 0) continue
+          const matches = rule.conditions.map(c => matchCondition(tx, c))
+          const pass = rule.logic === 'and' ? matches.every(Boolean) : matches.some(Boolean)
+          if (pass) { ruleMatch = { category: rule.category_code, action: rule.action }; break }
+        }
+
+        if (ruleMatch?.action === 'hide') { hidden++; continue }
+
+        toInsert.push({
           transaction_date: tx.date,
           amount: Math.abs(tx.amount),
           is_debit: tx.amount < 0 || tx.is_debit,
@@ -78,23 +160,17 @@ export default function BankImportPage() {
           purpose: tx.purpose || '',
           knp: tx.knp || '',
           category: ruleMatch?.category || tx.category || 'uncategorized',
-          confidence: ruleMatch?.confidence || tx.confidence || 'low',
+          confidence: ruleMatch ? 'auto' : tx.confidence || 'low',
           import_file: file.name,
           import_batch_id: batchId,
-          _hidden: ruleMatch?.action === 'hide',
-        }
-      }).filter(tx => !tx._hidden) // Remove hidden ones
-
-      // Clean _hidden field
-      const cleaned = toInsert.map(({ _hidden, ...rest }) => rest)
-
-      if (cleaned.length > 0) {
-        const { error } = await supabase.from('bank_transactions').insert(cleaned)
-        if (error) throw error
+        })
       }
 
-      const hidden = parsed.length - cleaned.length
-      alert(`✅ Импортировано ${cleaned.length} записей${hidden > 0 ? ` (${hidden} скрыто по правилам)` : ''}`)
+      if (toInsert.length > 0) {
+        const { error } = await supabase.from('bank_transactions').insert(toInsert)
+        if (error) throw error
+      }
+      alert(`✅ Импортировано ${toInsert.length} записей${hidden > 0 ? ` (${hidden} скрыто по правилам)` : ''}`)
       load()
     } catch (err) { alert('Ошибка импорта: ' + err.message) }
     setImporting(false)
@@ -111,35 +187,66 @@ export default function BankImportPage() {
     setTransactions(prev => prev.filter(t => t.id !== id))
   }
 
-  const deleteSelected = async (ids) => {
+  const deleteSelected = async () => {
+    const ids = [...selectedIds]
     if (!confirm(`Удалить ${ids.length} записей?`)) return
     for (const id of ids) {
       await supabase.from('bank_transactions').delete().eq('id', id)
     }
+    setSelectedIds(new Set())
     load()
   }
 
-  // Rules CRUD
-  const addRule = async () => {
-    if (!newRule.keyword.trim()) return alert('Введите ключевое слово')
-    const { error } = await supabase.from('bank_rules').insert({
-      field: newRule.field, keyword: newRule.keyword.trim(),
-      category: newRule.category, action: newRule.action,
-    })
-    if (error) {
-      if (error.code === '23505') return alert('Такое правило уже есть')
-      return alert('Ошибка: ' + error.message)
-    }
-    setNewRule({ field: 'beneficiary', keyword: '', category: 'cogs_kitchen', action: 'categorize' })
+  // ===== RULES CRUD =====
+  const addCondition = () => {
+    setNewRule(r => ({ ...r, conditions: [...r.conditions, { field: 'beneficiary', operator: 'contains', value: '' }] }))
+  }
+  const removeCondition = (idx) => {
+    setNewRule(r => ({ ...r, conditions: r.conditions.filter((_, i) => i !== idx) }))
+  }
+  const updateCondition = (idx, key, val) => {
+    setNewRule(r => ({
+      ...r,
+      conditions: r.conditions.map((c, i) => {
+        if (i !== idx) return c
+        const updated = { ...c, [key]: val }
+        // Reset operator when field changes
+        if (key === 'field') updated.operator = OPERATORS[val]?.[0]?.value || 'contains'
+        return updated
+      }),
+    }))
+  }
+
+  const saveRule = async () => {
+    if (!newRule.name.trim()) return alert('Введите название правила')
+    if (newRule.action === 'categorize' && !newRule.category_code) return alert('Выберите категорию')
+    if (newRule.conditions.some(c => !c.value.trim())) return alert('Заполните все условия')
+
+    const { data: rule, error } = await supabase.from('bank_rules').insert({
+      name: newRule.name, logic: newRule.logic,
+      category_code: newRule.action === 'hide' ? 'uncategorized' : newRule.category_code,
+      action: newRule.action,
+    }).select().single()
+    if (error) return alert('Ошибка: ' + error.message)
+
+    // Insert conditions
+    const condPayload = newRule.conditions.map((c, i) => ({
+      rule_id: rule.id, field: c.field, operator: c.operator, value: c.value, sort_order: i,
+    }))
+    await supabase.from('bank_rule_conditions').insert(condPayload)
+
+    setNewRule({ name: '', logic: 'and', category_code: '', action: 'categorize', conditions: [{ field: 'beneficiary', operator: 'contains', value: '' }] })
+    setShowAddRule(false)
     load()
   }
 
   const deleteRule = async (id) => {
+    if (!confirm('Удалить правило?')) return
     await supabase.from('bank_rules').delete().eq('id', id)
     load()
   }
 
-  // Sort: uncategorized first, then by date desc
+  // Sort: uncategorized first
   const sorted = [...transactions].sort((a, b) => {
     if (a.category === 'uncategorized' && b.category !== 'uncategorized') return -1
     if (a.category !== 'uncategorized' && b.category === 'uncategorized') return 1
@@ -147,10 +254,21 @@ export default function BankImportPage() {
   })
 
   const uncatCount = transactions.filter(t => t.category === 'uncategorized').length
-  const [selectedIds, setSelectedIds] = useState(new Set())
   const toggleSelect = (id) => setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
 
   if (loading) return <div className="text-center text-slate-500 py-20">Загрузка...</div>
+
+  // Category select with optgroups
+  const CategorySelect = ({ value, onChange, className = '' }) => (
+    <select value={value} onChange={e => onChange(e.target.value)} className={`input text-sm ${className}`}>
+      <option value="">— Выберите —</option>
+      {Object.entries(catGroups).map(([type, cats]) => (
+        <optgroup key={type} label={TYPE_LABELS[type] || type}>
+          {cats.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+        </optgroup>
+      ))}
+    </select>
+  )
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -160,10 +278,12 @@ export default function BankImportPage() {
           <p className="text-sm text-slate-500 mt-0.5">{transactions.length} записей{uncatCount > 0 ? ` · ${uncatCount} не распознано` : ''}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowRules(!showRules)}
-            className={cn('btn-secondary text-sm flex items-center gap-2', showRules && 'border-brand-500/50')}>
-            <Settings className="w-4 h-4" /> Правила
-          </button>
+          {canManage && (
+            <button onClick={() => setShowRules(!showRules)}
+              className={cn('btn-secondary text-sm flex items-center gap-2', showRules && 'border-brand-500/50')}>
+              <Settings className="w-4 h-4" /> Правила ({fullRules.length})
+            </button>
+          )}
           <label className={cn('btn-primary text-sm flex items-center gap-2 cursor-pointer', importing && 'opacity-50')}>
             <Upload className="w-4 h-4" />{importing ? 'Импорт...' : 'Загрузить Excel'}
             <input type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" disabled={importing} />
@@ -171,50 +291,120 @@ export default function BankImportPage() {
         </div>
       </div>
 
-      {/* Rules Panel */}
+      {/* ===== RULES PANEL ===== */}
       {showRules && canManage && (
         <div className="card border-brand-500/30 space-y-4">
-          <div className="text-sm font-semibold text-brand-400">Правила автокатегоризации</div>
-          <p className="text-xs text-slate-500">При импорте, записи с совпадающим ключевым словом будут автоматически категоризованы или скрыты.</p>
-
-          {/* Add rule */}
-          <div className="flex flex-col sm:flex-row gap-2">
-            <select value={newRule.field} onChange={e => setNewRule(r => ({...r, field: e.target.value}))} className="input text-sm">
-              <option value="beneficiary">Бенефициар</option>
-              <option value="purpose">Назначение</option>
-            </select>
-            <input value={newRule.keyword} onChange={e => setNewRule(r => ({...r, keyword: e.target.value}))}
-              className="input text-sm flex-1" placeholder="Ключевое слово (напр. KASPI, ТОО Арай)" />
-            <select value={newRule.action} onChange={e => setNewRule(r => ({...r, action: e.target.value}))} className="input text-sm">
-              <option value="categorize">Категоризовать</option>
-              <option value="hide">Скрыть (не импортировать)</option>
-            </select>
-            {newRule.action === 'categorize' && (
-              <select value={newRule.category} onChange={e => setNewRule(r => ({...r, category: e.target.value}))} className="input text-sm">
-                {Object.entries(CATEGORIES).filter(([k]) => k !== 'uncategorized').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            )}
-            <button onClick={addRule} className="btn-primary text-sm"><Plus className="w-4 h-4" /></button>
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold text-brand-400">Правила автокатегоризации</div>
+            <button onClick={() => setShowAddRule(!showAddRule)}
+              className="btn-primary text-xs flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5" /> Новое правило
+            </button>
           </div>
 
-          {/* Existing rules */}
-          <div className="space-y-1">
-            {rules.map(r => (
-              <div key={r.id} className="flex items-center justify-between bg-slate-900 rounded-lg px-3 py-2">
-                <div className="flex items-center gap-3 text-sm">
-                  <span className="badge-blue text-[10px]">{r.field === 'beneficiary' ? 'Бенефициар' : 'Назначение'}</span>
-                  <span className="font-mono text-xs text-slate-300">«{r.keyword}»</span>
-                  <span className="text-slate-500">→</span>
-                  {r.action === 'hide' ? (
-                    <span className="badge-red text-[10px]">Скрыть</span>
-                  ) : (
-                    <span className="badge-green text-[10px]">{CATEGORIES[r.category] || r.category}</span>
+          {/* Add Rule Form */}
+          {showAddRule && (
+            <div className="bg-slate-900 rounded-xl p-4 space-y-4 border border-slate-700">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div><label className="label">Название правила *</label>
+                  <input value={newRule.name} onChange={e => setNewRule(r => ({...r, name: e.target.value}))}
+                    className="input text-sm w-full" placeholder="Напр: Аренда от ТОО Алатау" /></div>
+                <div><label className="label">Действие</label>
+                  <select value={newRule.action} onChange={e => setNewRule(r => ({...r, action: e.target.value}))} className="input text-sm w-full">
+                    <option value="categorize">Категоризовать</option>
+                    <option value="hide">Скрыть (не импортировать)</option>
+                  </select></div>
+                {newRule.action === 'categorize' && (
+                  <div><label className="label">Категория *</label>
+                    <CategorySelect value={newRule.category_code} onChange={v => setNewRule(r => ({...r, category_code: v}))} className="w-full" /></div>
+                )}
+              </div>
+
+              {/* Conditions */}
+              <div>
+                <div className="flex items-center gap-3 mb-3">
+                  <label className="label mb-0">Условия</label>
+                  {newRule.conditions.length > 1 && (
+                    <div className="flex bg-slate-800 rounded-lg p-0.5">
+                      <button onClick={() => setNewRule(r => ({...r, logic: 'and'}))}
+                        className={cn('px-3 py-1 rounded-md text-xs font-medium', newRule.logic === 'and' ? 'bg-brand-500 text-white' : 'text-slate-500')}>
+                        И (AND)
+                      </button>
+                      <button onClick={() => setNewRule(r => ({...r, logic: 'or'}))}
+                        className={cn('px-3 py-1 rounded-md text-xs font-medium', newRule.logic === 'or' ? 'bg-brand-500 text-white' : 'text-slate-500')}>
+                        ИЛИ (OR)
+                      </button>
+                    </div>
                   )}
                 </div>
-                <button onClick={() => deleteRule(r.id)} className="p-1 text-slate-600 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
+
+                <div className="space-y-2">
+                  {newRule.conditions.map((cond, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      {idx > 0 && (
+                        <span className="text-[10px] font-bold text-brand-400 w-8 text-center">
+                          {newRule.logic === 'and' ? 'И' : 'ИЛИ'}
+                        </span>
+                      )}
+                      {idx === 0 && newRule.conditions.length > 1 && <span className="w-8" />}
+                      <select value={cond.field} onChange={e => updateCondition(idx, 'field', e.target.value)} className="input text-xs w-32">
+                        {FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                      </select>
+                      <select value={cond.operator} onChange={e => updateCondition(idx, 'operator', e.target.value)} className="input text-xs w-32">
+                        {(OPERATORS[cond.field] || []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      <input value={cond.value} onChange={e => updateCondition(idx, 'value', e.target.value)}
+                        className="input text-xs flex-1 font-mono" placeholder={cond.field === 'amount' ? '100000' : 'Ключевое слово'} />
+                      {newRule.conditions.length > 1 && (
+                        <button onClick={() => removeCondition(idx)} className="p-1 text-slate-600 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <button onClick={addCondition} className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 mt-2">
+                  <Plus className="w-3.5 h-3.5" /> Добавить условие
+                </button>
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-slate-700">
+                <button onClick={saveRule} className="btn-primary text-sm">Сохранить правило</button>
+                <button onClick={() => setShowAddRule(false)} className="btn-secondary text-sm">Отмена</button>
+              </div>
+            </div>
+          )}
+
+          {/* Existing Rules */}
+          <div className="space-y-2">
+            {fullRules.map(rule => (
+              <div key={rule.id} className="bg-slate-900 rounded-xl px-4 py-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium">{rule.name}</span>
+                    <span className="text-slate-500">→</span>
+                    {rule.action === 'hide' ? (
+                      <span className="badge badge-red text-[10px]">Скрыть</span>
+                    ) : (
+                      <span className="badge badge-green text-[10px]">{catName(rule.category_code)}</span>
+                    )}
+                  </div>
+                  <button onClick={() => deleteRule(rule.id)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {rule.conditions.map((c, i) => (
+                    <span key={c.id} className="flex items-center gap-1.5">
+                      {i > 0 && <span className="text-[10px] font-bold text-brand-400">{rule.logic === 'and' ? 'И' : 'ИЛИ'}</span>}
+                      <span className="text-[11px] bg-slate-800 rounded-lg px-2 py-1 font-mono">
+                        <span className="text-blue-400">{FIELDS.find(f => f.value === c.field)?.label}</span>
+                        <span className="text-slate-500 mx-1">{OPERATORS[c.field]?.find(o => o.value === c.operator)?.label}</span>
+                        <span className="text-amber-400">«{c.value}»</span>
+                      </span>
+                    </span>
+                  ))}
+                </div>
               </div>
             ))}
-            {rules.length === 0 && <div className="text-xs text-slate-600 text-center py-3">Нет правил. Добавьте первое.</div>}
+            {fullRules.length === 0 && <div className="text-xs text-slate-600 text-center py-4">Нет правил. Создайте первое.</div>}
           </div>
         </div>
       )}
@@ -223,8 +413,7 @@ export default function BankImportPage() {
       {selectedIds.size > 0 && (
         <div className="card flex items-center justify-between bg-red-500/5 border-red-500/20">
           <span className="text-sm">Выбрано: {selectedIds.size}</span>
-          <button onClick={() => deleteSelected([...selectedIds]).then(() => setSelectedIds(new Set()))}
-            className="btn-danger text-sm flex items-center gap-2"><Trash2 className="w-4 h-4" /> Удалить выбранные</button>
+          <button onClick={deleteSelected} className="btn-danger text-sm flex items-center gap-2"><Trash2 className="w-4 h-4" /> Удалить выбранные</button>
         </div>
       )}
 
@@ -255,13 +444,11 @@ export default function BankImportPage() {
                 </td>
                 <td className="table-cell text-center">
                   {canManage ? (
-                    <select value={tx.category} onChange={e => updateCategory(tx.id, e.target.value)}
-                      className={cn('input text-[11px] py-1 px-2 w-36', tx.category === 'uncategorized' && '!border-yellow-500/50 !bg-yellow-500/10')}>
-                      {Object.entries(CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                    </select>
+                    <CategorySelect value={tx.category} onChange={v => updateCategory(tx.id, v)}
+                      className={cn('text-[11px] py-1 px-2 w-40', tx.category === 'uncategorized' && '!border-yellow-500/50 !bg-yellow-500/10')} />
                   ) : (
                     <span className={cn('badge text-[10px]', tx.category === 'uncategorized' ? 'badge-yellow' : 'badge-blue')}>
-                      {CATEGORIES[tx.category] || tx.category}
+                      {catName(tx.category)}
                     </span>
                   )}
                 </td>

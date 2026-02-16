@@ -8,15 +8,6 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 const CURRENT_YEAR = new Date().getFullYear()
 const CURRENT_MONTH = new Date().getMonth() + 1
 
-// Mapping bank_transactions categories to P&L lines
-const BANK_TO_PNL = {
-  cogs_kitchen: 'cogs', cogs_bar: 'cogs', cogs_hookah: 'cogs',
-  payroll: 'payroll', rent: 'rent', utilities: 'utilities',
-  marketing: 'marketing', tax: 'tax', fee: 'bank_fees',
-  opex: 'other_opex', capex: 'capex', dividends: 'dividends',
-  internal: null, income_kaspi: null, income_other: null,
-}
-
 export default function PnLPage() {
   const { hasPermission } = useAuthStore()
   const [year, setYear] = useState(CURRENT_YEAR)
@@ -25,6 +16,7 @@ export default function PnLPage() {
   const [dailyReports, setDailyReports] = useState([])
   const [bankTx, setBankTx] = useState([])
   const [adjustments, setAdjustments] = useState([])
+  const [categories, setCategories] = useState([])
   const [showAddAdj, setShowAddAdj] = useState(false)
   const [adjForm, setAdjForm] = useState({ type: 'income', category: 'other_income', amount: '', description: '' })
   const [loading, setLoading] = useState(true)
@@ -38,7 +30,7 @@ export default function PnLPage() {
     const endMonth = viewMode === 'ytd' ? 12 : month
     const endDate = `${year}-${String(endMonth).padStart(2, '0')}-${new Date(year, endMonth, 0).getDate()}`
 
-    const [drRes, btRes, adjRes] = await Promise.all([
+    const [drRes, btRes, adjRes, catRes] = await Promise.all([
       supabase.from('daily_reports').select('*')
         .gte('report_date', startDate).lte('report_date', endDate).order('report_date'),
       supabase.from('bank_transactions').select('*')
@@ -46,10 +38,12 @@ export default function PnLPage() {
         .eq('is_debit', true), // Only expenses from bank
       supabase.from('pnl_data').select('*')
         .eq('year', year).gte('month', viewMode === 'ytd' ? 1 : month).lte('month', endMonth),
+      supabase.from('categories').select('*').eq('is_active', true).order('sort_order'),
     ])
     setDailyReports(drRes.data || [])
     setBankTx(btRes.data || [])
     setAdjustments(adjRes.data || [])
+    setCategories(catRes.data || [])
     setLoading(false)
   }
 
@@ -82,28 +76,43 @@ export default function PnLPage() {
       ;(w.tobacco || []).forEach(row => { cogsCashHookah += Number(row.amount) || 0 })
     })
 
-    // --- COGS from bank (non-cash purchases) ---
-    let cogsBankKitchen = 0, cogsBankBar = 0, cogsBankHookah = 0
+    // --- Build category map and aggregate bank transactions by pnl_group ---
+    const catMap = {}
+    categories.forEach(c => { catMap[c.code] = c })
+    const bankByGroup = {}
     bankTx.forEach(tx => {
-      if (tx.category === 'cogs_kitchen') cogsBankKitchen += Number(tx.amount) || 0
-      if (tx.category === 'cogs_bar') cogsBankBar += Number(tx.amount) || 0
-      if (tx.category === 'cogs_hookah') cogsBankHookah += Number(tx.amount) || 0
+      const cat = catMap[tx.category]
+      if (!cat) return
+      const group = cat.pnl_group || 'uncategorized'
+      bankByGroup[group] = (bankByGroup[group] || 0) + (Number(tx.amount) || 0)
+    })
+
+    // --- COGS from bank (non-cash purchases, using pnl_group='cogs') ---
+    let cogsBankKitchen = 0, cogsBankBar = 0, cogsBankHookah = 0, cogsBankOther = 0
+    bankTx.forEach(tx => {
+      const cat = catMap[tx.category]
+      if (cat?.pnl_group === 'cogs') {
+        if (tx.category === 'cogs_kitchen') cogsBankKitchen += Number(tx.amount) || 0
+        else if (tx.category === 'cogs_bar') cogsBankBar += Number(tx.amount) || 0
+        else if (tx.category === 'cogs_hookah') cogsBankHookah += Number(tx.amount) || 0
+        else cogsBankOther += Number(tx.amount) || 0
+      }
     })
 
     const cogsKitchen = cogsCashKitchen + cogsBankKitchen
     const cogsBar = cogsCashBar + cogsBankBar
     const cogsHookah = cogsCashHookah + cogsBankHookah
-    const totalCOGS = cogsKitchen + cogsBar + cogsHookah
+    const totalCOGS = cogsKitchen + cogsBar + cogsHookah + cogsBankOther
 
     const grossProfit = totalRevenue - totalCOGS
 
-    // --- PAYROLL from daily reports + bank ---
+    // --- PAYROLL from daily reports + bank (pnl_group='payroll') ---
     let payrollCash = 0
     dailyReports.forEach(r => {
       const w = (r.data || {}).withdrawals || {}
       ;(w.payroll || []).forEach(row => { payrollCash += Number(row.amount) || 0 })
     })
-    const payrollBank = bankTx.filter(tx => tx.category === 'payroll').reduce((s, tx) => s + Number(tx.amount), 0)
+    const payrollBank = bankByGroup['payroll'] || 0
     const totalPayroll = payrollCash + payrollBank
 
     // --- Other OpEx from daily reports ---
@@ -113,43 +122,44 @@ export default function PnLPage() {
       ;(w.other || []).forEach(row => { otherCashExpenses += Number(row.amount) || 0 })
     })
 
-    // --- OpEx from bank ---
-    const rent = bankTx.filter(tx => tx.category === 'rent').reduce((s, tx) => s + Number(tx.amount), 0)
-    const utilities = bankTx.filter(tx => tx.category === 'utilities').reduce((s, tx) => s + Number(tx.amount), 0)
-    const marketing = bankTx.filter(tx => tx.category === 'marketing').reduce((s, tx) => s + Number(tx.amount), 0)
-    const bankFees = bankTx.filter(tx => tx.category === 'fee').reduce((s, tx) => s + Number(tx.amount), 0)
-    const otherOpexBank = bankTx.filter(tx => tx.category === 'opex').reduce((s, tx) => s + Number(tx.amount), 0)
+    // --- OpEx from bank (dynamic from categories pnl_group) ---
+    const rent = bankByGroup['rent'] || 0
+    const utilities = bankByGroup['utilities'] || 0
+    const marketing = bankByGroup['marketing'] || 0
+    const bankFees = bankByGroup['bank_fees'] || 0
+    const otherOpexBank = bankByGroup['opex_other'] || 0
 
     const totalOpEx = totalPayroll + rent + utilities + marketing + bankFees + otherCashExpenses + otherOpexBank
 
     const ebitda = grossProfit - totalOpEx
 
-    // --- Below EBITDA ---
-    const tax = bankTx.filter(tx => tx.category === 'tax').reduce((s, tx) => s + Number(tx.amount), 0)
-    const capex = bankTx.filter(tx => tx.category === 'capex').reduce((s, tx) => s + Number(tx.amount), 0)
-    const dividends = bankTx.filter(tx => tx.category === 'dividends').reduce((s, tx) => s + Number(tx.amount), 0)
+    // --- Below EBITDA (dynamic) ---
+    const tax = bankByGroup['tax'] || 0
+    const capex = bankByGroup['capex'] || 0
+    const dividends = bankByGroup['dividends'] || 0
+    const loan = bankByGroup['loan'] || 0
 
     // --- Manual adjustments ---
     const adjIncome = adjustments.filter(a => a.type === 'income').reduce((s, a) => s + Number(a.amount), 0)
     const adjExpense = adjustments.filter(a => a.type === 'expense').reduce((s, a) => s + Number(a.amount), 0)
 
-    const netProfit = ebitda - tax - capex + adjIncome - adjExpense
+    const netProfit = ebitda - tax - capex - loan + adjIncome - adjExpense
 
     return {
       totalRevenue, revKitchen, revBar, revHookah, revOther,
-      cogsKitchen, cogsBar, cogsHookah, totalCOGS,
+      cogsKitchen, cogsBar, cogsHookah, cogsBankOther, totalCOGS,
       cogsCashKitchen, cogsCashBar, cogsCashHookah,
       cogsBankKitchen, cogsBankBar, cogsBankHookah,
       grossProfit,
       totalPayroll, payrollCash, payrollBank,
       rent, utilities, marketing, bankFees,
       otherCashExpenses, otherOpexBank, totalOpEx,
-      ebitda, tax, capex, dividends,
+      ebitda, tax, capex, dividends, loan,
       adjIncome, adjExpense, netProfit,
       reportCount: dailyReports.length,
       bankTxCount: bankTx.length,
     }
-  }, [dailyReports, bankTx, adjustments])
+  }, [dailyReports, bankTx, adjustments, categories])
 
   const pct = (v) => pnl.totalRevenue > 0 ? ((v / pnl.totalRevenue) * 100).toFixed(1) + '%' : '—'
 
@@ -276,6 +286,7 @@ export default function PnLPage() {
               sub={`нал ${fmt(pnl.cogsCashBar)} + безнал ${fmt(pnl.cogsBankBar)}`} />
             <Line label="Табак / Кальян" value={pnl.cogsHookah} pctVal={pct(pnl.cogsHookah)} indent
               sub={`нал ${fmt(pnl.cogsCashHookah)} + безнал ${fmt(pnl.cogsBankHookah)}`} />
+            {pnl.cogsBankOther > 0 && <Line label="Закуп Прочее (безнал)" value={pnl.cogsBankOther} pctVal={pct(pnl.cogsBankOther)} indent />}
           </div>
         )}
 
@@ -307,11 +318,12 @@ export default function PnLPage() {
         {/* Below EBITDA */}
         <SectionHeader label="НИЖЕ EBITDA" icon="📉" isOpen={expanded.below}
           toggle={() => setExpanded(p => ({...p, below: !p.below}))}
-          total={pnl.tax + pnl.capex} pctVal={pct(pnl.tax + pnl.capex)} color="text-slate-400" />
+          total={pnl.tax + pnl.capex + pnl.loan} pctVal={pct(pnl.tax + pnl.capex + pnl.loan)} color="text-slate-400" />
         {expanded.below && (
           <div>
             <Line label="Налоги" value={pnl.tax} pctVal={pct(pnl.tax)} indent />
             <Line label="CapEx" value={pnl.capex} pctVal={pct(pnl.capex)} indent />
+            {pnl.loan > 0 && <Line label="Погашение кредита" value={pnl.loan} pctVal={pct(pnl.loan)} indent />}
             {pnl.dividends > 0 && <Line label="Дивиденды" value={pnl.dividends} pctVal={pct(pnl.dividends)} indent />}
             {pnl.adjIncome > 0 && <Line label="Прочие доходы (ручн.)" value={pnl.adjIncome} indent color="text-green-400" />}
             {pnl.adjExpense > 0 && <Line label="Прочие расходы (ручн.)" value={pnl.adjExpense} indent color="text-red-400" />}
