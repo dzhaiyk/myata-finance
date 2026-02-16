@@ -1,200 +1,392 @@
-import { useState } from 'react'
-import { fmt, fmtPct, MONTHS_RU, cn } from '@/lib/utils'
-import { ChevronDown, ChevronRight, Download } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { supabase } from '@/lib/supabase'
+import { useAuthStore } from '@/lib/store'
+import { cn, fmt, MONTHS_RU } from '@/lib/utils'
+import { TrendingUp, TrendingDown, Plus, Trash2, ChevronDown, ChevronRight, FileText, Upload, Info } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
-const PNL_STRUCTURE = [
-  { key: 'revenue', label: 'ДОХОДЫ', type: 'header', color: 'bg-green-600/20 text-green-400' },
-  { key: 'rev_kitchen', label: 'Кухня', parent: 'revenue' },
-  { key: 'rev_bar', label: 'Бар', parent: 'revenue' },
-  { key: 'rev_hookah', label: 'Кальян', parent: 'revenue' },
-  { key: 'rev_other', label: 'Прочее', parent: 'revenue' },
-  { key: 'total_revenue', label: 'ИТОГО ДОХОДЫ', type: 'total', color: 'bg-green-700/30 text-green-300 font-bold' },
+const CURRENT_YEAR = new Date().getFullYear()
+const CURRENT_MONTH = new Date().getMonth() + 1
 
-  { key: 'cogs', label: 'СЕБЕСТОИМОСТЬ (Food Cost)', type: 'header', color: 'bg-amber-600/20 text-amber-400' },
-  { key: 'cogs_kitchen', label: 'Закуп кухня', parent: 'cogs' },
-  { key: 'cogs_bar', label: 'Закуп бар', parent: 'cogs' },
-  { key: 'cogs_hookah', label: 'Закуп кальян', parent: 'cogs' },
-  { key: 'total_cogs', label: 'ИТОГО СЕБЕСТОИМОСТЬ', type: 'total', color: 'bg-amber-700/20 text-amber-300' },
-  { key: 'gross_profit', label: 'ВАЛОВАЯ ПРИБЫЛЬ', type: 'total', color: 'bg-green-700/30 text-green-300 font-bold' },
-
-  { key: 'payroll', label: 'ФОТ', type: 'header', color: 'bg-blue-600/20 text-blue-400' },
-  { key: 'fot_mgmt', label: 'ФОТ Менеджмент', parent: 'payroll' },
-  { key: 'fot_kitchen', label: 'ФОТ Кухня', parent: 'payroll' },
-  { key: 'fot_bar', label: 'ФОТ Бар', parent: 'payroll' },
-  { key: 'fot_hookah', label: 'ФОТ Дымный коктейль', parent: 'payroll' },
-  { key: 'fot_hall', label: 'ФОТ Зал', parent: 'payroll' },
-  { key: 'fot_transport', label: 'Развозка', parent: 'payroll' },
-  { key: 'fot_other', label: 'ФОТ Прочее', parent: 'payroll' },
-  { key: 'total_payroll', label: 'ИТОГО ФОТ', type: 'total', color: 'bg-blue-700/20 text-blue-300' },
-
-  { key: 'marketing', label: 'МАРКЕТИНГ', type: 'header', color: 'bg-orange-600/20 text-orange-400' },
-  { key: 'mkt_smm', label: 'СММ', parent: 'marketing' },
-  { key: 'mkt_target', label: 'Таргет', parent: 'marketing' },
-  { key: 'mkt_2gis', label: '2ГИС', parent: 'marketing' },
-  { key: 'mkt_yandex', label: 'Яндекс', parent: 'marketing' },
-  { key: 'mkt_google', label: 'Google', parent: 'marketing' },
-  { key: 'mkt_other', label: 'Маркетинг прочее', parent: 'marketing' },
-  { key: 'total_marketing', label: 'ИТОГО МАРКЕТИНГ', type: 'total', color: 'bg-orange-700/20 text-orange-300' },
-
-  { key: 'rent', label: 'АРЕНДА', type: 'header', color: 'bg-stone-600/20 text-stone-400' },
-  { key: 'rent_main', label: 'Аренда помещения', parent: 'rent' },
-  { key: 'rent_storage', label: 'Аренда склада и кровли', parent: 'rent' },
-  { key: 'rent_property_tax', label: 'Налог на недвижимость', parent: 'rent' },
-  { key: 'total_rent', label: 'ИТОГО АРЕНДА', type: 'total', color: 'bg-stone-700/20 text-stone-300' },
-
-  { key: 'utilities', label: 'КОММУНАЛЬНЫЕ', type: 'header', color: 'bg-teal-600/20 text-teal-400' },
-  { key: 'util_electric', label: 'Электричество', parent: 'utilities' },
-  { key: 'util_water', label: 'Водоснабжение', parent: 'utilities' },
-  { key: 'util_heating', label: 'Отопление', parent: 'utilities' },
-  { key: 'util_bi', label: 'BI Service', parent: 'utilities' },
-  { key: 'util_internet', label: 'Интернет и связь', parent: 'utilities' },
-  { key: 'util_trash', label: 'Вывоз мусора', parent: 'utilities' },
-  { key: 'util_other', label: 'Ком.услуги прочее', parent: 'utilities' },
-  { key: 'total_utilities', label: 'ИТОГО КОММУНАЛЬНЫЕ', type: 'total', color: 'bg-teal-700/20 text-teal-300' },
-
-  { key: 'opex_other', label: 'ПРОЧИЕ ОПЕРАЦИОННЫЕ', type: 'header', color: 'bg-purple-600/20 text-purple-400' },
-  { key: 'opx_supplies', label: 'Хозтовары', parent: 'opex_other' },
-  { key: 'opx_bank', label: 'Комиссии банка/эквайринг', parent: 'opex_other' },
-  { key: 'opx_security', label: 'Система безопасности', parent: 'opex_other' },
-  { key: 'opx_software', label: 'Программное обеспечение', parent: 'opex_other' },
-  { key: 'opx_menu', label: 'Меню', parent: 'opex_other' },
-  { key: 'opx_pest', label: 'Дератизация/дезинсекция', parent: 'opex_other' },
-  { key: 'opx_grease', label: 'Чистка жироуловителей', parent: 'opex_other' },
-  { key: 'opx_repair', label: 'Мелкий ремонт', parent: 'opex_other' },
-  { key: 'opx_uniform', label: 'Форма для персонала', parent: 'opex_other' },
-  { key: 'opx_kao', label: 'Авторские права (КАО)', parent: 'opex_other' },
-  { key: 'opx_royalty', label: 'Роялти', parent: 'opex_other' },
-  { key: 'opx_other', label: 'Прочее', parent: 'opex_other' },
-  { key: 'total_opex_other', label: 'ИТОГО ПРОЧИЕ ОПЕР.', type: 'total', color: 'bg-purple-700/20 text-purple-300' },
-
-  { key: 'ebitda', label: 'EBITDA', type: 'total', color: 'bg-green-700/40 text-green-200 font-bold text-base' },
-
-  { key: 'taxes', label: 'НАЛОГИ', type: 'header', color: 'bg-red-600/20 text-red-400' },
-  { key: 'tax_retail', label: 'Розничный налог', parent: 'taxes' },
-  { key: 'tax_payroll', label: 'Налоги по зарплате', parent: 'taxes' },
-  { key: 'tax_insurance', label: 'Страхование сотрудников', parent: 'taxes' },
-  { key: 'tax_alcohol', label: 'Лицензия на алкоголь', parent: 'taxes' },
-  { key: 'tax_hookah', label: 'Лицензия на кальян', parent: 'taxes' },
-  { key: 'tax_other', label: 'Налоги прочее', parent: 'taxes' },
-  { key: 'total_taxes', label: 'ИТОГО НАЛОГИ', type: 'total', color: 'bg-red-700/20 text-red-300' },
-
-  { key: 'op_profit', label: 'ОПЕРАЦИОННАЯ ПРИБЫЛЬ', type: 'total', color: 'bg-emerald-700/40 text-emerald-200 font-bold text-base' },
-  { key: 'op_margin', label: 'Маржа опер. прибыли', type: 'pct' },
-
-  { key: 'capex', label: 'CapEx', type: 'header', color: 'bg-slate-600/20 text-slate-400' },
-  { key: 'capex_repair', label: 'Ремонт', parent: 'capex' },
-  { key: 'capex_equipment', label: 'Мебель и техника', parent: 'capex' },
-  { key: 'capex_other', label: 'CapEx прочее', parent: 'capex' },
-  { key: 'total_capex', label: 'ИТОГО CapEx', type: 'total', color: 'bg-slate-700/30 text-slate-300' },
-
-  { key: 'net_profit', label: 'ЧИСТАЯ ПРИБЫЛЬ', type: 'total', color: 'bg-brand-700/40 text-white font-bold text-lg' },
-]
-
-// Demo data generator
-const demoVal = (base, variance = 0.3) => base + base * (Math.random() - 0.5) * variance
-
-export default function PnLPage() {
-  const [year, setYear] = useState('2025')
-  const [collapsed, setCollapsed] = useState({})
-
-  const toggleSection = (key) => {
-    setCollapsed(prev => ({ ...prev, [key]: !prev[key] }))
-  }
-
-  const headers = SECTIONS_LIST()
-  const visibleMonths = MONTHS_RU.slice(0, 10) // Jan-Oct filled
-
-  return (
-    <div className="space-y-4 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-display font-bold tracking-tight">P&L</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Отчёт о прибылях и убытках</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <select value={year} onChange={e => setYear(e.target.value)} className="input text-sm">
-            <option>2025</option><option>2024</option><option>2023</option>
-          </select>
-          <button className="btn-secondary text-sm flex items-center gap-2">
-            <Download className="w-4 h-4" /> Excel
-          </button>
-        </div>
-      </div>
-
-      <div className="card overflow-x-auto">
-        <table className="w-full min-w-[900px] text-sm">
-          <thead>
-            <tr>
-              <th className="table-header text-left w-64 sticky left-0 bg-slate-900 z-10">Статья</th>
-              {visibleMonths.map(m => (
-                <th key={m} className="table-header text-right">{m.slice(0, 3)}</th>
-              ))}
-              <th className="table-header text-right font-bold">Итого</th>
-              <th className="table-header text-right">%</th>
-            </tr>
-          </thead>
-          <tbody>
-            {PNL_STRUCTURE.map(row => {
-              // Check if this row should be hidden (collapsed parent)
-              if (row.parent && collapsed[row.parent]) return null
-
-              const isHeader = row.type === 'header'
-              const isTotal = row.type === 'total'
-              const isPct = row.type === 'pct'
-              const isSub = !!row.parent
-              const isCollapsed = collapsed[row.key]
-
-              return (
-                <tr
-                  key={row.key}
-                  className={cn(
-                    'transition-colors',
-                    isHeader && 'cursor-pointer hover:bg-slate-800/50',
-                    isTotal && (row.color || ''),
-                    !isHeader && !isTotal && 'hover:bg-slate-800/30'
-                  )}
-                  onClick={isHeader ? () => toggleSection(row.key) : undefined}
-                >
-                  <td className={cn(
-                    'px-4 py-2 border-t border-slate-800/50 sticky left-0 z-10',
-                    isHeader ? 'bg-slate-900' : isTotal ? '' : 'bg-slate-850',
-                    isSub && 'pl-8'
-                  )}>
-                    <div className="flex items-center gap-2">
-                      {isHeader && (
-                        isCollapsed
-                          ? <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
-                          : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
-                      )}
-                      <span className={cn(
-                        isTotal && 'font-bold',
-                        isHeader && 'font-semibold text-xs uppercase tracking-wider',
-                        isSub && 'text-slate-400',
-                        isPct && 'text-slate-500 text-xs italic'
-                      )}>
-                        {row.label}
-                      </span>
-                    </div>
-                  </td>
-                  {visibleMonths.map((_, mi) => (
-                    <td key={mi} className={cn('px-3 py-2 text-right font-mono text-xs border-t border-slate-800/50 tabular-nums', isPct && 'text-slate-500')}>
-                      {isPct ? '—' : '—'}
-                    </td>
-                  ))}
-                  <td className="px-3 py-2 text-right font-mono text-xs font-bold border-t border-slate-800/50">—</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs border-t border-slate-800/50 text-slate-500">—</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="text-xs text-slate-600 text-center">Данные заполняются из ежедневных отчётов и импорта банковской выписки</div>
-    </div>
-  )
+// Mapping bank_transactions categories to P&L lines
+const BANK_TO_PNL = {
+  cogs_kitchen: 'cogs', cogs_bar: 'cogs', cogs_hookah: 'cogs',
+  payroll: 'payroll', rent: 'rent', utilities: 'utilities',
+  marketing: 'marketing', tax: 'tax', fee: 'bank_fees',
+  opex: 'other_opex', capex: 'capex', dividends: 'dividends',
+  internal: null, income_kaspi: null, income_other: null,
 }
 
-function SECTIONS_LIST() {
-  return PNL_STRUCTURE.filter(r => r.type === 'header').map(r => r.key)
+export default function PnLPage() {
+  const { hasPermission } = useAuthStore()
+  const [year, setYear] = useState(CURRENT_YEAR)
+  const [month, setMonth] = useState(CURRENT_MONTH)
+  const [viewMode, setViewMode] = useState('month') // month | ytd
+  const [dailyReports, setDailyReports] = useState([])
+  const [bankTx, setBankTx] = useState([])
+  const [adjustments, setAdjustments] = useState([])
+  const [showAddAdj, setShowAddAdj] = useState(false)
+  const [adjForm, setAdjForm] = useState({ type: 'income', category: 'other_income', amount: '', description: '' })
+  const [loading, setLoading] = useState(true)
+  const [expanded, setExpanded] = useState({ revenue: true, cogs: true, opex: true, below: true })
+
+  useEffect(() => { loadData() }, [year, month, viewMode])
+
+  const loadData = async () => {
+    setLoading(true)
+    const startDate = viewMode === 'ytd' ? `${year}-01-01` : `${year}-${String(month).padStart(2, '0')}-01`
+    const endMonth = viewMode === 'ytd' ? 12 : month
+    const endDate = `${year}-${String(endMonth).padStart(2, '0')}-${new Date(year, endMonth, 0).getDate()}`
+
+    const [drRes, btRes, adjRes] = await Promise.all([
+      supabase.from('daily_reports').select('*')
+        .gte('report_date', startDate).lte('report_date', endDate).order('report_date'),
+      supabase.from('bank_transactions').select('*')
+        .gte('transaction_date', startDate).lte('transaction_date', endDate)
+        .eq('is_debit', true), // Only expenses from bank
+      supabase.from('pnl_data').select('*')
+        .eq('year', year).gte('month', viewMode === 'ytd' ? 1 : month).lte('month', endMonth),
+    ])
+    setDailyReports(drRes.data || [])
+    setBankTx(btRes.data || [])
+    setAdjustments(adjRes.data || [])
+    setLoading(false)
+  }
+
+  // ===== AGGREGATE P&L =====
+  const pnl = useMemo(() => {
+    // --- REVENUE from daily reports ---
+    let totalRevenue = 0
+    let revKitchen = 0, revBar = 0, revHookah = 0, revOther = 0
+
+    dailyReports.forEach(r => {
+      const d = r.data || {}
+      totalRevenue += r.total_revenue || 0
+      const depts = d.departments || []
+      depts.forEach(dept => {
+        const amt = Number(dept.amount) || 0
+        if (dept.name === 'Кухня') revKitchen += amt
+        else if (dept.name === 'Бар') revBar += amt
+        else if (dept.name === 'Кальян') revHookah += amt
+        else revOther += amt
+      })
+    })
+
+    // --- COGS from daily reports (cash purchases) ---
+    let cogsCashKitchen = 0, cogsCashBar = 0, cogsCashHookah = 0
+    dailyReports.forEach(r => {
+      const d = r.data || {}
+      const w = d.withdrawals || {}
+      ;(w.suppliers_kitchen || []).forEach(row => { cogsCashKitchen += Number(row.amount) || 0 })
+      ;(w.suppliers_bar || []).forEach(row => { cogsCashBar += Number(row.amount) || 0 })
+      ;(w.tobacco || []).forEach(row => { cogsCashHookah += Number(row.amount) || 0 })
+    })
+
+    // --- COGS from bank (non-cash purchases) ---
+    let cogsBankKitchen = 0, cogsBankBar = 0, cogsBankHookah = 0
+    bankTx.forEach(tx => {
+      if (tx.category === 'cogs_kitchen') cogsBankKitchen += Number(tx.amount) || 0
+      if (tx.category === 'cogs_bar') cogsBankBar += Number(tx.amount) || 0
+      if (tx.category === 'cogs_hookah') cogsBankHookah += Number(tx.amount) || 0
+    })
+
+    const cogsKitchen = cogsCashKitchen + cogsBankKitchen
+    const cogsBar = cogsCashBar + cogsBankBar
+    const cogsHookah = cogsCashHookah + cogsBankHookah
+    const totalCOGS = cogsKitchen + cogsBar + cogsHookah
+
+    const grossProfit = totalRevenue - totalCOGS
+
+    // --- PAYROLL from daily reports + bank ---
+    let payrollCash = 0
+    dailyReports.forEach(r => {
+      const w = (r.data || {}).withdrawals || {}
+      ;(w.payroll || []).forEach(row => { payrollCash += Number(row.amount) || 0 })
+    })
+    const payrollBank = bankTx.filter(tx => tx.category === 'payroll').reduce((s, tx) => s + Number(tx.amount), 0)
+    const totalPayroll = payrollCash + payrollBank
+
+    // --- Other OpEx from daily reports ---
+    let otherCashExpenses = 0
+    dailyReports.forEach(r => {
+      const w = (r.data || {}).withdrawals || {}
+      ;(w.other || []).forEach(row => { otherCashExpenses += Number(row.amount) || 0 })
+    })
+
+    // --- OpEx from bank ---
+    const rent = bankTx.filter(tx => tx.category === 'rent').reduce((s, tx) => s + Number(tx.amount), 0)
+    const utilities = bankTx.filter(tx => tx.category === 'utilities').reduce((s, tx) => s + Number(tx.amount), 0)
+    const marketing = bankTx.filter(tx => tx.category === 'marketing').reduce((s, tx) => s + Number(tx.amount), 0)
+    const bankFees = bankTx.filter(tx => tx.category === 'fee').reduce((s, tx) => s + Number(tx.amount), 0)
+    const otherOpexBank = bankTx.filter(tx => tx.category === 'opex').reduce((s, tx) => s + Number(tx.amount), 0)
+
+    const totalOpEx = totalPayroll + rent + utilities + marketing + bankFees + otherCashExpenses + otherOpexBank
+
+    const ebitda = grossProfit - totalOpEx
+
+    // --- Below EBITDA ---
+    const tax = bankTx.filter(tx => tx.category === 'tax').reduce((s, tx) => s + Number(tx.amount), 0)
+    const capex = bankTx.filter(tx => tx.category === 'capex').reduce((s, tx) => s + Number(tx.amount), 0)
+    const dividends = bankTx.filter(tx => tx.category === 'dividends').reduce((s, tx) => s + Number(tx.amount), 0)
+
+    // --- Manual adjustments ---
+    const adjIncome = adjustments.filter(a => a.type === 'income').reduce((s, a) => s + Number(a.amount), 0)
+    const adjExpense = adjustments.filter(a => a.type === 'expense').reduce((s, a) => s + Number(a.amount), 0)
+
+    const netProfit = ebitda - tax - capex + adjIncome - adjExpense
+
+    return {
+      totalRevenue, revKitchen, revBar, revHookah, revOther,
+      cogsKitchen, cogsBar, cogsHookah, totalCOGS,
+      cogsCashKitchen, cogsCashBar, cogsCashHookah,
+      cogsBankKitchen, cogsBankBar, cogsBankHookah,
+      grossProfit,
+      totalPayroll, payrollCash, payrollBank,
+      rent, utilities, marketing, bankFees,
+      otherCashExpenses, otherOpexBank, totalOpEx,
+      ebitda, tax, capex, dividends,
+      adjIncome, adjExpense, netProfit,
+      reportCount: dailyReports.length,
+      bankTxCount: bankTx.length,
+    }
+  }, [dailyReports, bankTx, adjustments])
+
+  const pct = (v) => pnl.totalRevenue > 0 ? ((v / pnl.totalRevenue) * 100).toFixed(1) + '%' : '—'
+
+  // Save manual adjustment
+  const saveAdjustment = async () => {
+    if (!adjForm.amount || !adjForm.description) return alert('Заполните сумму и описание')
+    await supabase.from('pnl_data').insert({
+      year, month, type: adjForm.type, category: adjForm.category,
+      amount: Number(adjForm.amount), description: adjForm.description,
+    })
+    setShowAddAdj(false)
+    setAdjForm({ type: 'income', category: 'other_income', amount: '', description: '' })
+    loadData()
+  }
+
+  const deleteAdj = async (id) => {
+    await supabase.from('pnl_data').delete().eq('id', id)
+    loadData()
+  }
+
+  // P&L Line component
+  const Line = ({ label, value, pctVal, indent = 0, bold = false, color = '', sub = '' }) => (
+    <div className={cn('flex items-center justify-between py-2 px-4', indent && 'pl-8', bold && 'font-bold border-t border-slate-700 bg-slate-900/30')}>
+      <div className="flex items-center gap-2">
+        <span className={cn('text-sm', color, bold ? 'font-semibold' : indent ? 'text-slate-400' : 'text-slate-300')}>{label}</span>
+        {sub && <span className="text-[10px] text-slate-600">{sub}</span>}
+      </div>
+      <div className="flex items-center gap-4">
+        <span className={cn('font-mono text-sm', color, bold && 'text-base')}>{fmt(value)} ₸</span>
+        {pctVal !== undefined && <span className="text-[10px] text-slate-500 w-12 text-right">{pctVal}</span>}
+      </div>
+    </div>
+  )
+
+  const SectionHeader = ({ label, icon, isOpen, toggle, total, pctVal, color }) => (
+    <button onClick={toggle} className="flex items-center justify-between w-full px-4 py-3 bg-slate-900/50 hover:bg-slate-900/80 transition-colors">
+      <div className="flex items-center gap-2">
+        {isOpen ? <ChevronDown className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
+        <span className="text-sm font-bold">{icon} {label}</span>
+      </div>
+      <div className="flex items-center gap-4">
+        <span className={cn('font-mono text-sm font-bold', color)}>{fmt(total)} ₸</span>
+        <span className="text-[10px] text-slate-500 w-12 text-right">{pctVal}</span>
+      </div>
+    </button>
+  )
+
+  if (loading) return <div className="text-center text-slate-500 py-20">Загрузка...</div>
+
+  const periodLabel = viewMode === 'ytd' ? `${year} YTD` : `${MONTHS_RU[month - 1]} ${year}`
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-display font-bold tracking-tight">P&L</h1>
+          <p className="text-sm text-slate-500 mt-0.5">{periodLabel} · {pnl.reportCount} отчётов · {pnl.bankTxCount} банк. записей</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select value={month} onChange={e => setMonth(Number(e.target.value))} className="input text-sm">
+            {MONTHS_RU.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
+          <select value={year} onChange={e => setYear(Number(e.target.value))} className="input text-sm">
+            {[2024, 2025, 2026].map(y => <option key={y}>{y}</option>)}
+          </select>
+          <div className="flex bg-slate-900 rounded-lg p-0.5">
+            <button onClick={() => setViewMode('month')} className={cn('px-3 py-1.5 rounded-md text-xs font-medium', viewMode === 'month' ? 'bg-slate-700 text-white' : 'text-slate-500')}>Месяц</button>
+            <button onClick={() => setViewMode('ytd')} className={cn('px-3 py-1.5 rounded-md text-xs font-medium', viewMode === 'ytd' ? 'bg-slate-700 text-white' : 'text-slate-500')}>YTD</button>
+          </div>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="card-hover text-center">
+          <div className="stat-label">Выручка</div>
+          <div className="stat-value text-lg text-green-400">{fmt(pnl.totalRevenue)} ₸</div>
+        </div>
+        <div className="card-hover text-center">
+          <div className="stat-label">Food Cost</div>
+          <div className={cn('stat-value text-lg', pnl.totalRevenue > 0 && (pnl.totalCOGS / pnl.totalRevenue) > 0.32 ? 'text-red-400' : 'text-yellow-400')}>
+            {pct(pnl.totalCOGS)}
+          </div>
+        </div>
+        <div className="card-hover text-center">
+          <div className="stat-label">ФОТ</div>
+          <div className="stat-value text-lg text-blue-400">{pct(pnl.totalPayroll)}</div>
+        </div>
+        <div className="card-hover text-center">
+          <div className="stat-label">EBITDA</div>
+          <div className={cn('stat-value text-lg', pnl.ebitda >= 0 ? 'text-brand-400' : 'text-red-400')}>{fmt(pnl.ebitda)} ₸</div>
+        </div>
+        <div className="card-hover text-center">
+          <div className="stat-label">Чистая прибыль</div>
+          <div className={cn('stat-value text-lg', pnl.netProfit >= 0 ? 'text-brand-400' : 'text-red-400')}>{fmt(pnl.netProfit)} ₸</div>
+        </div>
+      </div>
+
+      {/* P&L Statement */}
+      <div className="card p-0 divide-y divide-slate-800">
+
+        {/* REVENUE */}
+        <SectionHeader label="ВЫРУЧКА" icon="💰" isOpen={expanded.revenue}
+          toggle={() => setExpanded(p => ({...p, revenue: !p.revenue}))}
+          total={pnl.totalRevenue} pctVal="100%" color="text-green-400" />
+        {expanded.revenue && (
+          <div>
+            <Line label="Кухня" value={pnl.revKitchen} pctVal={pct(pnl.revKitchen)} indent />
+            <Line label="Бар" value={pnl.revBar} pctVal={pct(pnl.revBar)} indent />
+            <Line label="Кальян" value={pnl.revHookah} pctVal={pct(pnl.revHookah)} indent />
+            {pnl.revOther > 0 && <Line label="Прочее" value={pnl.revOther} pctVal={pct(pnl.revOther)} indent />}
+          </div>
+        )}
+
+        {/* COGS */}
+        <SectionHeader label="СЕБЕСТОИМОСТЬ (COGS)" icon="🛒" isOpen={expanded.cogs}
+          toggle={() => setExpanded(p => ({...p, cogs: !p.cogs}))}
+          total={pnl.totalCOGS} pctVal={pct(pnl.totalCOGS)} color="text-red-400" />
+        {expanded.cogs && (
+          <div>
+            <Line label="Закуп Кухня" value={pnl.cogsKitchen} pctVal={pct(pnl.cogsKitchen)} indent
+              sub={`нал ${fmt(pnl.cogsCashKitchen)} + безнал ${fmt(pnl.cogsBankKitchen)}`} />
+            <Line label="Закуп Бар" value={pnl.cogsBar} pctVal={pct(pnl.cogsBar)} indent
+              sub={`нал ${fmt(pnl.cogsCashBar)} + безнал ${fmt(pnl.cogsBankBar)}`} />
+            <Line label="Табак / Кальян" value={pnl.cogsHookah} pctVal={pct(pnl.cogsHookah)} indent
+              sub={`нал ${fmt(pnl.cogsCashHookah)} + безнал ${fmt(pnl.cogsBankHookah)}`} />
+          </div>
+        )}
+
+        {/* GROSS PROFIT */}
+        <Line label="ВАЛОВАЯ ПРИБЫЛЬ" value={pnl.grossProfit} pctVal={pct(pnl.grossProfit)} bold
+          color={pnl.grossProfit >= 0 ? 'text-green-400' : 'text-red-400'} />
+
+        {/* OPEX */}
+        <SectionHeader label="ОПЕРАЦИОННЫЕ РАСХОДЫ (OpEx)" icon="⚙️" isOpen={expanded.opex}
+          toggle={() => setExpanded(p => ({...p, opex: !p.opex}))}
+          total={pnl.totalOpEx} pctVal={pct(pnl.totalOpEx)} color="text-orange-400" />
+        {expanded.opex && (
+          <div>
+            <Line label="ФОТ (Зарплата)" value={pnl.totalPayroll} pctVal={pct(pnl.totalPayroll)} indent
+              sub={`нал ${fmt(pnl.payrollCash)} + безнал ${fmt(pnl.payrollBank)}`} />
+            <Line label="Аренда" value={pnl.rent} pctVal={pct(pnl.rent)} indent />
+            <Line label="Коммунальные услуги" value={pnl.utilities} pctVal={pct(pnl.utilities)} indent />
+            <Line label="Маркетинг" value={pnl.marketing} pctVal={pct(pnl.marketing)} indent />
+            <Line label="Комиссия банка" value={pnl.bankFees} pctVal={pct(pnl.bankFees)} indent />
+            <Line label="Прочие (наличные)" value={pnl.otherCashExpenses} pctVal={pct(pnl.otherCashExpenses)} indent sub="из отчётов" />
+            {pnl.otherOpexBank > 0 && <Line label="Прочие (безнал)" value={pnl.otherOpexBank} pctVal={pct(pnl.otherOpexBank)} indent sub="из выписки" />}
+          </div>
+        )}
+
+        {/* EBITDA */}
+        <Line label="EBITDA" value={pnl.ebitda} pctVal={pct(pnl.ebitda)} bold
+          color={pnl.ebitda >= 0 ? 'text-brand-400' : 'text-red-400'} />
+
+        {/* Below EBITDA */}
+        <SectionHeader label="НИЖЕ EBITDA" icon="📉" isOpen={expanded.below}
+          toggle={() => setExpanded(p => ({...p, below: !p.below}))}
+          total={pnl.tax + pnl.capex} pctVal={pct(pnl.tax + pnl.capex)} color="text-slate-400" />
+        {expanded.below && (
+          <div>
+            <Line label="Налоги" value={pnl.tax} pctVal={pct(pnl.tax)} indent />
+            <Line label="CapEx" value={pnl.capex} pctVal={pct(pnl.capex)} indent />
+            {pnl.dividends > 0 && <Line label="Дивиденды" value={pnl.dividends} pctVal={pct(pnl.dividends)} indent />}
+            {pnl.adjIncome > 0 && <Line label="Прочие доходы (ручн.)" value={pnl.adjIncome} indent color="text-green-400" />}
+            {pnl.adjExpense > 0 && <Line label="Прочие расходы (ручн.)" value={pnl.adjExpense} indent color="text-red-400" />}
+          </div>
+        )}
+
+        {/* NET PROFIT */}
+        <div className={cn('px-4 py-4 flex items-center justify-between', pnl.netProfit >= 0 ? 'bg-green-500/5' : 'bg-red-500/5')}>
+          <span className="text-base font-display font-bold">ЧИСТАЯ ПРИБЫЛЬ</span>
+          <div className="flex items-center gap-4">
+            <span className={cn('font-mono text-lg font-bold', pnl.netProfit >= 0 ? 'text-green-400' : 'text-red-400')}>
+              {fmt(pnl.netProfit)} ₸
+            </span>
+            <span className="text-xs text-slate-500 w-12 text-right">{pct(pnl.netProfit)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Manual Adjustments */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-sm font-semibold">Ручные корректировки</div>
+          <button onClick={() => setShowAddAdj(true)} className="btn-secondary text-xs flex items-center gap-1">
+            <Plus className="w-3.5 h-3.5" /> Добавить
+          </button>
+        </div>
+
+        {showAddAdj && (
+          <div className="bg-slate-900 rounded-xl p-4 mb-4 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <select value={adjForm.type} onChange={e => setAdjForm(f => ({...f, type: e.target.value}))} className="input text-sm">
+                <option value="income">Доход</option><option value="expense">Расход</option>
+              </select>
+              <input type="text" inputMode="numeric" value={adjForm.amount} onChange={e => setAdjForm(f => ({...f, amount: e.target.value.replace(/[^0-9]/g, '')}))}
+                className="input text-sm font-mono" placeholder="Сумма" />
+              <input value={adjForm.description} onChange={e => setAdjForm(f => ({...f, description: e.target.value}))} className="input text-sm" placeholder="Бонус от поставщика" />
+              <div className="flex gap-2">
+                <button onClick={saveAdjustment} className="btn-primary text-sm flex-1">Сохранить</button>
+                <button onClick={() => setShowAddAdj(false)} className="btn-secondary text-sm">✕</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {adjustments.length > 0 ? (
+          <div className="space-y-1">
+            {adjustments.map(a => (
+              <div key={a.id} className="flex items-center justify-between bg-slate-900 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-3 text-sm">
+                  <span className={cn('badge text-[10px]', a.type === 'income' ? 'badge-green' : 'badge-red')}>
+                    {a.type === 'income' ? 'Доход' : 'Расход'}
+                  </span>
+                  <span>{a.description}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-sm">{fmt(a.amount)} ₸</span>
+                  <button onClick={() => deleteAdj(a.id)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs text-slate-600 text-center py-2">Нет корректировок</div>
+        )}
+      </div>
+
+      {/* Data Sources Info */}
+      <div className="card border-blue-500/20 bg-blue-500/5">
+        <div className="text-sm font-semibold text-blue-300 mb-2 flex items-center gap-2"><Info className="w-4 h-4" /> Источники данных</div>
+        <div className="text-xs text-slate-400 space-y-1">
+          <p><FileText className="w-3 h-3 inline mr-1" /> <b className="text-slate-300">Ежедневные отчёты ({pnl.reportCount}):</b> Выручка по отделам, закуп наличными, ЗП наличными, прочие расходы из кассы</p>
+          <p><Upload className="w-3 h-3 inline mr-1" /> <b className="text-slate-300">Банковская выписка ({pnl.bankTxCount}):</b> Аренда, коммуналка, маркетинг, налоги, ЗП безнал, комиссии, закуп безнал</p>
+          <p>P&L собирается <b className="text-slate-300">автоматически</b>. Ручные корректировки — для редких случаев (бонусы от поставщиков и т.д.)</p>
+        </div>
+      </div>
+    </div>
+  )
 }

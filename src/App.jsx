@@ -14,6 +14,7 @@ import SettingsPage from '@/pages/SettingsPage'
 import StaffPage from '@/pages/StaffPage'
 import PayrollPage from '@/pages/PayrollPage'
 import SuppliersPage from '@/pages/SuppliersPage'
+import AccountsPage from '@/pages/AccountsPage'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuthStore()
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="pnl" element={<PnLPage />} />
           <Route path="cashflow" element={<CashFlowPage />} />
           <Route path="bank-import" element={<BankImportPage />} />
+          <Route path="accounts" element={<AccountsPage />} />
           <Route path="staff" element={<StaffPage />} />
           <Route path="suppliers" element={<SuppliersPage />} />
           <Route path="payroll" element={<PayrollPage />} />
