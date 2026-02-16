@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
 import { parseBankStatement } from '@/lib/categorize'
-import { Upload, Trash2, Settings, Plus, X, Save, Calendar } from 'lucide-react'
+import { Upload, Trash2, Settings, Plus, X, Save, Calendar, Pencil } from 'lucide-react'
 
 const MONTHS_SHORT = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек']
 
@@ -225,6 +225,7 @@ export default function BankImportPage() {
     name: '', logic: 'and', category_code: '', action: 'categorize',
     conditions: [{ field: 'beneficiary', operator: 'contains', value: '' }],
   })
+  const [editingRule, setEditingRule] = useState(null) // { id, name, logic, category_code, action, conditions: [...] }
 
   useEffect(() => { load() }, [])
 
@@ -385,6 +386,48 @@ export default function BankImportPage() {
   }
   const deleteRule = async (id) => { if (!confirm('Удалить правило?')) return; await supabase.from('bank_rules').delete().eq('id', id); load() }
 
+  // === Edit rule functions ===
+  const startEdit = (rule) => {
+    setEditingRule({
+      id: rule.id,
+      name: rule.name,
+      logic: rule.logic,
+      category_code: rule.category_code,
+      action: rule.action,
+      conditions: rule.conditions.map(c => ({ field: c.field, operator: c.operator, value: c.value })),
+    })
+  }
+  const cancelEdit = () => setEditingRule(null)
+  const addEditCondition = () => setEditingRule(r => ({ ...r, conditions: [...r.conditions, { field: 'beneficiary', operator: 'contains', value: '' }] }))
+  const removeEditCondition = (idx) => setEditingRule(r => ({ ...r, conditions: r.conditions.filter((_, i) => i !== idx) }))
+  const updateEditCondition = (idx, key, val) => {
+    setEditingRule(r => ({ ...r, conditions: r.conditions.map((c, i) => {
+      if (i !== idx) return c
+      const u = { ...c, [key]: val }
+      if (key === 'field') {
+        u.operator = OPERATORS[val]?.[0]?.value || 'contains'
+        if (val === 'is_debit') u.value = 'true'
+      }
+      return u
+    })}))
+  }
+  const updateRule = async () => {
+    if (!editingRule.name.trim()) return alert('Введите название')
+    if (editingRule.action === 'categorize' && !editingRule.category_code) return alert('Выберите категорию')
+    if (editingRule.conditions.some(c => !c.value.trim())) return alert('Заполните все условия')
+    const { error } = await supabase.from('bank_rules').update({
+      name: editingRule.name, logic: editingRule.logic,
+      category_code: editingRule.action === 'hide' ? 'uncategorized' : editingRule.category_code, action: editingRule.action,
+    }).eq('id', editingRule.id)
+    if (error) return alert('Ошибка: ' + error.message)
+    // Replace conditions: delete old, insert new
+    await supabase.from('bank_rule_conditions').delete().eq('rule_id', editingRule.id)
+    await supabase.from('bank_rule_conditions').insert(
+      editingRule.conditions.map((c, i) => ({ rule_id: editingRule.id, field: c.field, operator: c.operator, value: c.value, sort_order: i }))
+    )
+    setEditingRule(null); load()
+  }
+
   const sorted = [...transactions].sort((a, b) => {
     if (a.category === 'uncategorized' && b.category !== 'uncategorized') return -1
     if (a.category !== 'uncategorized' && b.category === 'uncategorized') return 1
@@ -497,7 +540,77 @@ export default function BankImportPage() {
 
           {/* Existing rules list */}
           <div className="space-y-2">
-            {fullRules.map(rule => (
+            {fullRules.map(rule => editingRule?.id === rule.id ? (
+              /* ── EDIT MODE ── */
+              <div key={rule.id} className="bg-slate-900 rounded-xl p-4 space-y-4 border border-brand-500/40">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div><label className="label">Название *</label>
+                    <input value={editingRule.name} onChange={e => setEditingRule(r => ({...r, name: e.target.value}))} className="input text-sm w-full" /></div>
+                  <div><label className="label">Действие</label>
+                    <select value={editingRule.action} onChange={e => setEditingRule(r => ({...r, action: e.target.value}))} className="input text-sm w-full">
+                      <option value="categorize">Категоризовать</option><option value="hide">Скрыть</option>
+                    </select></div>
+                  {editingRule.action === 'categorize' && (
+                    <div><label className="label">Категория *</label>
+                      <select value={editingRule.category_code} onChange={e => setEditingRule(r => ({...r, category_code: e.target.value}))} className="input text-sm w-full">
+                        <option value="">— Выберите —</option>
+                        {Object.entries(catGroups).map(([type, cats]) => (
+                          <optgroup key={type} label={TYPE_LABELS[type] || type}>
+                            {cats.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <label className="label mb-0">Условия</label>
+                    {editingRule.conditions.length > 1 && (
+                      <div className="flex bg-slate-800 rounded-lg p-0.5">
+                        <button onClick={() => setEditingRule(r => ({...r, logic: 'and'}))} className={cn('px-3 py-1 rounded-md text-xs font-medium', editingRule.logic === 'and' ? 'bg-brand-500 text-white' : 'text-slate-500')}>И (AND)</button>
+                        <button onClick={() => setEditingRule(r => ({...r, logic: 'or'}))} className={cn('px-3 py-1 rounded-md text-xs font-medium', editingRule.logic === 'or' ? 'bg-brand-500 text-white' : 'text-slate-500')}>ИЛИ (OR)</button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    {editingRule.conditions.map((cond, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        {idx > 0 && <span className="text-[10px] font-bold text-brand-400 w-8 text-center">{editingRule.logic === 'and' ? 'И' : 'ИЛИ'}</span>}
+                        {idx === 0 && editingRule.conditions.length > 1 && <span className="w-8" />}
+                        <select value={cond.field} onChange={e => updateEditCondition(idx, 'field', e.target.value)} className="input text-xs w-32">
+                          {FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                        </select>
+                        <select value={cond.operator} onChange={e => updateEditCondition(idx, 'operator', e.target.value)} className="input text-xs w-32">
+                          {(OPERATORS[cond.field] || []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                        {cond.operator === 'between' ? (
+                          <div className="flex items-center gap-1 flex-1">
+                            <input value={cond.value.split('-')[0] || ''} onChange={e => updateEditCondition(idx, 'value', `${e.target.value}-${cond.value.split('-')[1] || ''}`)} className="input text-xs w-20 font-mono" placeholder="от" />
+                            <span className="text-slate-500 text-xs">—</span>
+                            <input value={cond.value.split('-')[1] || ''} onChange={e => updateEditCondition(idx, 'value', `${cond.value.split('-')[0] || ''}-${e.target.value}`)} className="input text-xs w-20 font-mono" placeholder="до" />
+                          </div>
+                        ) : cond.field === 'is_debit' ? (
+                          <select value={cond.value} onChange={e => updateEditCondition(idx, 'value', e.target.value)} className="input text-xs flex-1">
+                            <option value="true">Дебет (расход)</option>
+                            <option value="false">Кредит (приход)</option>
+                          </select>
+                        ) : (
+                          <input value={cond.value} onChange={e => updateEditCondition(idx, 'value', e.target.value)} className="input text-xs flex-1 font-mono" placeholder={cond.field === 'amount' ? '100000' : 'Ключевое слово'} />
+                        )}
+                        {editingRule.conditions.length > 1 && <button onClick={() => removeEditCondition(idx)} className="p-1 text-slate-600 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>}
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={addEditCondition} className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 mt-2"><Plus className="w-3.5 h-3.5" /> Добавить условие</button>
+                </div>
+                <div className="flex gap-2 pt-2 border-t border-slate-700">
+                  <button onClick={updateRule} className="btn-primary text-sm flex items-center gap-1.5"><Save className="w-3.5 h-3.5" /> Сохранить</button>
+                  <button onClick={cancelEdit} className="btn-secondary text-sm">Отмена</button>
+                </div>
+              </div>
+            ) : (
+              /* ── READ MODE ── */
               <div key={rule.id} className="bg-slate-900 rounded-xl px-4 py-3">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-3">
@@ -505,7 +618,10 @@ export default function BankImportPage() {
                     <span className="text-slate-500">→</span>
                     {rule.action === 'hide' ? <span className="badge badge-red text-[10px]">Скрыть</span> : <span className="badge badge-green text-[10px]">{catName(rule.category_code)}</span>}
                   </div>
-                  <button onClick={() => deleteRule(rule.id)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => startEdit(rule)} className="p-1 text-slate-600 hover:text-brand-400"><Pencil className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => deleteRule(rule.id)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
                   {rule.conditions.map((c, i) => (
