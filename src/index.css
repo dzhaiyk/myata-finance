@@ -33,4 +33,8 @@
   .badge-blue { @apply badge bg-blue-500/15 text-blue-400; }
   .table-header { @apply text-xs font-semibold text-slate-500 uppercase tracking-wider bg-slate-900/50 px-4 py-3; }
   .table-cell { @apply px-4 py-3 text-sm border-t border-slate-800; }
+
+  /* Date input dark mode */
+  input[type="date"] { color-scheme: dark; }
+  input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; filter: invert(0.7); }
 }

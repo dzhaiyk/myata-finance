@@ -5,6 +5,54 @@ import { supabase } from '@/lib/supabase'
 import { sendTelegramNotification, formatDailyReportNotification, formatCashDiscrepancyAlert } from '@/lib/telegram'
 import { Save, Send, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Plus, Trash2, Calendar } from 'lucide-react'
 
+const MoneyInput = ({ value, onChange, className = '' }) => (
+  <input
+    type="text"
+    inputMode="numeric"
+    value={value}
+    onChange={e => {
+      const v = e.target.value.replace(/[^0-9]/g, '')
+      onChange(v)
+    }}
+    className={`input text-right font-mono text-sm tabular-nums w-full ${className}`}
+    placeholder="0"
+  />
+)
+
+// Autocomplete dropdown for suppliers/staff
+const NameInput = ({ value, onChange, suggestions, placeholder }) => {
+  const [showSugg, setShowSugg] = useState(false)
+  const filtered = (suggestions || []).filter(s => {
+    const name = typeof s === 'string' ? s : s.name || s.full_name
+    return name.toLowerCase().includes((value || '').toLowerCase()) && name !== value
+  })
+  return (
+    <div className="relative">
+      <input
+        value={value}
+        onChange={e => { onChange(e.target.value); setShowSugg(true) }}
+        onFocus={() => setShowSugg(true)}
+        onBlur={() => setTimeout(() => setShowSugg(false), 200)}
+        className="input text-sm w-full"
+        placeholder={placeholder}
+      />
+      {showSugg && filtered.length > 0 && (
+        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-xl shadow-xl max-h-40 overflow-y-auto">
+          {filtered.slice(0, 8).map((s, i) => {
+            const name = typeof s === 'string' ? s : s.name || s.full_name
+            return (
+              <button key={i} onMouseDown={() => { onChange(name); setShowSugg(false) }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-700 text-slate-300 transition-colors">
+                {name}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const SECTIONS = [
   { key: 'suppliers_kitchen', label: 'Поставщики КУХНЯ', color: 'green', icon: '🍽', supplierCat: 'Кухня' },
   { key: 'suppliers_bar', label: 'Поставщики БАР', color: 'blue', icon: '🍸', supplierCat: 'Бар' },
@@ -148,63 +196,6 @@ export default function DailyReportPage() {
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
   }
 
-  // Money input — stores as string, allows full number entry
-  const MoneyInput = ({ value, onChange, className = '' }) => (
-    <input
-      type="text"
-      inputMode="numeric"
-      value={value}
-      onChange={e => {
-        const v = e.target.value.replace(/[^0-9]/g, '')
-        onChange(v)
-      }}
-      className={cn('input text-right font-mono text-sm tabular-nums w-full', className)}
-      placeholder="0"
-    />
-  )
-
-  // Date picker with custom display
-  const formatDateRu = (d) => {
-    if (!d) return ''
-    const [y, m, day] = d.split('-')
-    const months = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек']
-    return `${parseInt(day)} ${months[parseInt(m)-1]} ${y}`
-  }
-
-  // Autocomplete dropdown for suppliers/staff
-  const NameInput = ({ value, onChange, suggestions, placeholder }) => {
-    const [showSugg, setShowSugg] = useState(false)
-    const filtered = suggestions.filter(s => {
-      const name = typeof s === 'string' ? s : s.name || s.full_name
-      return name.toLowerCase().includes((value || '').toLowerCase()) && name !== value
-    })
-    return (
-      <div className="relative">
-        <input
-          value={value}
-          onChange={e => { onChange(e.target.value); setShowSugg(true) }}
-          onFocus={() => setShowSugg(true)}
-          onBlur={() => setTimeout(() => setShowSugg(false), 200)}
-          className="input text-sm w-full"
-          placeholder={placeholder}
-        />
-        {showSugg && filtered.length > 0 && (
-          <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-xl shadow-xl max-h-40 overflow-y-auto">
-            {filtered.slice(0, 8).map((s, i) => {
-              const name = typeof s === 'string' ? s : s.name || s.full_name
-              return (
-                <button key={i} onMouseDown={() => { onChange(name); setShowSugg(false) }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-700 text-slate-300 transition-colors">
-                  {name}
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    )
-  }
-
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
       {/* Header */}
@@ -215,14 +206,12 @@ export default function DailyReportPage() {
         </div>
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-slate-500" />
-          <div className="relative">
-            <button onClick={() => document.getElementById('date-picker').showPicker?.() || document.getElementById('date-picker').focus()}
-              className="input text-sm font-medium cursor-pointer min-w-[160px] text-left">
-              {formatDateRu(date)}
-            </button>
-            <input id="date-picker" type="date" value={date} onChange={e => setDate(e.target.value)}
-              className="absolute inset-0 opacity-0 cursor-pointer" />
-          </div>
+          <input
+            type="date"
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            className="input text-sm font-medium cursor-pointer min-w-[160px]"
+          />
         </div>
       </div>
 
