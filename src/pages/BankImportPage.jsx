@@ -1,181 +1,278 @@
-import { useState, useRef } from 'react'
-import { fmt, fmtDate, cn } from '@/lib/utils'
-import { CATEGORIES, parseBankStatement } from '@/lib/categorize'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { sendTelegramNotification, formatBankImportNotification } from '@/lib/telegram'
-import { Upload, Save, Filter } from 'lucide-react'
-import * as XLSX from 'xlsx'
+import { useAuthStore } from '@/lib/store'
+import { cn, fmt } from '@/lib/utils'
+import { parseBankStatement } from '@/lib/categorize'
+import { Upload, Trash2, Settings, Plus, X, Filter, Eye, EyeOff, Save } from 'lucide-react'
+
+const CATEGORIES = {
+  income_kaspi: 'Доход Kaspi', income_other: 'Прочий доход',
+  cogs_kitchen: 'Закуп Кухня', cogs_bar: 'Закуп Бар', cogs_hookah: 'Закуп Кальян',
+  payroll: 'ЗП/Авансы', marketing: 'Маркетинг', rent: 'Аренда',
+  utilities: 'Коммуналка', opex: 'Прочие OpEx', tax: 'Налоги',
+  capex: 'CapEx', dividends: 'Дивиденды', internal: 'Внутренние', fee: 'Комиссия банка',
+  uncategorized: '❓ Не распознано',
+}
 
 export default function BankImportPage() {
+  const { hasPermission } = useAuthStore()
+  const canManage = hasPermission('bank_import.categorize')
   const [transactions, setTransactions] = useState([])
-  const [fileName, setFileName] = useState('')
-  const [filter, setFilter] = useState('all')
-  const [saving, setSaving] = useState(false)
-  const fileRef = useRef()
+  const [rules, setRules] = useState([])
+  const [showRules, setShowRules] = useState(false)
+  const [hideHidden, setHideHidden] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [importing, setImporting] = useState(false)
+  const [newRule, setNewRule] = useState({ field: 'beneficiary', keyword: '', category: 'cogs_kitchen', action: 'categorize' })
 
-  const handleFileUpload = async (e) => {
+  useEffect(() => { load() }, [])
+
+  const load = async () => {
+    setLoading(true)
+    const [txRes, rulesRes] = await Promise.all([
+      supabase.from('bank_transactions').select('*').order('transaction_date', { ascending: false }).limit(500),
+      supabase.from('bank_rules').select('*').eq('is_active', true).order('field, keyword'),
+    ])
+    setTransactions(txRes.data || [])
+    setRules(rulesRes.data || [])
+    setLoading(false)
+  }
+
+  // Apply rules to a transaction
+  const applyRules = (tx, rulesList) => {
+    for (const rule of rulesList) {
+      const field = rule.field === 'beneficiary' ? (tx.beneficiary || '') : (tx.purpose || '')
+      if (field.toLowerCase().includes(rule.keyword.toLowerCase())) {
+        return { category: rule.category, action: rule.action, confidence: 'auto' }
+      }
+    }
+    return null
+  }
+
+  // File import
+  const handleFile = async (e) => {
     const file = e.target.files[0]
     if (!file) return
-    setFileName(file.name)
-    const data = await file.arrayBuffer()
-    const wb = XLSX.read(data)
-    const ws = wb.Sheets[wb.SheetNames[0]]
-    const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
-    let headerIdx = json.findIndex(row => row.some(cell => String(cell).includes('Дебет')))
-    if (headerIdx === -1) headerIdx = 10
-    const dataRows = json.slice(headerIdx + 1).filter(row => {
-      const d = row[2]; const c = row[3]
-      return (typeof d === 'number' && d > 0) || (typeof c === 'number' && c > 0)
+    setImporting(true)
+    try {
+      const XLSX = await import('xlsx')
+      const data = await file.arrayBuffer()
+      const wb = XLSX.read(data)
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(ws)
+
+      const batchId = crypto.randomUUID()
+      const parsed = parseBankStatement(rows)
+
+      // Apply custom rules
+      const { data: currentRules } = await supabase.from('bank_rules').select('*').eq('is_active', true)
+      const rulesList = currentRules || []
+
+      const toInsert = parsed.map(tx => {
+        const ruleMatch = applyRules(tx, rulesList)
+        return {
+          transaction_date: tx.date,
+          amount: Math.abs(tx.amount),
+          is_debit: tx.amount < 0 || tx.is_debit,
+          beneficiary: tx.beneficiary || '',
+          purpose: tx.purpose || '',
+          knp: tx.knp || '',
+          category: ruleMatch?.category || tx.category || 'uncategorized',
+          confidence: ruleMatch?.confidence || tx.confidence || 'low',
+          import_file: file.name,
+          import_batch_id: batchId,
+          _hidden: ruleMatch?.action === 'hide',
+        }
+      }).filter(tx => !tx._hidden) // Remove hidden ones
+
+      // Clean _hidden field
+      const cleaned = toInsert.map(({ _hidden, ...rest }) => rest)
+
+      if (cleaned.length > 0) {
+        const { error } = await supabase.from('bank_transactions').insert(cleaned)
+        if (error) throw error
+      }
+
+      const hidden = parsed.length - cleaned.length
+      alert(`✅ Импортировано ${cleaned.length} записей${hidden > 0 ? ` (${hidden} скрыто по правилам)` : ''}`)
+      load()
+    } catch (err) { alert('Ошибка импорта: ' + err.message) }
+    setImporting(false)
+    e.target.value = ''
+  }
+
+  const updateCategory = async (id, category) => {
+    await supabase.from('bank_transactions').update({ category, confidence: 'manual' }).eq('id', id)
+    setTransactions(prev => prev.map(t => t.id === id ? { ...t, category, confidence: 'manual' } : t))
+  }
+
+  const deleteTransaction = async (id) => {
+    await supabase.from('bank_transactions').delete().eq('id', id)
+    setTransactions(prev => prev.filter(t => t.id !== id))
+  }
+
+  const deleteSelected = async (ids) => {
+    if (!confirm(`Удалить ${ids.length} записей?`)) return
+    for (const id of ids) {
+      await supabase.from('bank_transactions').delete().eq('id', id)
+    }
+    load()
+  }
+
+  // Rules CRUD
+  const addRule = async () => {
+    if (!newRule.keyword.trim()) return alert('Введите ключевое слово')
+    const { error } = await supabase.from('bank_rules').insert({
+      field: newRule.field, keyword: newRule.keyword.trim(),
+      category: newRule.category, action: newRule.action,
     })
-    setTransactions(parseBankStatement(dataRows))
+    if (error) {
+      if (error.code === '23505') return alert('Такое правило уже есть')
+      return alert('Ошибка: ' + error.message)
+    }
+    setNewRule({ field: 'beneficiary', keyword: '', category: 'cogs_kitchen', action: 'categorize' })
+    load()
   }
 
-  const updateCategory = (idx, newCat) => {
-    setTransactions(prev => prev.map((tx, i) =>
-      i === idx ? { ...tx, category: newCat, confidence: 'manual', matchedRule: 'Manual' } : tx
-    ))
+  const deleteRule = async (id) => {
+    await supabase.from('bank_rules').delete().eq('id', id)
+    load()
   }
 
-  const stats = {
-    total: transactions.length,
-    categorized: transactions.filter(t => t.category !== 'uncategorized').length,
-    uncategorized: transactions.filter(t => t.category === 'uncategorized').length,
-    totalDebit: transactions.filter(t => t.isDebit).reduce((s, t) => s + t.amount, 0),
-    totalCredit: transactions.filter(t => !t.isDebit).reduce((s, t) => s + t.amount, 0),
-  }
-
-  const filtered = transactions.filter(tx => {
-    if (filter === 'uncategorized') return tx.category === 'uncategorized'
-    if (filter === 'categorized') return tx.category !== 'uncategorized'
-    return true
+  // Sort: uncategorized first, then by date desc
+  const sorted = [...transactions].sort((a, b) => {
+    if (a.category === 'uncategorized' && b.category !== 'uncategorized') return -1
+    if (a.category !== 'uncategorized' && b.category === 'uncategorized') return 1
+    return new Date(b.transaction_date) - new Date(a.transaction_date)
   })
 
-  const handleSave = async () => {
-    setSaving(true)
-    try {
-      const rows = transactions.map(tx => ({
-        transaction_date: tx.date, amount: tx.amount, is_debit: tx.isDebit,
-        beneficiary: tx.beneficiary, purpose: tx.purpose, knp: tx.knp,
-        category: tx.category, confidence: tx.confidence, import_file: fileName,
-      }))
-      const { error } = await supabase.from('bank_transactions').insert(rows)
-      if (error) throw error
-      await sendTelegramNotification(formatBankImportNotification(fileName, stats.total, stats.categorized, stats.uncategorized))
-      alert('✅ Сохранено!')
-    } catch (e) { alert('Ошибка: ' + e.message) }
-    setSaving(false)
-  }
+  const uncatCount = transactions.filter(t => t.category === 'uncategorized').length
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const toggleSelect = (id) => setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
 
-  const categoryOptions = Object.entries(CATEGORIES).map(([k, v]) => ({ value: k, label: v.label, group: v.group }))
-  const groupLabels = { revenue:'Доходы', cogs:'Себестоимость', payroll:'ФОТ', marketing:'Маркетинг', rent:'Аренда', utilities:'Коммуналка', opex_other:'Прочие OpEx', taxes:'Налоги', capex:'CapEx', dividends:'Дивиденды', internal:'Внутренние', uncategorized:'Прочее' }
-
-  const confBadge = (c) => {
-    if (c === 'high') return <span className="badge-green text-[10px]">Авто</span>
-    if (c === 'medium') return <span className="badge-blue text-[10px]">Частичн.</span>
-    if (c === 'manual') return <span className="badge-yellow text-[10px]">Вручную</span>
-    return <span className="badge-red text-[10px]">❓</span>
-  }
+  if (loading) return <div className="text-center text-slate-500 py-20">Загрузка...</div>
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-display font-bold tracking-tight">Импорт банковской выписки</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Загрузите Excel-файл выписки для автокатегоризации</p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-display font-bold tracking-tight">Импорт выписки</h1>
+          <p className="text-sm text-slate-500 mt-0.5">{transactions.length} записей{uncatCount > 0 ? ` · ${uncatCount} не распознано` : ''}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowRules(!showRules)}
+            className={cn('btn-secondary text-sm flex items-center gap-2', showRules && 'border-brand-500/50')}>
+            <Settings className="w-4 h-4" /> Правила
+          </button>
+          <label className={cn('btn-primary text-sm flex items-center gap-2 cursor-pointer', importing && 'opacity-50')}>
+            <Upload className="w-4 h-4" />{importing ? 'Импорт...' : 'Загрузить Excel'}
+            <input type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" disabled={importing} />
+          </label>
+        </div>
       </div>
 
-      {transactions.length === 0 ? (
-        <div onClick={() => fileRef.current?.click()}
-          className="card border-2 border-dashed border-slate-700 hover:border-brand-500/50 transition-colors cursor-pointer flex flex-col items-center justify-center py-16">
-          <Upload className="w-12 h-12 text-slate-600 mb-4" />
-          <div className="text-lg font-semibold text-slate-400">Загрузите выписку</div>
-          <div className="text-sm text-slate-600 mt-1">Формат: Excel (.xlsx) из Kaspi Business</div>
-          <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFileUpload} className="hidden" />
-        </div>
-      ) : (
-        <>
-          {/* Stats */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            {[
-              { label:'Транзакций', val: stats.total, cls:'' },
-              { label:'Распознано', val: stats.categorized, cls:'text-green-400' },
-              { label:'Не распознано', val: stats.uncategorized, cls:'text-red-400' },
-              { label:'Дебет', val: fmt(stats.totalDebit)+' ₸', cls:'text-red-400' },
-              { label:'Кредит', val: fmt(stats.totalCredit)+' ₸', cls:'text-green-400' },
-            ].map((s,i) => (
-              <div key={i} className="card-hover text-center">
-                <div className="stat-label">{s.label}</div>
-                <div className={cn('stat-value text-xl', s.cls)}>{s.val}</div>
+      {/* Rules Panel */}
+      {showRules && canManage && (
+        <div className="card border-brand-500/30 space-y-4">
+          <div className="text-sm font-semibold text-brand-400">Правила автокатегоризации</div>
+          <p className="text-xs text-slate-500">При импорте, записи с совпадающим ключевым словом будут автоматически категоризованы или скрыты.</p>
+
+          {/* Add rule */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <select value={newRule.field} onChange={e => setNewRule(r => ({...r, field: e.target.value}))} className="input text-sm">
+              <option value="beneficiary">Бенефициар</option>
+              <option value="purpose">Назначение</option>
+            </select>
+            <input value={newRule.keyword} onChange={e => setNewRule(r => ({...r, keyword: e.target.value}))}
+              className="input text-sm flex-1" placeholder="Ключевое слово (напр. KASPI, ТОО Арай)" />
+            <select value={newRule.action} onChange={e => setNewRule(r => ({...r, action: e.target.value}))} className="input text-sm">
+              <option value="categorize">Категоризовать</option>
+              <option value="hide">Скрыть (не импортировать)</option>
+            </select>
+            {newRule.action === 'categorize' && (
+              <select value={newRule.category} onChange={e => setNewRule(r => ({...r, category: e.target.value}))} className="input text-sm">
+                {Object.entries(CATEGORIES).filter(([k]) => k !== 'uncategorized').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            )}
+            <button onClick={addRule} className="btn-primary text-sm"><Plus className="w-4 h-4" /></button>
+          </div>
+
+          {/* Existing rules */}
+          <div className="space-y-1">
+            {rules.map(r => (
+              <div key={r.id} className="flex items-center justify-between bg-slate-900 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="badge-blue text-[10px]">{r.field === 'beneficiary' ? 'Бенефициар' : 'Назначение'}</span>
+                  <span className="font-mono text-xs text-slate-300">«{r.keyword}»</span>
+                  <span className="text-slate-500">→</span>
+                  {r.action === 'hide' ? (
+                    <span className="badge-red text-[10px]">Скрыть</span>
+                  ) : (
+                    <span className="badge-green text-[10px]">{CATEGORIES[r.category] || r.category}</span>
+                  )}
+                </div>
+                <button onClick={() => deleteRule(r.id)} className="p-1 text-slate-600 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
               </div>
             ))}
+            {rules.length === 0 && <div className="text-xs text-slate-600 text-center py-3">Нет правил. Добавьте первое.</div>}
           </div>
-
-          {/* Filter + Actions */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-slate-500" />
-              {[{ key:'all', label:'Все' }, { key:'uncategorized', label:`Не распозн. (${stats.uncategorized})` }, { key:'categorized', label:'Распозн.' }].map(f => (
-                <button key={f.key} onClick={() => setFilter(f.key)}
-                  className={cn('px-3 py-1.5 rounded-lg text-xs font-medium transition-colors', filter === f.key ? 'bg-brand-600/20 text-brand-400' : 'text-slate-500 hover:text-slate-300')}>
-                  {f.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => { setTransactions([]); setFileName('') }} className="btn-secondary text-sm">Другой файл</button>
-              <button onClick={handleSave} disabled={saving} className="btn-primary text-sm flex items-center gap-2">
-                <Save className="w-4 h-4" />{saving ? 'Сохранение...' : 'Сохранить'}
-              </button>
-            </div>
-          </div>
-
-          {/* Table */}
-          <div className="card overflow-x-auto p-0">
-            <table className="w-full min-w-[1000px] text-sm">
-              <thead>
-                <tr>
-                  <th className="table-header text-left w-24">Дата</th>
-                  <th className="table-header text-right w-28">Сумма</th>
-                  <th className="table-header text-left">Бенефициар</th>
-                  <th className="table-header text-left">Назначение</th>
-                  <th className="table-header text-left w-56">Категория</th>
-                  <th className="table-header text-center w-20">Статус</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((tx, i) => (
-                  <tr key={i} className={cn('hover:bg-slate-800/30', tx.category === 'uncategorized' && 'bg-red-500/5')}>
-                    <td className="table-cell text-xs font-mono text-slate-400">{tx.date ? String(tx.date).slice(0,10) : '—'}</td>
-                    <td className={cn('table-cell text-right font-mono text-xs font-semibold', tx.isDebit ? 'text-red-400' : 'text-green-400')}>
-                      {tx.isDebit ? '-' : '+'}{fmt(tx.amount)}
-                    </td>
-                    <td className="table-cell text-xs text-slate-300 max-w-[200px] truncate">{tx.beneficiary?.split('\n')[0]}</td>
-                    <td className="table-cell text-xs text-slate-500 max-w-[250px] truncate">{tx.purpose}</td>
-                    <td className="table-cell">
-                      <select value={tx.category} onChange={e => updateCategory(i, e.target.value)}
-                        className={cn('input text-xs py-1 px-2 w-full', tx.category === 'uncategorized' && '!border-red-500/50 !bg-red-500/10')}>
-                        {Object.entries(groupLabels).map(([group, gLabel]) => {
-                          const opts = categoryOptions.filter(o => o.group === group)
-                          if (!opts.length) return null
-                          return <optgroup key={group} label={gLabel}>{opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup>
-                        })}
-                      </select>
-                    </td>
-                    <td className="table-cell text-center">{confBadge(tx.confidence)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+        </div>
       )}
 
-      <div className="card border-blue-500/20 bg-blue-500/5">
-        <div className="text-sm font-semibold text-blue-300 mb-2">💡 Совет для бухгалтера</div>
-        <div className="text-xs text-slate-400 space-y-1">
-          <p>В поле «Назначение платежа» добавляйте ключевые слова для автоматической категоризации:</p>
-          <p><span className="text-green-400 font-semibold">Кухня</span> — закуп кухни, <span className="text-blue-400 font-semibold">Бар</span> — закуп бара, <span className="text-amber-400 font-semibold">Кальян</span> — табак</p>
-          <p><span className="text-purple-400 font-semibold">Хоз товары</span>, <span className="text-red-400 font-semibold">Дивиденды</span>, <span className="text-teal-400 font-semibold">Аренда</span>, <span className="text-orange-400 font-semibold">Маркетинг</span></p>
+      {/* Bulk actions */}
+      {selectedIds.size > 0 && (
+        <div className="card flex items-center justify-between bg-red-500/5 border-red-500/20">
+          <span className="text-sm">Выбрано: {selectedIds.size}</span>
+          <button onClick={() => deleteSelected([...selectedIds]).then(() => setSelectedIds(new Set()))}
+            className="btn-danger text-sm flex items-center gap-2"><Trash2 className="w-4 h-4" /> Удалить выбранные</button>
         </div>
+      )}
+
+      {/* Table */}
+      <div className="card overflow-x-auto p-0">
+        <table className="w-full text-sm min-w-[800px]">
+          <thead><tr>
+            <th className="table-header w-8"><input type="checkbox" onChange={e => {
+              if (e.target.checked) setSelectedIds(new Set(sorted.map(t => t.id)))
+              else setSelectedIds(new Set())
+            }} /></th>
+            <th className="table-header text-left">Дата</th>
+            <th className="table-header text-left">Бенефициар</th>
+            <th className="table-header text-left">Назначение</th>
+            <th className="table-header text-right">Сумма</th>
+            <th className="table-header text-center">Категория</th>
+            <th className="table-header text-center w-16"></th>
+          </tr></thead>
+          <tbody>
+            {sorted.map(tx => (
+              <tr key={tx.id} className={cn('hover:bg-slate-800/30', tx.category === 'uncategorized' && 'bg-yellow-500/5')}>
+                <td className="table-cell"><input type="checkbox" checked={selectedIds.has(tx.id)} onChange={() => toggleSelect(tx.id)} /></td>
+                <td className="table-cell text-xs text-slate-400 whitespace-nowrap">{tx.transaction_date}</td>
+                <td className="table-cell text-xs max-w-[200px] truncate" title={tx.beneficiary}>{tx.beneficiary || '—'}</td>
+                <td className="table-cell text-xs max-w-[200px] truncate text-slate-500" title={tx.purpose}>{tx.purpose || '—'}</td>
+                <td className={cn('table-cell text-right font-mono text-xs font-semibold', tx.is_debit ? 'text-red-400' : 'text-green-400')}>
+                  {tx.is_debit ? '-' : '+'}{fmt(tx.amount)} ₸
+                </td>
+                <td className="table-cell text-center">
+                  {canManage ? (
+                    <select value={tx.category} onChange={e => updateCategory(tx.id, e.target.value)}
+                      className={cn('input text-[11px] py-1 px-2 w-36', tx.category === 'uncategorized' && '!border-yellow-500/50 !bg-yellow-500/10')}>
+                      {Object.entries(CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                  ) : (
+                    <span className={cn('badge text-[10px]', tx.category === 'uncategorized' ? 'badge-yellow' : 'badge-blue')}>
+                      {CATEGORIES[tx.category] || tx.category}
+                    </span>
+                  )}
+                </td>
+                <td className="table-cell text-center">
+                  <button onClick={() => deleteTransaction(tx.id)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                </td>
+              </tr>
+            ))}
+            {sorted.length === 0 && <tr><td colSpan="7" className="table-cell text-center text-slate-500 py-8">Нет транзакций. Загрузите банковскую выписку.</td></tr>}
+          </tbody>
+        </table>
       </div>
     </div>
   )

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#166534"/>
+  <text x="256" y="240" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-weight="800" font-size="140" fill="white" letter-spacing="-4">Myata</text>
+  <text x="256" y="360" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-weight="600" font-size="100" fill="rgba(255,255,255,0.7)" letter-spacing="16">4YOU</text>
+</svg>

@@ -33,9 +33,7 @@ export default function LoginPage() {
 
       <div className="relative w-full max-w-md animate-fade-in">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-mint-500 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-brand-500/20">
-            <Leaf className="w-9 h-9 text-white" />
-          </div>
+          <img src="/logo-192.png" alt="Myata 4YOU" className="w-20 h-20 rounded-2xl mx-auto mb-4 shadow-lg shadow-green-900/40" />
           <h1 className="text-2xl font-display font-bold tracking-tight">Мята Finance</h1>
           <p className="text-slate-500 text-sm mt-1">Platinum 4YOU — Финансовый учёт</p>
         </div>

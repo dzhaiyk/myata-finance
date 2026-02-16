@@ -63,6 +63,24 @@ export default function StaffPage() {
     load()
   }
 
+  const terminateStaff = async (s) => {
+    const reason = prompt('Причина увольнения (необязательно):')
+    if (reason === null) return // cancelled
+    await supabase.from('staff').update({
+      is_active: false,
+      terminated_at: new Date().toISOString().split('T')[0],
+      termination_reason: reason || null,
+    }).eq('id', s.id)
+    load()
+  }
+
+  const reinstateStaff = async (s) => {
+    await supabase.from('staff').update({ is_active: true, terminated_at: null, termination_reason: null }).eq('id', s.id)
+    load()
+  }
+
+  const [showInactive, setShowInactive] = useState(false)
+
   const tabs = [
     { key: 'staff', label: 'Сотрудники', icon: Users, count: staff.length },
     { key: 'positions', label: 'Должности', icon: Briefcase, count: positions.length },
@@ -146,6 +164,15 @@ export default function StaffPage() {
       {/* Tables */}
       <div className="card overflow-x-auto p-0">
         {tab === 'staff' && (
+          <>
+          {canManage && (
+            <div className="px-4 py-2 bg-slate-900/30 border-b border-slate-800 flex items-center gap-3">
+              <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
+                <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} className="rounded" />
+                Показать уволенных
+              </label>
+            </div>
+          )}
           <table className="w-full text-sm">
             <thead><tr>
               <th className="table-header text-left">Сотрудник</th>
@@ -154,37 +181,47 @@ export default function StaffPage() {
               <th className="table-header text-right">Ставка/день</th>
               <th className="table-header text-right">% продаж</th>
               <th className="table-header text-center">Статус</th>
-              {canManage && <th className="table-header text-center w-20"></th>}
+              {canManage && <th className="table-header text-center w-24"></th>}
             </tr></thead>
             <tbody>
-              {staff.map(s => {
+              {staff.filter(s => showInactive || s.is_active).map(s => {
                 const pos = positions.find(p => p.id === s.position_id)
                 const rate = s.daily_rate_override || pos?.daily_rate || 0
                 const pct = s.sales_pct_override || pos?.sales_pct || 0
                 return (
                   <tr key={s.id} className={cn('hover:bg-slate-800/30', !s.is_active && 'opacity-50')}>
-                    <td className="table-cell font-medium">{s.full_name}</td>
+                    <td className="table-cell">
+                      <div className="font-medium">{s.full_name}</div>
+                      {s.terminated_at && <div className="text-[10px] text-red-400">Уволен: {s.terminated_at}{s.termination_reason ? ` — ${s.termination_reason}` : ''}</div>}
+                    </td>
                     <td className="table-cell text-slate-400">{s.department}</td>
                     <td className="table-cell text-slate-400">{pos?.name || '—'}</td>
                     <td className="table-cell text-right font-mono">{rate > 0 ? fmt(rate) + ' ₸' : '—'}</td>
                     <td className="table-cell text-right font-mono">{pct > 0 ? pct + '%' : '—'}</td>
                     <td className="table-cell text-center">
-                      <span className={cn('badge', s.is_active ? 'badge-green' : 'badge-red')}>{s.is_active ? 'Активен' : 'Неактивен'}</span>
+                      <span className={cn('badge', s.is_active ? 'badge-green' : 'badge-red')}>{s.is_active ? 'Активен' : 'Уволен'}</span>
                     </td>
                     {canManage && (
                       <td className="table-cell text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button onClick={() => { setEditId(s.id); setForm({ ...s }); setShowForm(true) }} className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-500 hover:text-blue-400"><Edit3 className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => deleteItem('staff', s.id)} className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-500 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                          {s.is_active ? (
+                            <button onClick={() => terminateStaff(s)} className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-500 hover:text-red-400" title="Уволить">
+                              <Trash2 className="w-3.5 h-3.5" /></button>
+                          ) : (
+                            <button onClick={() => reinstateStaff(s)} className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-500 hover:text-green-400" title="Восстановить">
+                              <Plus className="w-3.5 h-3.5" /></button>
+                          )}
                         </div>
                       </td>
                     )}
                   </tr>
                 )
               })}
-              {staff.length === 0 && <tr><td colSpan="7" className="table-cell text-center text-slate-500 py-8">Нет сотрудников</td></tr>}
+              {staff.filter(s => showInactive || s.is_active).length === 0 && <tr><td colSpan="7" className="table-cell text-center text-slate-500 py-8">Нет сотрудников</td></tr>}
             </tbody>
           </table>
+          </>
         )}
         {tab === 'positions' && (
           <table className="w-full text-sm">

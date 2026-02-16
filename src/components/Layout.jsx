@@ -42,9 +42,7 @@ export default function Layout() {
       )}>
         {/* Logo */}
         <div className="px-5 py-5 flex items-center gap-3 border-b border-slate-800">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-mint-500 flex items-center justify-center">
-            <Leaf className="w-5 h-5 text-white" />
-          </div>
+          <img src="/logo-192.png" alt="Myata" className="w-9 h-9 rounded-xl" />
           <div>
             <div className="font-display font-bold text-sm tracking-tight">Мята Finance</div>
             <div className="text-[10px] text-slate-500 font-medium tracking-wide uppercase">Platinum 4YOU</div>
