@@ -7,6 +7,30 @@ import { ChevronDown, ChevronRight, Plus, Trash2, Info, FileText, Upload, Chevro
 const CURRENT_YEAR = new Date().getFullYear()
 const CURRENT_MONTH = new Date().getMonth() + 1
 
+// Period allocation: how much of a transaction's amount belongs to a specific month
+function getTxAmountForMonth(tx, targetYear, targetMonth) {
+  const amount = Number(tx.amount) || 0
+
+  // No period set → standard behavior by transaction_date
+  if (!tx.period_from || !tx.period_to) {
+    const d = new Date(tx.transaction_date)
+    return (d.getFullYear() === targetYear && d.getMonth() + 1 === targetMonth) ? amount : 0
+  }
+
+  const from = new Date(tx.period_from)
+  const to = new Date(tx.period_to)
+  const fromYM = from.getFullYear() * 12 + from.getMonth()
+  const toYM = to.getFullYear() * 12 + to.getMonth()
+  const targetYM = targetYear * 12 + (targetMonth - 1)
+
+  // Target month not in range
+  if (targetYM < fromYM || targetYM > toYM) return 0
+
+  // Split evenly across all months in the period
+  const totalMonths = toYM - fromYM + 1
+  return Math.round(amount / totalMonths)
+}
+
 // P&L structure matching the restaurant's actual format
 // Each line: { key, label, level (0=header,1=group,2=sub), source, calc }
 // source: 'daily:field' | 'bank:category_code' | 'calc' | 'manual'
@@ -129,9 +153,13 @@ export default function PnLPage() {
     const startDate = viewMode === 'ytd' ? `${year}-01-01` : `${year}-${String(month).padStart(2, '0')}-01`
     const endMonth = viewMode === 'ytd' ? 12 : month
     const endDate = `${year}-${String(endMonth).padStart(2, '0')}-${new Date(year, endMonth, 0).getDate()}`
+
     const [drRes, btRes, adjRes] = await Promise.all([
       supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted'),
-      supabase.from('bank_transactions').select('*').gte('transaction_date', startDate).lte('transaction_date', endDate),
+      // Fetch bank tx where: transaction_date in range OR period overlaps with range
+      supabase.from('bank_transactions').select('*').or(
+        `and(transaction_date.gte.${startDate},transaction_date.lte.${endDate}),and(period_from.lte.${endDate},period_to.gte.${startDate})`
+      ),
       supabase.from('pnl_data').select('*').eq('year', year).gte('month', viewMode === 'ytd' ? 1 : month).lte('month', endMonth),
     ])
     setDailyReports(drRes.data || [])
@@ -143,6 +171,10 @@ export default function PnLPage() {
   // ===== COMPUTE ALL P&L VALUES =====
   const values = useMemo(() => {
     const v = {}
+
+    // Determine which months we're computing for
+    const startMonth = viewMode === 'ytd' ? 1 : month
+    const endMonth = viewMode === 'ytd' ? 12 : month
 
     // Revenue from daily reports
     let revK = 0, revB = 0, revH = 0, revO = 0
@@ -171,11 +203,18 @@ export default function PnLPage() {
     })
     v.payroll_cash = cashPayroll
 
-    // Bank expenses by category
+    // Bank expenses by category — period-aware aggregation
     const bankByCat = {}
     bankTx.forEach(tx => {
       if (!tx.category || tx.category === 'uncategorized' || tx.category === 'internal') return
-      bankByCat[tx.category] = (bankByCat[tx.category] || 0) + (Number(tx.amount) || 0)
+      // Sum the period-allocated amount across all target months
+      let txTotal = 0
+      for (let m = startMonth; m <= endMonth; m++) {
+        txTotal += getTxAmountForMonth(tx, year, m)
+      }
+      if (txTotal !== 0) {
+        bankByCat[tx.category] = (bankByCat[tx.category] || 0) + txTotal
+      }
     })
     const bk = (cat) => bankByCat[cat] || 0
 
@@ -227,7 +266,7 @@ export default function PnLPage() {
     v.fc_hookah_pct = revH > 0 ? (v.fc_hookah / revH) : 0
 
     return v
-  }, [dailyReports, bankTx, adjustments])
+  }, [dailyReports, bankTx, adjustments, year, month, viewMode])
 
   const toggleAll = () => {
     const newState = !allExpanded
@@ -251,6 +290,9 @@ export default function PnLPage() {
   if (loading) return <div className="text-center text-slate-500 py-20">Загрузка...</div>
 
   const periodLabel = viewMode === 'ytd' ? `${year} YTD` : `${MONTHS_RU[month - 1]} ${year}`
+
+  // Count period-allocated bank transactions for info display
+  const periodAllocatedCount = bankTx.filter(tx => tx.period_from && tx.period_to).length
 
   // Determine which lines are visible (hidden if parent collapsed)
   const isVisible = (line, idx) => {
@@ -281,7 +323,10 @@ export default function PnLPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-display font-bold tracking-tight">P&L</h1>
-          <p className="text-sm text-slate-500 mt-0.5">{periodLabel} · {dailyReports.length} отчётов · {bankTx.length} банк. записей</p>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {periodLabel} · {dailyReports.length} отчётов · {bankTx.length} банк. записей
+            {periodAllocatedCount > 0 && <span className="text-purple-400"> · {periodAllocatedCount} распредел.</span>}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <select value={month} onChange={e => setMonth(Number(e.target.value))} className="input text-sm">
@@ -424,6 +469,9 @@ export default function PnLPage() {
         <div className="text-xs text-slate-400 space-y-1">
           <p><FileText className="w-3 h-3 inline mr-1" /> <b className="text-slate-300">Ежедневные отчёты ({dailyReports.length}):</b> Выручка, закуп нал, ЗП авансы нал</p>
           <p><Upload className="w-3 h-3 inline mr-1" /> <b className="text-slate-300">Банковская выписка ({bankTx.length}):</b> Аренда, коммуналка, ФОТ безнал, маркетинг, налоги, комиссии</p>
+          {periodAllocatedCount > 0 && (
+            <p>📅 <b className="text-purple-300">{periodAllocatedCount} транзакций</b> распределены по периодам (суммы пропорционально разнесены по месяцам)</p>
+          )}
           <p>P&L собирается <b className="text-slate-300">автоматически</b>. Ручные корректировки — для редких случаев.</p>
         </div>
       </div>

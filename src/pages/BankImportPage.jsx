@@ -1,23 +1,213 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
 import { parseBankStatement } from '@/lib/categorize'
-import { Upload, Trash2, Settings, Plus, X, Save } from 'lucide-react'
+import { Upload, Trash2, Settings, Plus, X, Save, Calendar } from 'lucide-react'
+
+const MONTHS_SHORT = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек']
 
 const FIELDS = [
   { value: 'beneficiary', label: 'Бенефициар' },
   { value: 'purpose', label: 'Назначение' },
   { value: 'knp', label: 'КНП' },
   { value: 'amount', label: 'Сумма' },
+  { value: 'is_debit', label: 'Дебет/Кредит' },
 ]
 const OPERATORS = {
-  beneficiary: [{ value: 'contains', label: 'содержит' }, { value: 'equals', label: 'равно' }, { value: 'starts_with', label: 'начинается с' }],
-  purpose: [{ value: 'contains', label: 'содержит' }, { value: 'equals', label: 'равно' }, { value: 'starts_with', label: 'начинается с' }],
-  knp: [{ value: 'equals', label: 'равно' }, { value: 'contains', label: 'содержит' }],
-  amount: [{ value: 'gt', label: '>' }, { value: 'lt', label: '<' }, { value: 'equals', label: '=' }],
+  beneficiary: [{ value: 'contains', label: 'содержит' }, { value: 'not_contains', label: 'не содержит' }, { value: 'equals', label: 'равно' }, { value: 'not_equals', label: 'не равно' }, { value: 'starts_with', label: 'начинается с' }],
+  purpose: [{ value: 'contains', label: 'содержит' }, { value: 'not_contains', label: 'не содержит' }, { value: 'equals', label: 'равно' }, { value: 'not_equals', label: 'не равно' }, { value: 'starts_with', label: 'начинается с' }],
+  knp: [{ value: 'equals', label: 'равно' }, { value: 'not_equals', label: 'не равно' }, { value: 'contains', label: 'содержит' }],
+  amount: [{ value: 'gt', label: '>' }, { value: 'gte', label: '≥' }, { value: 'lt', label: '<' }, { value: 'lte', label: '≤' }, { value: 'equals', label: '=' }, { value: 'between', label: 'между' }],
+  is_debit: [{ value: 'equals', label: 'равно' }],
+}
+
+// Hash for deduplication
+function generateTxHash(tx) {
+  const str = `${tx.date}|${tx.amount}|${(tx.beneficiary || '').trim().toLowerCase()}|${(tx.purpose || '').slice(0, 100).trim().toLowerCase()}`
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash |= 0
+  }
+  return hash.toString(36)
 }
 const TYPE_LABELS = { income: 'Доходы', cogs: 'Себестоимость', opex: 'Операционные', below_ebitda: 'Ниже EBITDA', other: 'Прочее' }
+
+// === Period helpers ===
+const firstOfMonth = (y, m) => `${y}-${String(m).padStart(2, '0')}-01`
+const lastOfMonth = (y, m) => `${y}-${String(m).padStart(2, '0')}-${new Date(y, m, 0).getDate()}`
+
+const formatPeriodBadge = (tx) => {
+  const txDate = new Date(tx.transaction_date)
+  const txM = txDate.getMonth() // 0-indexed
+  const txY = txDate.getFullYear()
+  const txLabel = `${MONTHS_SHORT[txM]} ${String(txY).slice(2)}`
+
+  if (!tx.period_from || !tx.period_to) {
+    return { label: txLabel, style: 'default' }
+  }
+
+  const from = new Date(tx.period_from)
+  const to = new Date(tx.period_to)
+  const fromM = from.getMonth()
+  const fromY = from.getFullYear()
+  const toM = to.getMonth()
+  const toY = to.getFullYear()
+  const totalMonths = (toY * 12 + toM) - (fromY * 12 + fromM) + 1
+
+  if (fromY === toY && fromM === toM) {
+    // Single month
+    const label = `${MONTHS_SHORT[fromM]} ${String(fromY).slice(2)}`
+    const isSameAsTx = fromM === txM && fromY === txY
+    return { label, style: isSameAsTx ? 'default' : 'single' }
+  }
+
+  // Range
+  const fromLabel = `${MONTHS_SHORT[fromM]}`
+  const toLabel = `${MONTHS_SHORT[toM]} ${String(toY).slice(2)}`
+  return { label: `${fromLabel}-${toLabel} (${totalMonths}м)`, style: 'range' }
+}
+
+// === PeriodEditor component ===
+const PeriodEditor = ({ tx, onSave, disabled }) => {
+  const [open, setOpen] = useState(false)
+  const [showCustom, setShowCustom] = useState(false)
+  const [customFrom, setCustomFrom] = useState({ month: 1, year: 2025 })
+  const [customTo, setCustomTo] = useState({ month: 1, year: 2025 })
+  const btnRef = useRef(null)
+  const popRef = useRef(null)
+
+  const txDate = new Date(tx.transaction_date)
+  const txM = txDate.getMonth() + 1 // 1-indexed
+  const txY = txDate.getFullYear()
+
+  // Close popover on outside click
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => {
+      if (popRef.current && !popRef.current.contains(e.target) && btnRef.current && !btnRef.current.contains(e.target)) {
+        setOpen(false); setShowCustom(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const badge = formatPeriodBadge(tx)
+  const badgeClass = {
+    default: 'bg-slate-800 text-slate-400 border-slate-700',
+    single: 'bg-green-500/15 text-green-400 border-green-500/30',
+    range: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
+  }[badge.style]
+
+  const save = async (from, to) => {
+    await onSave(tx.id, from, to)
+    setOpen(false); setShowCustom(false)
+  }
+
+  const handlePreset = (preset) => {
+    if (preset === 'current') {
+      save(null, null)
+    } else if (preset === 'prev_month') {
+      const pm = txM === 1 ? 12 : txM - 1
+      const py = txM === 1 ? txY - 1 : txY
+      save(firstOfMonth(py, pm), lastOfMonth(py, pm))
+    } else if (preset === 'prev_quarter') {
+      // 3 months before tx month
+      let fm = txM - 3, fy = txY
+      if (fm <= 0) { fm += 12; fy-- }
+      let tm = txM - 1, ty = txY
+      if (tm <= 0) { tm += 12; ty-- }
+      save(firstOfMonth(fy, fm), lastOfMonth(ty, tm))
+    } else if (preset === 'fwd3') {
+      const toM3 = txM + 2
+      const toY3 = txY + Math.floor((toM3 - 1) / 12)
+      const toM3adj = ((toM3 - 1) % 12) + 1
+      save(firstOfMonth(txY, txM), lastOfMonth(toY3, toM3adj))
+    } else if (preset === 'fwd6') {
+      const toM6 = txM + 5
+      const toY6 = txY + Math.floor((toM6 - 1) / 12)
+      const toM6adj = ((toM6 - 1) % 12) + 1
+      save(firstOfMonth(txY, txM), lastOfMonth(toY6, toM6adj))
+    }
+  }
+
+  const handleCustomSave = () => {
+    save(firstOfMonth(customFrom.year, customFrom.month), lastOfMonth(customTo.year, customTo.month))
+  }
+
+  const openCustom = () => {
+    // Initialize custom selects from existing period or tx date
+    if (tx.period_from) {
+      const f = new Date(tx.period_from)
+      const t = new Date(tx.period_to)
+      setCustomFrom({ month: f.getMonth() + 1, year: f.getFullYear() })
+      setCustomTo({ month: t.getMonth() + 1, year: t.getFullYear() })
+    } else {
+      setCustomFrom({ month: txM, year: txY })
+      setCustomTo({ month: txM, year: txY })
+    }
+    setShowCustom(true)
+  }
+
+  const years = [2023, 2024, 2025, 2026]
+
+  return (
+    <div className="relative inline-block">
+      <button ref={btnRef} onClick={() => { if (!disabled) setOpen(!open) }}
+        disabled={disabled}
+        className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] font-medium transition-colors whitespace-nowrap',
+          badgeClass, !disabled && 'cursor-pointer hover:brightness-125')}>
+        <Calendar className="w-3 h-3" />{badge.label}
+      </button>
+
+      {open && (
+        <div ref={popRef}
+          className="absolute z-[60] top-full right-0 mt-1 bg-slate-850 border border-slate-700 rounded-xl shadow-2xl p-2 min-w-[180px]"
+          style={{ zIndex: 60 }}>
+          {!showCustom ? (
+            <div className="space-y-0.5">
+              <button onClick={() => handlePreset('current')} className="w-full text-left px-3 py-1.5 text-xs rounded-lg hover:bg-slate-800 text-slate-300">Текущий</button>
+              <button onClick={() => handlePreset('prev_month')} className="w-full text-left px-3 py-1.5 text-xs rounded-lg hover:bg-slate-800 text-slate-300">Пред. месяц</button>
+              <button onClick={() => handlePreset('prev_quarter')} className="w-full text-left px-3 py-1.5 text-xs rounded-lg hover:bg-slate-800 text-slate-300">Пред. квартал (3м)</button>
+              <button onClick={() => handlePreset('fwd3')} className="w-full text-left px-3 py-1.5 text-xs rounded-lg hover:bg-slate-800 text-slate-300">Вперёд 3 мес</button>
+              <button onClick={() => handlePreset('fwd6')} className="w-full text-left px-3 py-1.5 text-xs rounded-lg hover:bg-slate-800 text-slate-300">Вперёд 6 мес</button>
+              <div className="h-px bg-slate-700 my-1" />
+              <button onClick={openCustom} className="w-full text-left px-3 py-1.5 text-xs rounded-lg hover:bg-slate-800 text-brand-400 font-medium">Свой…</button>
+            </div>
+          ) : (
+            <div className="space-y-2 min-w-[220px]">
+              <div className="text-[10px] font-semibold text-slate-500 uppercase px-1">С</div>
+              <div className="flex gap-1.5">
+                <select value={customFrom.month} onChange={e => setCustomFrom(p => ({ ...p, month: Number(e.target.value) }))} className="input text-xs py-1 px-1.5 flex-1">
+                  {MONTHS_SHORT.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                </select>
+                <select value={customFrom.year} onChange={e => setCustomFrom(p => ({ ...p, year: Number(e.target.value) }))} className="input text-xs py-1 px-1.5 w-20">
+                  {years.map(y => <option key={y}>{y}</option>)}
+                </select>
+              </div>
+              <div className="text-[10px] font-semibold text-slate-500 uppercase px-1">По</div>
+              <div className="flex gap-1.5">
+                <select value={customTo.month} onChange={e => setCustomTo(p => ({ ...p, month: Number(e.target.value) }))} className="input text-xs py-1 px-1.5 flex-1">
+                  {MONTHS_SHORT.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                </select>
+                <select value={customTo.year} onChange={e => setCustomTo(p => ({ ...p, year: Number(e.target.value) }))} className="input text-xs py-1 px-1.5 w-20">
+                  {years.map(y => <option key={y}>{y}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-1.5 pt-1">
+                <button onClick={handleCustomSave} className="btn-primary text-[11px] py-1 px-3 flex-1">OK</button>
+                <button onClick={() => setShowCustom(false)} className="btn-secondary text-[11px] py-1 px-3">Назад</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function BankImportPage() {
   const { hasPermission } = useAuthStore()
@@ -67,6 +257,9 @@ export default function BankImportPage() {
   }, [rules, ruleConditions])
 
   const matchCondition = (tx, cond) => {
+    if (cond.field === 'is_debit') {
+      return String(tx.is_debit) === cond.value
+    }
     const fieldVal = (() => {
       if (cond.field === 'beneficiary') return tx.beneficiary || ''
       if (cond.field === 'purpose') return tx.purpose || ''
@@ -76,10 +269,19 @@ export default function BankImportPage() {
     })()
     switch (cond.operator) {
       case 'contains': return fieldVal.toLowerCase().includes(cond.value.toLowerCase())
+      case 'not_contains': return !fieldVal.toLowerCase().includes(cond.value.toLowerCase())
       case 'equals': return fieldVal.toLowerCase() === cond.value.toLowerCase()
+      case 'not_equals': return fieldVal.toLowerCase() !== cond.value.toLowerCase()
       case 'starts_with': return fieldVal.toLowerCase().startsWith(cond.value.toLowerCase())
       case 'gt': return Number(fieldVal) > Number(cond.value)
+      case 'gte': return Number(fieldVal) >= Number(cond.value)
       case 'lt': return Number(fieldVal) < Number(cond.value)
+      case 'lte': return Number(fieldVal) <= Number(cond.value)
+      case 'between': {
+        const [min, max] = cond.value.split('-').map(Number)
+        const num = Number(fieldVal)
+        return num >= min && num <= max
+      }
       default: return false
     }
   }
@@ -110,14 +312,26 @@ export default function BankImportPage() {
         }
         if (ruleMatch?.action === 'hide') { hidden++; continue }
         toInsert.push({
-          transaction_date: tx.date, amount: Math.abs(tx.amount), is_debit: tx.amount < 0 || tx.is_debit,
+          transaction_date: tx.date, amount: Math.abs(tx.amount), is_debit: tx.amount < 0 || tx.isDebit,
           beneficiary: tx.beneficiary || '', purpose: tx.purpose || '', knp: tx.knp || '',
           category: ruleMatch?.category || tx.category || 'uncategorized',
           confidence: ruleMatch ? 'auto' : tx.confidence || 'low', import_file: file.name, import_batch_id: batchId,
+          tx_hash: generateTxHash(tx),
         })
       }
-      if (toInsert.length > 0) { const { error } = await supabase.from('bank_transactions').insert(toInsert); if (error) throw error }
-      alert(`✅ Импортировано ${toInsert.length} записей${hidden > 0 ? ` (${hidden} скрыто)` : ''}`)
+      // Deduplicate: upsert ignoring existing hashes
+      let duplicates = 0
+      if (toInsert.length > 0) {
+        const { data: inserted, error } = await supabase.from('bank_transactions')
+          .upsert(toInsert, { onConflict: 'tx_hash', ignoreDuplicates: true })
+          .select('id')
+        if (error) throw error
+        duplicates = toInsert.length - (inserted?.length || 0)
+      }
+      const parts = [`✅ Импортировано ${toInsert.length - duplicates} записей`]
+      if (duplicates > 0) parts.push(`${duplicates} дублей пропущено`)
+      if (hidden > 0) parts.push(`${hidden} скрыто правилами`)
+      alert(parts.join(' · '))
       load()
     } catch (err) { alert('Ошибка: ' + err.message) }
     setImporting(false); e.target.value = ''
@@ -127,6 +341,12 @@ export default function BankImportPage() {
     await supabase.from('bank_transactions').update({ category, confidence: 'manual' }).eq('id', id)
     setTransactions(prev => prev.map(t => t.id === id ? { ...t, category, confidence: 'manual' } : t))
   }
+
+  const updatePeriod = async (id, periodFrom, periodTo) => {
+    await supabase.from('bank_transactions').update({ period_from: periodFrom, period_to: periodTo }).eq('id', id)
+    setTransactions(prev => prev.map(t => t.id === id ? { ...t, period_from: periodFrom, period_to: periodTo } : t))
+  }
+
   const deleteTransaction = async (id) => {
     await supabase.from('bank_transactions').delete().eq('id', id)
     setTransactions(prev => prev.filter(t => t.id !== id))
@@ -142,7 +362,12 @@ export default function BankImportPage() {
   const updateCondition = (idx, key, val) => {
     setNewRule(r => ({ ...r, conditions: r.conditions.map((c, i) => {
       if (i !== idx) return c
-      const u = { ...c, [key]: val }; if (key === 'field') u.operator = OPERATORS[val]?.[0]?.value || 'contains'; return u
+      const u = { ...c, [key]: val }
+      if (key === 'field') {
+        u.operator = OPERATORS[val]?.[0]?.value || 'contains'
+        if (val === 'is_debit') u.value = 'true'
+      }
+      return u
     })}))
   }
   const saveRule = async () => {
@@ -243,7 +468,20 @@ export default function BankImportPage() {
                       <select value={cond.operator} onChange={e => updateCondition(idx, 'operator', e.target.value)} className="input text-xs w-32">
                         {(OPERATORS[cond.field] || []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
-                      <input value={cond.value} onChange={e => updateCondition(idx, 'value', e.target.value)} className="input text-xs flex-1 font-mono" placeholder={cond.field === 'amount' ? '100000' : 'Ключевое слово'} />
+                      {cond.operator === 'between' ? (
+                        <div className="flex items-center gap-1 flex-1">
+                          <input value={cond.value.split('-')[0] || ''} onChange={e => updateCondition(idx, 'value', `${e.target.value}-${cond.value.split('-')[1] || ''}`)} className="input text-xs w-20 font-mono" placeholder="от" />
+                          <span className="text-slate-500 text-xs">—</span>
+                          <input value={cond.value.split('-')[1] || ''} onChange={e => updateCondition(idx, 'value', `${cond.value.split('-')[0] || ''}-${e.target.value}`)} className="input text-xs w-20 font-mono" placeholder="до" />
+                        </div>
+                      ) : cond.field === 'is_debit' ? (
+                        <select value={cond.value} onChange={e => updateCondition(idx, 'value', e.target.value)} className="input text-xs flex-1">
+                          <option value="true">Дебет (расход)</option>
+                          <option value="false">Кредит (приход)</option>
+                        </select>
+                      ) : (
+                        <input value={cond.value} onChange={e => updateCondition(idx, 'value', e.target.value)} className="input text-xs flex-1 font-mono" placeholder={cond.field === 'amount' ? '100000' : 'Ключевое слово'} />
+                      )}
                       {newRule.conditions.length > 1 && <button onClick={() => removeCondition(idx)} className="p-1 text-slate-600 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>}
                     </div>
                   ))}
@@ -276,7 +514,7 @@ export default function BankImportPage() {
                       <span className="text-[11px] bg-slate-800 rounded-lg px-2 py-1 font-mono">
                         <span className="text-blue-400">{FIELDS.find(f => f.value === c.field)?.label}</span>
                         <span className="text-slate-500 mx-1">{OPERATORS[c.field]?.find(o => o.value === c.operator)?.label}</span>
-                        <span className="text-amber-400">«{c.value}»</span>
+                        <span className="text-amber-400">«{c.field === 'is_debit' ? (c.value === 'true' ? 'Дебет' : 'Кредит') : c.value}»</span>
                       </span>
                     </span>
                   ))}
@@ -296,11 +534,12 @@ export default function BankImportPage() {
       )}
 
       <div className="card overflow-x-auto p-0">
-        <table className="w-full text-sm min-w-[800px]">
+        <table className="w-full text-sm min-w-[900px]">
           <thead><tr>
             <th className="table-header w-8"><input type="checkbox" onChange={e => { if (e.target.checked) setSelectedIds(new Set(sorted.map(t => t.id))); else setSelectedIds(new Set()) }} /></th>
             <th className="table-header text-left">Дата</th><th className="table-header text-left">Бенефициар</th>
             <th className="table-header text-left">Назначение</th><th className="table-header text-right">Сумма</th>
+            <th className="table-header text-center">Период</th>
             <th className="table-header text-center">Категория</th><th className="table-header w-16"></th>
           </tr></thead>
           <tbody>
@@ -312,6 +551,9 @@ export default function BankImportPage() {
                 <td className="table-cell text-xs max-w-[200px] truncate text-slate-500" title={tx.purpose}>{tx.purpose || '—'}</td>
                 <td className={cn('table-cell text-right font-mono text-xs font-semibold', tx.is_debit ? 'text-red-400' : 'text-green-400')}>
                   {tx.is_debit ? '-' : '+'}{fmt(tx.amount)} ₸
+                </td>
+                <td className="table-cell text-center">
+                  <PeriodEditor tx={tx} onSave={updatePeriod} disabled={!canManage} />
                 </td>
                 <td className="table-cell text-center">
                   {canManage ? (
@@ -333,7 +575,7 @@ export default function BankImportPage() {
                 </td>
               </tr>
             ))}
-            {sorted.length === 0 && <tr><td colSpan="7" className="table-cell text-center text-slate-500 py-8">Нет транзакций</td></tr>}
+            {sorted.length === 0 && <tr><td colSpan="8" className="table-cell text-center text-slate-500 py-8">Нет транзакций</td></tr>}
           </tbody>
         </table>
       </div>

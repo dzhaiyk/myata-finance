@@ -391,7 +391,7 @@ export default function DailyReportPage() {
         if (sec.supplierCat) suggestions = savedSuppliers[sec.supplierCat] || []
         if (isPayroll) suggestions = savedStaff
         return (
-          <div key={sec.key} className={cn('card border', colorMap[sec.color])}>
+          <div key={sec.key} className={cn('card border overflow-visible', colorMap[sec.color])}>
             <button onClick={() => setExpanded(prev => ({ ...prev, [sec.key]: !prev[sec.key] }))} className="flex items-center justify-between w-full text-left">
               <div className="flex items-center gap-2">
                 <span>{sec.icon}</span><h2 className="text-sm font-display font-bold">{sec.label}</h2>
