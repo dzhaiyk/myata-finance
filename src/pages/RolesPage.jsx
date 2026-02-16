@@ -1,96 +1,97 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ALL_PERMISSIONS, useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { Plus, Trash2, Save, Shield, Check, X } from 'lucide-react'
 
-const DEFAULT_ROLES = [
-  { name: 'Админ', description: 'Полный доступ ко всему', is_system: true },
-  { name: 'Учредитель', description: 'Просмотр всех финансов и отчётов', is_system: true },
-  { name: 'Управляющий', description: 'Управление ежедневными операциями', is_system: true },
-  { name: 'Менеджер', description: 'Создание ежедневных отчётов', is_system: true },
-]
-
 export default function RolesPage() {
   const { hasPermission } = useAuthStore()
   const canManage = hasPermission('roles.manage')
 
-  const [roles, setRoles] = useState(DEFAULT_ROLES.map((r, i) => ({ id: i + 1, ...r })))
-  const [permsMatrix, setPermsMatrix] = useState(() => {
-    const m = {}
-    // Default permissions
-    const defaults = {
-      'Админ': Object.keys(ALL_PERMISSIONS).reduce((a, k) => ({ ...a, [k]: true }), {}),
-      'Учредитель': {
-        'daily_report.view': true, 'pnl.view': true, 'cashflow.view': true, 'dashboard.view': true,
-        'dashboard.kpi': true, 'bank_import.view': true, 'users.view': true, 'roles.view': true, 'settings.view': true,
-      },
-      'Управляющий': {
-        'daily_report.view': true, 'daily_report.create': true, 'daily_report.edit': true,
-        'pnl.view': true, 'cashflow.view': true, 'dashboard.view': true, 'dashboard.kpi': true,
-        'bank_import.view': true, 'bank_import.upload': true, 'bank_import.categorize': true,
-      },
-      'Менеджер': {
-        'daily_report.view': true, 'daily_report.create': true, 'dashboard.view': true,
-      },
-    }
-    roles.forEach(r => { m[r.id] = defaults[r.name] || {} })
-    return m
-  })
-
+  const [roles, setRoles] = useState([])
+  const [permsMatrix, setPermsMatrix] = useState({})
+  const [loading, setLoading] = useState(true)
   const [newRoleName, setNewRoleName] = useState('')
   const [newRoleDesc, setNewRoleDesc] = useState('')
   const [saving, setSaving] = useState(false)
 
+  useEffect(() => { loadRoles() }, [])
+
+  const loadRoles = async () => {
+    setLoading(true)
+    const { data: rolesData } = await supabase.from('roles').select('*').order('id')
+    const { data: permsData } = await supabase.from('permissions').select('*')
+
+    const r = rolesData || []
+    setRoles(r)
+
+    // Build permissions matrix from DB
+    const m = {}
+    r.forEach(role => { m[role.id] = {} })
+    if (permsData) {
+      permsData.forEach(p => {
+        if (m[p.role_id]) m[p.role_id][p.permission_key] = p.allowed
+      })
+    }
+    // Admin always has all
+    const adminRole = r.find(x => x.name === 'Админ')
+    if (adminRole) {
+      Object.keys(ALL_PERMISSIONS).forEach(k => { m[adminRole.id] = { ...m[adminRole.id], [k]: true } })
+    }
+    setPermsMatrix(m)
+    setLoading(false)
+  }
+
   const togglePerm = (roleId, permKey) => {
     if (!canManage) return
     const role = roles.find(r => r.id === roleId)
-    if (role?.name === 'Админ') return // Can't modify admin
+    if (role?.name === 'Админ') return
     setPermsMatrix(prev => ({
       ...prev,
       [roleId]: { ...prev[roleId], [permKey]: !prev[roleId]?.[permKey] }
     }))
   }
 
-  const addRole = () => {
+  const addRole = async () => {
     if (!newRoleName.trim()) return
-    const newId = Math.max(...roles.map(r => r.id)) + 1
-    setRoles(prev => [...prev, { id: newId, name: newRoleName, description: newRoleDesc, is_system: false }])
-    setPermsMatrix(prev => ({ ...prev, [newId]: {} }))
+    const { data, error } = await supabase.from('roles').insert({
+      name: newRoleName.trim(),
+      description: newRoleDesc.trim() || null,
+      is_system: false,
+    }).select().single()
+    if (error) return alert('Ошибка: ' + error.message)
     setNewRoleName('')
     setNewRoleDesc('')
+    loadRoles()
   }
 
-  const removeRole = (roleId) => {
+  const removeRole = async (roleId) => {
     const role = roles.find(r => r.id === roleId)
-    if (role?.is_system) return
-    if (!confirm(`Удалить роль "${role.name}"?`)) return
-    setRoles(prev => prev.filter(r => r.id !== roleId))
-    setPermsMatrix(prev => { const m = { ...prev }; delete m[roleId]; return m })
+    if (role?.is_system) return alert('Системную роль нельзя удалить')
+    if (!confirm(`Удалить роль "${role?.name}"?`)) return
+    await supabase.from('permissions').delete().eq('role_id', roleId)
+    await supabase.from('roles').delete().eq('id', roleId)
+    loadRoles()
   }
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      // Save to Supabase
       for (const role of roles) {
-        const { data, error } = await supabase.from('roles').upsert({
-          id: role.id, name: role.name, description: role.description, is_system: role.is_system,
-        }, { onConflict: 'id' })
-        if (error) throw error
-
-        // Save permissions
-        const perms = Object.entries(permsMatrix[role.id] || {}).map(([key, allowed]) => ({
-          role_id: role.id, permission_key: key, allowed,
+        if (role.name === 'Админ') continue // Skip admin
+        const perms = Object.entries(permsMatrix[role.id] || {})
+        // Delete old and insert new
+        await supabase.from('permissions').delete().eq('role_id', role.id)
+        const rows = perms.filter(([_, v]) => v).map(([key]) => ({
+          role_id: role.id, permission_key: key, allowed: true,
         }))
-        if (perms.length) {
-          await supabase.from('permissions').upsert(perms, { onConflict: 'role_id,permission_key' })
+        if (rows.length > 0) {
+          const { error } = await supabase.from('permissions').insert(rows)
+          if (error) throw error
         }
       }
-      alert('✅ Роли и права сохранены')
-    } catch (e) {
-      alert('Ошибка: ' + e.message)
-    }
+      alert('✅ Права сохранены')
+    } catch (e) { alert('Ошибка: ' + e.message) }
     setSaving(false)
   }
 
@@ -104,15 +105,18 @@ export default function RolesPage() {
 
   const groupNames = {
     daily_report: 'Ежедневный отчёт', pnl: 'P&L', cashflow: 'Cash Flow', dashboard: 'Dashboard',
-    bank_import: 'Импорт выписки', users: 'Пользователи', roles: 'Роли', settings: 'Настройки', telegram: 'Telegram',
+    bank_import: 'Импорт выписки', staff: 'Персонал', suppliers: 'Поставщики', payroll: 'Зарплата',
+    users: 'Пользователи', roles: 'Роли', settings: 'Настройки', telegram: 'Telegram',
   }
+
+  if (loading) return <div className="text-center text-slate-500 py-20">Загрузка...</div>
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-display font-bold tracking-tight">Роли и права</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Управление ролями и разрешениями пользователей</p>
+          <p className="text-sm text-slate-500 mt-0.5">{roles.length} ролей в системе</p>
         </div>
         {canManage && (
           <button onClick={handleSave} disabled={saving} className="btn-primary text-sm flex items-center gap-2">
@@ -124,9 +128,9 @@ export default function RolesPage() {
       {/* Add Role */}
       {canManage && (
         <div className="card border-brand-500/20">
-          <div className="text-sm font-semibold text-brand-400 mb-3">Добавить новую роль</div>
+          <div className="text-sm font-semibold text-brand-400 mb-3">Добавить роль</div>
           <div className="flex flex-col sm:flex-row gap-3">
-            <input value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="Название роли" className="input text-sm flex-1" />
+            <input value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="Название" className="input text-sm flex-1" />
             <input value={newRoleDesc} onChange={e => setNewRoleDesc(e.target.value)} placeholder="Описание" className="input text-sm flex-1" />
             <button onClick={addRole} disabled={!newRoleName.trim()} className="btn-primary text-sm flex items-center gap-2">
               <Plus className="w-4 h-4" /> Добавить
@@ -158,8 +162,8 @@ export default function RolesPage() {
           </thead>
           <tbody>
             {Object.entries(permGroups).map(([group, perms]) => (
-              <>
-                <tr key={`g-${group}`}>
+              <React.Fragment key={`g-${group}`}>
+                <tr>
                   <td colSpan={roles.length + 1} className="px-4 py-2 bg-slate-900/80 text-xs font-bold text-slate-500 uppercase tracking-wider border-t border-slate-800">
                     {groupNames[group] || group}
                   </td>
@@ -191,7 +195,7 @@ export default function RolesPage() {
                     })}
                   </tr>
                 ))}
-              </>
+              </React.Fragment>
             ))}
           </tbody>
         </table>
