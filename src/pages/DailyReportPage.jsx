@@ -25,7 +25,7 @@ const NameInput = ({ value, onChange, suggestions, placeholder, disabled = false
         onFocus={() => setShowSugg(true)} onBlur={() => setTimeout(() => setShowSugg(false), 200)}
         className={`input text-sm w-full ${disabled ? 'opacity-50' : ''}`} placeholder={placeholder} />
       {showSugg && !disabled && filtered.length > 0 && (
-        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-xl shadow-xl max-h-40 overflow-y-auto">
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-h-40 overflow-y-auto">
           {filtered.slice(0, 8).map((s, i) => {
             const name = typeof s === 'string' ? s : s.name || s.full_name
             return <button key={i} onMouseDown={() => { onChange(name); setShowSugg(false) }}
