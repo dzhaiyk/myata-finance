@@ -320,14 +320,19 @@ export default function BankImportPage() {
           tx_hash: generateTxHash(tx),
         })
       }
-      // Deduplicate: upsert ignoring existing hashes
+      // Deduplicate: check existing hashes, then insert only new ones
       let duplicates = 0
       if (toInsert.length > 0) {
-        const { data: inserted, error } = await supabase.from('bank_transactions')
-          .upsert(toInsert, { onConflict: 'tx_hash', ignoreDuplicates: true })
-          .select('id')
-        if (error) throw error
-        duplicates = toInsert.length - (inserted?.length || 0)
+        const hashes = toInsert.map(t => t.tx_hash).filter(Boolean)
+        const { data: existing } = await supabase.from('bank_transactions')
+          .select('tx_hash').in('tx_hash', hashes)
+        const existingSet = new Set((existing || []).map(e => e.tx_hash))
+        const newRows = toInsert.filter(t => !t.tx_hash || !existingSet.has(t.tx_hash))
+        duplicates = toInsert.length - newRows.length
+        if (newRows.length > 0) {
+          const { error } = await supabase.from('bank_transactions').insert(newRows)
+          if (error) throw error
+        }
       }
       const parts = [`✅ Импортировано ${toInsert.length - duplicates} записей`]
       if (duplicates > 0) parts.push(`${duplicates} дублей пропущено`)
