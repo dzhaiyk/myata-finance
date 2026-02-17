@@ -318,12 +318,16 @@ export default function BankImportPage() {
           if (pass) { ruleMatch = { category: rule.category_code, action: rule.action }; break }
         }
         if (ruleMatch?.action === 'hide') { hidden++; continue }
+        // Default period = month of the transaction date
+        const txDate = new Date(tx.date)
+        const txY = txDate.getFullYear(), txM = txDate.getMonth() + 1
         toInsert.push({
           transaction_date: tx.date, amount: Math.abs(tx.amount), is_debit: tx.amount < 0 || tx.isDebit,
           beneficiary: tx.beneficiary || '', purpose: tx.purpose || '', knp: tx.knp || '',
           category: ruleMatch?.category || tx.category || 'uncategorized',
           confidence: ruleMatch ? 'auto' : tx.confidence || 'low', import_file: file.name, import_batch_id: batchId,
           tx_hash: generateTxHash(tx),
+          period_from: firstOfMonth(txY, txM), period_to: lastOfMonth(txY, txM),
         })
       }
       // Check for duplicates but don't insert yet
