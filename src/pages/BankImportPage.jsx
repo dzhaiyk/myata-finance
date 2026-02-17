@@ -358,10 +358,25 @@ export default function BankImportPage() {
     setSavingStaged(false)
   }
 
-  const cancelStaged = () => setStagedRows(null)
+  const cancelStaged = () => { setStagedRows(null); setStagedSelected(new Set()) }
+  const [stagedSelected, setStagedSelected] = useState(new Set())
   const updateStagedCategory = (idx, category) => {
     setStagedRows(prev => prev.map((r, i) => i === idx ? { ...r, category, confidence: 'manual' } : r))
   }
+  const toggleStagedSelect = (idx) => setStagedSelected(prev => { const s = new Set(prev); s.has(idx) ? s.delete(idx) : s.add(idx); return s })
+  const deleteStagedSelected = () => {
+    setStagedRows(prev => prev.filter((_, i) => !stagedSelected.has(i)))
+    setStagedSelected(new Set())
+  }
+  // Sort staged: categorized first, then uncategorized
+  const sortedStaged = useMemo(() => {
+    if (!stagedRows) return []
+    return stagedRows.map((r, i) => ({ ...r, _idx: i })).sort((a, b) => {
+      if (a.category !== 'uncategorized' && b.category === 'uncategorized') return -1
+      if (a.category === 'uncategorized' && b.category !== 'uncategorized') return 1
+      return 0
+    })
+  }, [stagedRows])
 
   const updateCategory = async (id, category) => {
     await supabase.from('bank_transactions').update({ category, confidence: 'manual' }).eq('id', id)
@@ -672,7 +687,7 @@ export default function BankImportPage() {
       {/* STAGED IMPORT PREVIEW */}
       {stagedRows && (
         <div className="card border-green-500/30 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <div className="text-sm font-semibold text-green-400">Предпросмотр импорта: {stagedMeta.fileName}</div>
               <p className="text-xs text-slate-500 mt-0.5">
@@ -682,6 +697,11 @@ export default function BankImportPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              {stagedSelected.size > 0 && (
+                <button onClick={deleteStagedSelected} className="btn-danger text-sm flex items-center gap-1.5">
+                  <Trash2 className="w-3.5 h-3.5" /> Убрать ({stagedSelected.size})
+                </button>
+              )}
               <button onClick={commitStaged} disabled={savingStaged || stagedRows.length === 0}
                 className={cn('btn-primary text-sm flex items-center gap-1.5', savingStaged && 'opacity-50')}>
                 <Check className="w-4 h-4" />{savingStaged ? 'Сохранение...' : `Сохранить (${stagedRows.length})`}
@@ -691,8 +711,12 @@ export default function BankImportPage() {
           </div>
           {stagedRows.length > 0 && (
             <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-              <table className="w-full text-sm min-w-[700px]">
+              <table className="w-full text-sm min-w-[800px]">
                 <thead><tr>
+                  <th className="table-header w-8"><input type="checkbox" onChange={e => {
+                    if (e.target.checked) setStagedSelected(new Set(stagedRows.map((_, i) => i)))
+                    else setStagedSelected(new Set())
+                  }} checked={stagedSelected.size === stagedRows.length && stagedRows.length > 0} /></th>
                   <th className="table-header text-left">Дата</th>
                   <th className="table-header text-left">Бенефициар</th>
                   <th className="table-header text-left">Назначение</th>
@@ -700,8 +724,9 @@ export default function BankImportPage() {
                   <th className="table-header text-center">Категория</th>
                 </tr></thead>
                 <tbody>
-                  {stagedRows.map((tx, i) => (
-                    <tr key={i} className={cn('hover:bg-slate-800/30', tx.category === 'uncategorized' && 'bg-yellow-500/5')}>
+                  {sortedStaged.map(tx => (
+                    <tr key={tx._idx} className={cn('hover:bg-slate-800/30', tx.category === 'uncategorized' && 'bg-yellow-500/5')}>
+                      <td className="table-cell"><input type="checkbox" checked={stagedSelected.has(tx._idx)} onChange={() => toggleStagedSelect(tx._idx)} /></td>
                       <td className="table-cell text-xs text-slate-400 whitespace-nowrap">{tx.transaction_date}</td>
                       <td className="table-cell text-xs max-w-[200px] truncate" title={tx.beneficiary}>{tx.beneficiary || '—'}</td>
                       <td className="table-cell text-xs max-w-[200px] truncate text-slate-500" title={tx.purpose}>{tx.purpose || '—'}</td>
@@ -709,7 +734,7 @@ export default function BankImportPage() {
                         {tx.is_debit ? '-' : '+'}{fmt(tx.amount)} ₸
                       </td>
                       <td className="table-cell text-center">
-                        <select value={tx.category || 'uncategorized'} onChange={e => updateStagedCategory(i, e.target.value)}
+                        <select value={tx.category || 'uncategorized'} onChange={e => updateStagedCategory(tx._idx, e.target.value)}
                           className={cn('input text-[11px] py-1 px-2 w-44', tx.category === 'uncategorized' && '!border-yellow-500/50 !bg-yellow-500/10')}>
                           <option value="uncategorized">— Не распознано —</option>
                           {Object.entries(catGroups).map(([type, cats]) => (
