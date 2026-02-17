@@ -302,7 +302,16 @@ export default function BankImportPage() {
       const wb = XLSX.read(data); const ws = wb.Sheets[wb.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1 })
       const batchId = crypto.randomUUID()
-      const parsed = parseBankStatement(rows)
+      // Convert Excel serial date numbers to YYYY-MM-DD strings
+      const excelDateToISO = (v) => {
+        if (typeof v === 'string') return v.slice(0, 10) // already a string
+        if (typeof v === 'number') {
+          const d = XLSX.SSF.parse_date_code(v)
+          return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`
+        }
+        return String(v)
+      }
+      const parsed = parseBankStatement(rows).map(tx => ({ ...tx, date: excelDateToISO(tx.date) }))
       const [rRes, cRes] = await Promise.all([
         supabase.from('bank_rules').select('*').eq('is_active', true),
         supabase.from('bank_rule_conditions').select('*'),
