@@ -153,27 +153,68 @@ export function categorizeTransaction(tx) {
 }
 
 /**
- * Parse bank statement Excel file
- * Expected columns: Date(1), #(2), Debit(3), Credit(4), Beneficiary(5), BIN(6), BeneficiaryAccount(7), KNP(8), Purpose(9)
+ * Parse Kaspi Business bank statement Excel file
+ * Actual column layout (from Kaspi bank export):
+ *   [0] = № документа (document number, e.g. "94779730")
+ *   [1] = Дата операции (date string, e.g. "30.01.2026 23:42:00")
+ *   [2] = Дебет (debit amount or null)
+ *   [3] = Кредит (credit amount or null)
+ *   [4] = Наименование бенефициара (beneficiary, may contain \r\n + ИИН/БИН)
+ *   [5] = ИИК бенефициара (IBAN of beneficiary)
+ *   [6] = БИК банка бенефициара (BIC/SWIFT of beneficiary bank)
+ *   [7] = КНП (payment code)
+ *   [8] = Назначение платежа (purpose)
+ *
+ * First ~11 rows are metadata (account info, period, balances).
+ * Row 11 is column headers. Some files have a row of [1,2,3,...9] after headers.
  */
 export function parseBankStatement(rows) {
-  // Skip header rows (usually first 11 rows)
+  // Find the header row by looking for "Дебет" in position [2]
+  let headerIdx = -1
+  for (let i = 0; i < Math.min(20, rows.length); i++) {
+    const cell = String(rows[i]?.[2] || '')
+    if (/дебет/i.test(cell)) { headerIdx = i; break }
+  }
+  // Fallback: skip first 11 rows
+  const startIdx = headerIdx >= 0 ? headerIdx + 1 : 11
+
   const dataRows = rows.filter((row, i) => {
-    if (i < 1) return false // skip header
+    if (i < startIdx) return false
+    // Skip numbered index row (e.g. [1,2,3,4,5,6,7,8,9])
+    if (row[0] === 1 && row[1] === 2 && row[2] === 3) return false
+    // Skip summary/totals rows ("Итого обороты...", "Итого операций...")
+    if (typeof row[1] === 'string' && /^Итого/i.test(row[1])) return false
+    // Must have a numeric debit or credit
     const debit = row[2]
     const credit = row[3]
     return (typeof debit === 'number' && debit > 0) || (typeof credit === 'number' && credit > 0)
   })
 
   return dataRows.map(row => {
+    // Extract beneficiary name (strip \r\n and ИИН/БИН suffix)
+    const rawBeneficiary = String(row[4] || '')
+    const beneficiary = rawBeneficiary.split(/[\r\n]+/)[0].trim()
+    // Extract BIN from beneficiary field if present
+    const binMatch = rawBeneficiary.match(/ИИН\/БИН\s*(\d+)/)
+    const bin = binMatch ? binMatch[1] : ''
+
+    // Parse date: "30.01.2026 23:42:00" → "2026-01-30"
+    const rawDate = String(row[1] || '')
+    let date = rawDate
+    const dateMatch = rawDate.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/)
+    if (dateMatch) {
+      date = `${dateMatch[3]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[1].padStart(2, '0')}`
+    }
+
     const tx = {
-      date: row[0],
-      number: row[1],
+      date,
+      number: String(row[0] || ''),
       debit: typeof row[2] === 'number' ? row[2] : 0,
       credit: typeof row[3] === 'number' ? row[3] : 0,
-      beneficiary: String(row[4] || ''),
-      bin: String(row[5] || ''),
-      beneficiaryAccount: String(row[6] || ''),
+      beneficiary,
+      bin,
+      beneficiaryAccount: String(row[5] || ''),
+      bik: String(row[6] || ''),
       knp: String(row[7] || ''),
       purpose: String(row[8] || ''),
     }
