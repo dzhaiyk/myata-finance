@@ -22,16 +22,11 @@ const OPERATORS = {
   is_debit: [{ value: 'equals', label: 'равно' }],
 }
 
-// Hash for deduplication
-function generateTxHash(tx) {
-  const str = `${tx.date}|${tx.amount}|${(tx.beneficiary || '').trim().toLowerCase()}|${(tx.purpose || '').slice(0, 100).trim().toLowerCase()}`
-  let hash = 0
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash |= 0
-  }
-  return hash.toString(36)
+// Hash for deduplication — uses SubtleCrypto SHA-256 for collision resistance
+async function generateTxHash(tx) {
+  const str = `${tx.date}|${tx.number}|${tx.amount}|${tx.isDebit}|${(tx.beneficiary || '').trim().toLowerCase()}|${(tx.purpose || '').slice(0, 120).trim().toLowerCase()}`
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str))
+  return Array.from(new Uint8Array(buf)).slice(0, 12).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 const TYPE_LABELS = { income: 'Доходы', cogs: 'Себестоимость', opex: 'Операционные', below_ebitda: 'Ниже EBITDA', other: 'Прочее' }
 
@@ -329,7 +324,7 @@ export default function BankImportPage() {
           beneficiary: tx.beneficiary || '', purpose: tx.purpose || '', knp: tx.knp || '',
           category: ruleMatch?.category || tx.category || 'uncategorized',
           confidence: ruleMatch ? 'auto' : tx.confidence || 'low', import_file: file.name, import_batch_id: batchId,
-          tx_hash: generateTxHash(tx),
+          tx_hash: await generateTxHash(tx),
           period_from: firstOfMonth(txY, txM), period_to: lastOfMonth(txY, txM),
         })
       }
@@ -357,8 +352,21 @@ export default function BankImportPage() {
     setSavingStaged(true)
     try {
       const { error } = await supabase.from('bank_transactions').insert(stagedRows)
-      if (error) throw error
-      alert(`✅ Сохранено ${stagedRows.length} записей`)
+      if (error) {
+        // If batch fails due to unique constraint, fall back to one-by-one insert
+        if (error.message?.includes('unique') || error.message?.includes('duplicate')) {
+          let saved = 0, skipped = 0
+          for (const row of stagedRows) {
+            const { error: e2 } = await supabase.from('bank_transactions').insert(row)
+            if (e2) skipped++; else saved++
+          }
+          alert(`Сохранено ${saved} записей` + (skipped > 0 ? `, ${skipped} дублей пропущено` : ''))
+        } else {
+          throw error
+        }
+      } else {
+        alert(`Сохранено ${stagedRows.length} записей`)
+      }
       setStagedRows(null)
       load()
     } catch (err) { alert('Ошибка: ' + err.message) }
