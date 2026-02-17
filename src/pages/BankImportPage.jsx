@@ -357,6 +357,9 @@ export default function BankImportPage() {
   }
 
   const cancelStaged = () => setStagedRows(null)
+  const updateStagedCategory = (idx, category) => {
+    setStagedRows(prev => prev.map((r, i) => i === idx ? { ...r, category, confidence: 'manual' } : r))
+  }
 
   const updateCategory = async (id, category) => {
     await supabase.from('bank_transactions').update({ category, confidence: 'manual' }).eq('id', id)
@@ -704,7 +707,15 @@ export default function BankImportPage() {
                         {tx.is_debit ? '-' : '+'}{fmt(tx.amount)} ₸
                       </td>
                       <td className="table-cell text-center">
-                        <span className={cn('badge text-[10px]', tx.category === 'uncategorized' ? 'badge-yellow' : 'badge-blue')}>{catName(tx.category)}</span>
+                        <select value={tx.category || 'uncategorized'} onChange={e => updateStagedCategory(i, e.target.value)}
+                          className={cn('input text-[11px] py-1 px-2 w-44', tx.category === 'uncategorized' && '!border-yellow-500/50 !bg-yellow-500/10')}>
+                          <option value="uncategorized">— Не распознано —</option>
+                          {Object.entries(catGroups).map(([type, cats]) => (
+                            <optgroup key={type} label={TYPE_LABELS[type] || type}>
+                              {cats.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+                            </optgroup>
+                          ))}
+                        </select>
                       </td>
                     </tr>
                   ))}
