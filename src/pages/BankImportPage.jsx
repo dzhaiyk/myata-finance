@@ -262,7 +262,9 @@ export default function BankImportPage() {
 
   const matchCondition = (tx, cond) => {
     if (cond.field === 'is_debit') {
-      return String(tx.is_debit) === cond.value
+      // Support both parsed (isDebit) and DB (is_debit) field names
+      const val = tx.is_debit !== undefined ? tx.is_debit : tx.isDebit
+      return String(val) === cond.value
     }
     const fieldVal = (() => {
       if (cond.field === 'beneficiary') return tx.beneficiary || ''
