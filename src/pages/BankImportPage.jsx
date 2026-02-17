@@ -362,25 +362,43 @@ export default function BankImportPage() {
     setSavingStaged(false)
   }
 
-  const cancelStaged = () => { setStagedRows(null); setStagedSelected(new Set()) }
+  const cancelStaged = () => { setStagedRows(null); setStagedSelected(new Set()); setStagedSort({ col: 'category', dir: 'asc' }) }
   const [stagedSelected, setStagedSelected] = useState(new Set())
+  const [stagedSort, setStagedSort] = useState({ col: 'category', dir: 'asc' }) // default: categorized first
   const updateStagedCategory = (idx, category) => {
     setStagedRows(prev => prev.map((r, i) => i === idx ? { ...r, category, confidence: 'manual' } : r))
+  }
+  const updateStagedPeriod = (idx, periodFrom, periodTo) => {
+    setStagedRows(prev => prev.map((r, i) => i === idx ? { ...r, period_from: periodFrom, period_to: periodTo } : r))
   }
   const toggleStagedSelect = (idx) => setStagedSelected(prev => { const s = new Set(prev); s.has(idx) ? s.delete(idx) : s.add(idx); return s })
   const deleteStagedSelected = () => {
     setStagedRows(prev => prev.filter((_, i) => !stagedSelected.has(i)))
     setStagedSelected(new Set())
   }
-  // Sort staged: categorized first, then uncategorized
+  const toggleStagedSort = (col) => {
+    setStagedSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
+  }
   const sortedStaged = useMemo(() => {
     if (!stagedRows) return []
+    const { col, dir } = stagedSort
+    const mult = dir === 'asc' ? 1 : -1
     return stagedRows.map((r, i) => ({ ...r, _idx: i })).sort((a, b) => {
-      if (a.category !== 'uncategorized' && b.category === 'uncategorized') return -1
-      if (a.category === 'uncategorized' && b.category !== 'uncategorized') return 1
-      return 0
+      let cmp = 0
+      if (col === 'transaction_date') cmp = (a.transaction_date || '').localeCompare(b.transaction_date || '')
+      else if (col === 'beneficiary') cmp = (a.beneficiary || '').localeCompare(b.beneficiary || '')
+      else if (col === 'purpose') cmp = (a.purpose || '').localeCompare(b.purpose || '')
+      else if (col === 'amount') cmp = (a.amount || 0) - (b.amount || 0)
+      else if (col === 'period') cmp = (a.period_from || '').localeCompare(b.period_from || '')
+      else if (col === 'category') {
+        // Categorized first (asc), uncategorized first (desc)
+        if (a.category !== 'uncategorized' && b.category === 'uncategorized') cmp = -1
+        else if (a.category === 'uncategorized' && b.category !== 'uncategorized') cmp = 1
+        else cmp = (a.category || '').localeCompare(b.category || '')
+      }
+      return cmp * mult
     })
-  }, [stagedRows])
+  }, [stagedRows, stagedSort])
 
   const updateCategory = async (id, category) => {
     await supabase.from('bank_transactions').update({ category, confidence: 'manual' }).eq('id', id)
@@ -715,17 +733,25 @@ export default function BankImportPage() {
           </div>
           {stagedRows.length > 0 && (
             <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-              <table className="w-full text-sm min-w-[800px]">
+              <table className="w-full text-sm min-w-[1000px]">
                 <thead><tr>
                   <th className="table-header w-8"><input type="checkbox" onChange={e => {
                     if (e.target.checked) setStagedSelected(new Set(stagedRows.map((_, i) => i)))
                     else setStagedSelected(new Set())
                   }} checked={stagedSelected.size === stagedRows.length && stagedRows.length > 0} /></th>
-                  <th className="table-header text-left">Дата</th>
-                  <th className="table-header text-left">Бенефициар</th>
-                  <th className="table-header text-left">Назначение</th>
-                  <th className="table-header text-right">Сумма</th>
-                  <th className="table-header text-center">Категория</th>
+                  {[
+                    { key: 'transaction_date', label: 'Дата', align: 'text-left' },
+                    { key: 'beneficiary', label: 'Бенефициар', align: 'text-left' },
+                    { key: 'purpose', label: 'Назначение', align: 'text-left' },
+                    { key: 'amount', label: 'Сумма', align: 'text-right' },
+                    { key: 'period', label: 'Период', align: 'text-center' },
+                    { key: 'category', label: 'Категория', align: 'text-center' },
+                  ].map(h => (
+                    <th key={h.key} onClick={() => toggleStagedSort(h.key)}
+                      className={cn('table-header cursor-pointer select-none hover:text-brand-400', h.align)}>
+                      {h.label} {stagedSort.col === h.key && (stagedSort.dir === 'asc' ? '↑' : '↓')}
+                    </th>
+                  ))}
                 </tr></thead>
                 <tbody>
                   {sortedStaged.map(tx => (
@@ -736,6 +762,9 @@ export default function BankImportPage() {
                       <td className="table-cell text-xs max-w-[200px] truncate text-slate-500" title={tx.purpose}>{tx.purpose || '—'}</td>
                       <td className={cn('table-cell text-right font-mono text-xs font-semibold', tx.is_debit ? 'text-red-400' : 'text-green-400')}>
                         {tx.is_debit ? '-' : '+'}{fmt(tx.amount)} ₸
+                      </td>
+                      <td className="table-cell text-center">
+                        <PeriodEditor tx={{ ...tx, transaction_date: tx.transaction_date }} onSave={(_, from, to) => updateStagedPeriod(tx._idx, from, to)} disabled={false} />
                       </td>
                       <td className="table-cell text-center">
                         <select value={tx.category || 'uncategorized'} onChange={e => updateStagedCategory(tx._idx, e.target.value)}
