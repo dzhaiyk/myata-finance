@@ -302,16 +302,45 @@ export default function BankImportPage() {
       const wb = XLSX.read(data); const ws = wb.Sheets[wb.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1 })
       const batchId = crypto.randomUUID()
-      // Convert Excel serial date numbers to YYYY-MM-DD strings
+
+      // Try to extract month/year from filename as fallback (e.g. "Янв-26", "Фев-25")
+      const RU_MONTHS = { 'янв': 1, 'фев': 2, 'мар': 3, 'апр': 4, 'май': 5, 'июн': 6, 'июл': 7, 'авг': 8, 'сен': 9, 'окт': 10, 'ноя': 11, 'дек': 12 }
+      let fallbackYear = null, fallbackMonth = null
+      const fnMatch = file.name.toLowerCase().match(/(янв|фев|мар|апр|май|июн|июл|авг|сен|окт|ноя|дек)[^0-9]*(\d{2,4})/)
+      if (fnMatch) {
+        fallbackMonth = RU_MONTHS[fnMatch[1]]
+        fallbackYear = Number(fnMatch[2]) < 100 ? 2000 + Number(fnMatch[2]) : Number(fnMatch[2])
+      }
+
+      // Convert date value to YYYY-MM-DD
       const excelDateToISO = (v) => {
-        if (typeof v === 'string') return v.slice(0, 10) // already a string
-        if (typeof v === 'number') {
+        // Already a date string (YYYY-MM-DD or DD.MM.YYYY)
+        if (typeof v === 'string') {
+          if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10)
+          const ddmmyyyy = v.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/)
+          if (ddmmyyyy) {
+            const yy = Number(ddmmyyyy[3]) < 100 ? 2000 + Number(ddmmyyyy[3]) : Number(ddmmyyyy[3])
+            return `${yy}-${String(ddmmyyyy[2]).padStart(2, '0')}-${String(ddmmyyyy[1]).padStart(2, '0')}`
+          }
+          return v.slice(0, 10)
+        }
+        // Excel serial date (>= 30000 means year ~1982+, valid date serial)
+        if (typeof v === 'number' && v >= 30000) {
           const d = XLSX.SSF.parse_date_code(v)
           return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`
         }
-        return String(v)
+        // Small number (1-31) — likely day of month, use fallback month/year
+        if (typeof v === 'number' && v >= 1 && v <= 31 && fallbackYear && fallbackMonth) {
+          return `${fallbackYear}-${String(fallbackMonth).padStart(2, '0')}-${String(Math.min(v, 28)).padStart(2, '0')}`
+        }
+        // Number but not a valid date serial — use fallback as whole month
+        if (typeof v === 'number' && fallbackYear && fallbackMonth) {
+          return `${fallbackYear}-${String(fallbackMonth).padStart(2, '0')}-01`
+        }
+        // Last resort
+        return null
       }
-      const parsed = parseBankStatement(rows).map(tx => ({ ...tx, date: excelDateToISO(tx.date) }))
+      const parsed = parseBankStatement(rows).map(tx => ({ ...tx, date: excelDateToISO(tx.date) || tx.date }))
       const [rRes, cRes] = await Promise.all([
         supabase.from('bank_rules').select('*').eq('is_active', true),
         supabase.from('bank_rule_conditions').select('*'),
@@ -329,7 +358,8 @@ export default function BankImportPage() {
         if (ruleMatch?.action === 'hide') { hidden++; continue }
         // Default period = month of the transaction date
         const txDate = new Date(tx.date)
-        const txY = txDate.getFullYear(), txM = txDate.getMonth() + 1
+        const txY = !isNaN(txDate) ? txDate.getFullYear() : (fallbackYear || 2025)
+        const txM = !isNaN(txDate) ? txDate.getMonth() + 1 : (fallbackMonth || 1)
         toInsert.push({
           transaction_date: tx.date, amount: Math.abs(tx.amount), is_debit: tx.amount < 0 || tx.isDebit,
           beneficiary: tx.beneficiary || '', purpose: tx.purpose || '', knp: tx.knp || '',
