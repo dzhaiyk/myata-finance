@@ -294,7 +294,7 @@ export default function BankImportPage() {
       const XLSX = await import('xlsx')
       const data = await file.arrayBuffer()
       const wb = XLSX.read(data); const ws = wb.Sheets[wb.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(ws)
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 })
       const batchId = crypto.randomUUID()
       const parsed = parseBankStatement(rows)
       const [rRes, cRes] = await Promise.all([
