@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
 import { parseBankStatement } from '@/lib/categorize'
-import { Upload, Trash2, Settings, Plus, X, Save, Calendar, Pencil } from 'lucide-react'
+import { Upload, Trash2, Settings, Plus, X, Save, Calendar, Pencil, Check } from 'lucide-react'
 
 const MONTHS_SHORT = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек']
 
@@ -221,6 +221,9 @@ export default function BankImportPage() {
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
   const [selectedIds, setSelectedIds] = useState(new Set())
+  const [stagedRows, setStagedRows] = useState(null) // parsed rows awaiting confirmation
+  const [stagedMeta, setStagedMeta] = useState({ hidden: 0, duplicates: 0, fileName: '' })
+  const [savingStaged, setSavingStaged] = useState(false)
   const [newRule, setNewRule] = useState({
     name: '', logic: 'and', category_code: '', action: 'categorize',
     conditions: [{ field: 'beneficiary', operator: 'contains', value: '' }],
@@ -287,6 +290,7 @@ export default function BankImportPage() {
     }
   }
 
+  // Step 1: Parse file → stage rows for preview (no DB write)
   const handleFile = async (e) => {
     const file = e.target.files[0]; if (!file) return
     setImporting(true)
@@ -320,28 +324,39 @@ export default function BankImportPage() {
           tx_hash: generateTxHash(tx),
         })
       }
-      // Deduplicate: check existing hashes, then insert only new ones
+      // Check for duplicates but don't insert yet
       let duplicates = 0
+      let newRows = toInsert
       if (toInsert.length > 0) {
         const hashes = toInsert.map(t => t.tx_hash).filter(Boolean)
         const { data: existing } = await supabase.from('bank_transactions')
           .select('tx_hash').in('tx_hash', hashes)
         const existingSet = new Set((existing || []).map(e => e.tx_hash))
-        const newRows = toInsert.filter(t => !t.tx_hash || !existingSet.has(t.tx_hash))
+        newRows = toInsert.filter(t => !t.tx_hash || !existingSet.has(t.tx_hash))
         duplicates = toInsert.length - newRows.length
-        if (newRows.length > 0) {
-          const { error } = await supabase.from('bank_transactions').insert(newRows)
-          if (error) throw error
-        }
       }
-      const parts = [`✅ Импортировано ${toInsert.length - duplicates} записей`]
-      if (duplicates > 0) parts.push(`${duplicates} дублей пропущено`)
-      if (hidden > 0) parts.push(`${hidden} скрыто правилами`)
-      alert(parts.join(' · '))
-      load()
+      // Stage for preview
+      setStagedRows(newRows)
+      setStagedMeta({ hidden, duplicates, fileName: file.name })
     } catch (err) { alert('Ошибка: ' + err.message) }
     setImporting(false); e.target.value = ''
   }
+
+  // Step 2: User confirms → write staged rows to DB
+  const commitStaged = async () => {
+    if (!stagedRows || stagedRows.length === 0) return
+    setSavingStaged(true)
+    try {
+      const { error } = await supabase.from('bank_transactions').insert(stagedRows)
+      if (error) throw error
+      alert(`✅ Сохранено ${stagedRows.length} записей`)
+      setStagedRows(null)
+      load()
+    } catch (err) { alert('Ошибка: ' + err.message) }
+    setSavingStaged(false)
+  }
+
+  const cancelStaged = () => setStagedRows(null)
 
   const updateCategory = async (id, category) => {
     await supabase.from('bank_transactions').update({ category, confidence: 'manual' }).eq('id', id)
@@ -354,12 +369,14 @@ export default function BankImportPage() {
   }
 
   const deleteTransaction = async (id) => {
-    await supabase.from('bank_transactions').delete().eq('id', id)
+    const { error } = await supabase.from('bank_transactions').delete().eq('id', id)
+    if (error) return alert('Ошибка удаления: ' + error.message)
     setTransactions(prev => prev.filter(t => t.id !== id))
   }
   const deleteSelected = async () => {
     const ids = [...selectedIds]; if (!confirm(`Удалить ${ids.length} записей?`)) return
-    for (const id of ids) await supabase.from('bank_transactions').delete().eq('id', id)
+    const { error } = await supabase.from('bank_transactions').delete().in('id', ids)
+    if (error) return alert('Ошибка удаления: ' + error.message)
     setSelectedIds(new Set()); load()
   }
 
@@ -644,6 +661,60 @@ export default function BankImportPage() {
             ))}
             {fullRules.length === 0 && <div className="text-xs text-slate-600 text-center py-4">Нет правил</div>}
           </div>
+        </div>
+      )}
+
+      {/* STAGED IMPORT PREVIEW */}
+      {stagedRows && (
+        <div className="card border-green-500/30 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-green-400">Предпросмотр импорта: {stagedMeta.fileName}</div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {stagedRows.length} новых записей
+                {stagedMeta.duplicates > 0 && ` · ${stagedMeta.duplicates} дублей пропущено`}
+                {stagedMeta.hidden > 0 && ` · ${stagedMeta.hidden} скрыто правилами`}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={commitStaged} disabled={savingStaged || stagedRows.length === 0}
+                className={cn('btn-primary text-sm flex items-center gap-1.5', savingStaged && 'opacity-50')}>
+                <Check className="w-4 h-4" />{savingStaged ? 'Сохранение...' : `Сохранить (${stagedRows.length})`}
+              </button>
+              <button onClick={cancelStaged} className="btn-secondary text-sm">Отмена</button>
+            </div>
+          </div>
+          {stagedRows.length > 0 && (
+            <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+              <table className="w-full text-sm min-w-[700px]">
+                <thead><tr>
+                  <th className="table-header text-left">Дата</th>
+                  <th className="table-header text-left">Бенефициар</th>
+                  <th className="table-header text-left">Назначение</th>
+                  <th className="table-header text-right">Сумма</th>
+                  <th className="table-header text-center">Категория</th>
+                </tr></thead>
+                <tbody>
+                  {stagedRows.map((tx, i) => (
+                    <tr key={i} className={cn('hover:bg-slate-800/30', tx.category === 'uncategorized' && 'bg-yellow-500/5')}>
+                      <td className="table-cell text-xs text-slate-400 whitespace-nowrap">{tx.transaction_date}</td>
+                      <td className="table-cell text-xs max-w-[200px] truncate" title={tx.beneficiary}>{tx.beneficiary || '—'}</td>
+                      <td className="table-cell text-xs max-w-[200px] truncate text-slate-500" title={tx.purpose}>{tx.purpose || '—'}</td>
+                      <td className={cn('table-cell text-right font-mono text-xs font-semibold', tx.is_debit ? 'text-red-400' : 'text-green-400')}>
+                        {tx.is_debit ? '-' : '+'}{fmt(tx.amount)} ₸
+                      </td>
+                      <td className="table-cell text-center">
+                        <span className={cn('badge text-[10px]', tx.category === 'uncategorized' ? 'badge-yellow' : 'badge-blue')}>{catName(tx.category)}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {stagedRows.length === 0 && (
+            <div className="text-xs text-slate-500 text-center py-4">Все записи являются дублями — нечего импортировать</div>
+          )}
         </div>
       )}
 
