@@ -40,15 +40,15 @@ const NameInput = ({ value, onChange, suggestions, placeholder, disabled = false
 }
 
 const SECTIONS = [
-  { key: 'suppliers_kitchen', label: 'Поставщики КУХНЯ', color: 'green', icon: '🍽', supplierCat: 'Кухня' },
-  { key: 'suppliers_bar', label: 'Поставщики БАР', color: 'blue', icon: '🍸', supplierCat: 'Бар' },
-  { key: 'tobacco', label: 'Табак и расходники кальян', color: 'amber', icon: '💨', fixed: true },
-  { key: 'payroll', label: 'ЗП и авансы персоналу', color: 'indigo', icon: '👥', isPayroll: true },
+  { key: 'suppliers_kitchen', label: 'Закуп Кухня', color: 'green', icon: '🍽', supplierCat: 'Кухня' },
+  { key: 'suppliers_bar', label: 'Закуп Бар', color: 'blue', icon: '🍸', supplierCat: 'Бар' },
+  { key: 'tobacco', label: 'Закуп Кальян', color: 'amber', icon: '💨', fixed: true },
+  { key: 'payroll', label: 'Авансы персоналу', color: 'indigo', icon: '👥', isPayroll: true },
   { key: 'other', label: 'Прочие расходы', color: 'rose', icon: '📦', fixed: true },
   { key: 'cash_withdrawals', label: 'Изъятия из кассы', color: 'red', icon: '💸' },
 ]
 const FIXED_ROWS = {
-  tobacco: ['Табак', 'Угли', 'Расходники кальян', 'Доставка'],
+  tobacco: ['Табак', 'Угли', 'Расходники кальян', 'Аппараты', 'Доставка'],
   other: ['Хозтовары', 'Мелкий ремонт', 'Доставка (Яндекс)', 'Канцтовары', 'Прочее'],
 }
 const PAYMENT_TYPES = ['Наличные', 'Kaspi', 'Halyk', 'Wolt', 'Glovo', 'Yandex Eda', 'Прочее']
@@ -88,7 +88,7 @@ export default function DailyReportPage() {
   const [savedSuppliers, setSavedSuppliers] = useState({ Кухня: [], Бар: [], Кальян: [], Хозтовары: [], Прочее: [] })
   const [savedStaff, setSavedStaff] = useState([])
   const [cashStart, setCashStart] = useState('')
-  const [cashActual, setCashActual] = useState('')
+  const [cashEnd, setCashEnd] = useState('')
   const emptyWithdrawals = () => ({
     suppliers_kitchen: [{ name: '', amount: '', comment: '' }],
     suppliers_bar: [{ name: '', amount: '', comment: '' }],
@@ -129,30 +129,14 @@ export default function DailyReportPage() {
     if (staffRes.data) setSavedStaff(staffRes.data)
   }
 
-  // Fetch cash account balance from accounts + transactions
-  const getCashBalance = async () => {
-    const { data: cashAccount } = await supabase
-      .from('accounts').select('*').eq('type', 'cash').limit(1).single()
-    if (!cashAccount) return 0
-    const { data: txs } = await supabase
-      .from('account_transactions').select('type, amount')
-      .eq('account_id', cashAccount.id)
-    const initial = Number(cashAccount.initial_balance) || 0
-    const txTotal = (txs || []).reduce((sum, t) => {
-      if (t.type === 'income' || t.type === 'transfer_in') return sum + Number(t.amount)
-      if (t.type === 'expense' || t.type === 'transfer_out') return sum - Number(t.amount)
-      return sum
-    }, 0)
-    return initial + txTotal
-  }
-
   const openReport = (report) => {
     const d = report.data || {}
     setReportId(report.id)
     setStatus(report.status || 'draft')
     setDate(report.report_date)
     setCashStart(String(d.cash_start || ''))
-    setCashActual(String(d.cash_actual || ''))
+    // Backward compat: cash_end (new) or cash_actual (old)
+    setCashEnd(String(d.cash_end || d.cash_actual || ''))
     if (d.withdrawals) {
       setWithdrawals({
         suppliers_kitchen: d.withdrawals.suppliers_kitchen?.length ? d.withdrawals.suppliers_kitchen : [{ name: '', amount: '', comment: '' }],
@@ -168,17 +152,15 @@ export default function DailyReportPage() {
     setMode('form')
   }
 
-  const newReport = async () => {
+  const newReport = () => {
     setReportId(null); setStatus('draft')
     setDate(new Date().toISOString().split('T')[0])
-    setCashStart(''); setCashActual('')
+    setCashStart(''); setCashEnd('')
     setWithdrawals(emptyWithdrawals())
     setRevenue(PAYMENT_TYPES.map(t => ({ type: t, amount: '', checks: '' })))
     setDepartments(DEPARTMENTS.map(d => ({ name: d, amount: '' })))
     setLastSaved(null)
     setMode('form')
-    const bal = await getCashBalance()
-    setCashStart(String(bal || 0))
   }
 
   // Calculations
@@ -187,9 +169,10 @@ export default function DailyReportPage() {
   const totalWithdrawals = SECTIONS.reduce((s, sec) => s + sectionTotal(sec.key), 0)
   const totalRevenue = revenue.reduce((s, r) => s + num(r.amount), 0)
   const totalDeptRevenue = departments.reduce((s, d) => s + num(d.amount), 0)
-  const cashSales = num(revenue[0]?.amount)
+  const revenueDiscrepancy = totalDeptRevenue - totalRevenue
+  const cashSales = num(revenue.find(r => r.type === 'Наличные')?.amount)
   const cashExpected = num(cashStart) + cashSales - totalWithdrawals
-  const discrepancy = num(cashActual) - cashExpected
+  const discrepancy = num(cashEnd) - cashExpected
 
   const updateWithdrawal = (section, idx, field, value) => {
     setWithdrawals(prev => ({ ...prev, [section]: prev[section].map((r, i) => i === idx ? { ...r, [field]: value } : r) }))
@@ -207,8 +190,9 @@ export default function DailyReportPage() {
     updated_at: new Date().toISOString(),
     data: {
       date, manager: profile?.full_name, cash_start: num(cashStart),
-      cash_actual: num(cashActual), withdrawals, revenue, departments,
-      total_revenue: totalRevenue, total_withdrawals: totalWithdrawals, cash_expected: cashExpected, discrepancy,
+      cash_end: num(cashEnd), withdrawals, revenue, departments,
+      total_revenue: totalRevenue, total_dept_revenue: totalDeptRevenue,
+      total_withdrawals: totalWithdrawals, cash_expected: cashExpected, discrepancy,
     },
     total_revenue: totalRevenue, total_withdrawals: totalWithdrawals, cash_discrepancy: discrepancy,
   })
@@ -230,8 +214,8 @@ export default function DailyReportPage() {
 
   // Submit final report
   const submitReport = async () => {
-    if (!num(cashActual)) {
-      if (!confirm('Фактический остаток кассы не указан. Всё равно отправить?')) return
+    if (!num(cashEnd)) {
+      if (!confirm('Остаток на конец смены не указан. Всё равно отправить?')) return
     }
     setSaving(true)
     try {
@@ -241,8 +225,8 @@ export default function DailyReportPage() {
       if (data) setReportId(data.id)
       setStatus('submitted')
 
-      // Sync cash account balance with cashActual
-      if (num(cashActual)) {
+      // Sync cash account balance with cashEnd
+      if (num(cashEnd)) {
         try {
           const { data: cashAccount } = await supabase
             .from('accounts').select('*').eq('type', 'cash').limit(1).single()
@@ -257,7 +241,7 @@ export default function DailyReportPage() {
               return sum
             }, 0)
             const currentBalance = initial + txTotal
-            const diff = num(cashActual) - currentBalance
+            const diff = num(cashEnd) - currentBalance
             if (Math.abs(diff) > 0) {
               await supabase.from('account_transactions').insert({
                 account_id: cashAccount.id,
@@ -276,7 +260,7 @@ export default function DailyReportPage() {
       try {
         await sendTelegramNotification(formatDailyReportNotification({
           date, manager: profile?.full_name, revenue: totalRevenue, withdrawals: totalWithdrawals,
-          cashExpected, cashActual: num(cashActual), discrepancy,
+          cashExpected, cashActual: num(cashEnd), discrepancy,
           departments: { kitchen: num(departments[0]?.amount), bar: num(departments[1]?.amount), hookah: num(departments[2]?.amount) }
         }))
         if (Math.abs(discrepancy) > 1000) {
@@ -315,8 +299,6 @@ export default function DailyReportPage() {
   }
 
   // Generate PDF using direct jsPDF API with Roboto font
-  const revenueDiscrepancy = totalDeptRevenue - totalRevenue
-
   const generatePDF = async () => {
     const doc = new jsPDF('p', 'mm', 'a4')
     await loadPdfFonts(doc)
@@ -330,14 +312,12 @@ export default function DailyReportPage() {
     const setNormal = (size = 10) => { doc.setFont('Roboto', 'normal'); doc.setFontSize(size); doc.setTextColor(30) }
     const setBold = (size = 10) => { doc.setFont('Roboto', 'bold'); doc.setFontSize(size); doc.setTextColor(30) }
 
-    // Thin divider: gap above → line → gap below (no text overlap)
     const divider = () => {
       y += 2
       doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.3)
       doc.line(L, y, R, y)
       y += 4
     }
-    // Bold divider for totals
     const boldDivider = () => {
       y += 2
       doc.setDrawColor(100, 100, 100); doc.setLineWidth(0.5)
@@ -382,38 +362,41 @@ export default function DailyReportPage() {
     // ══════════ BLOCK 1: ДОХОДЫ ══════════
     sectionHeader('ДОХОДЫ', [34, 139, 34])
 
-    subHeader('Доходы по типам оплат')
-    revenue.forEach(r => {
-      if (num(r.amount) > 0) row(r.type, `${fmt(num(r.amount))} ₸`)
-    })
-    divider()
-    row('Итого выручка', `${fmt(totalRevenue)} ₸`, { bold: true })
-    y += 3
-
     subHeader('Выручка по отделам')
     departments.forEach(d => {
       if (num(d.amount) > 0) row(d.name, `${fmt(num(d.amount))} ₸`)
     })
     divider()
     row('Итого по отделам', `${fmt(totalDeptRevenue)} ₸`, { bold: true })
-    setNormal(9); doc.setTextColor(120)
-    doc.text('Итого по типам оплат', L + 4, y)
-    doc.text(`${fmt(totalRevenue)} ₸`, R - 2, y, { align: 'right' })
-    y += 5
-    if (revenueDiscrepancy !== 0) {
+    y += 3
+
+    subHeader('Доходы по типам оплат')
+    revenue.forEach(r => {
+      if (num(r.amount) > 0) {
+        const checks = num(r.checks)
+        const label = checks > 0 ? `${r.type} (${checks} чек.)` : r.type
+        row(label, `${fmt(num(r.amount))} ₸`)
+      }
+    })
+    divider()
+    row('Итого по типам оплат', `${fmt(totalRevenue)} ₸`, { bold: true })
+    y += 2
+
+    // Сверка выручки
+    if (revenueDiscrepancy !== 0 && totalRevenue > 0) {
       doc.setFont('Roboto', 'bold'); doc.setFontSize(9); doc.setTextColor(220, 53, 69)
-      doc.text(`Расхождение: ${fmt(revenueDiscrepancy)} ₸`, L + 4, y)
+      doc.text(`Расхождение выручки: ${fmt(revenueDiscrepancy)} ₸`, L + 4, y)
+      y += 5
+    } else if (totalRevenue > 0) {
+      doc.setFont('Roboto', 'normal'); doc.setFontSize(9); doc.setTextColor(34, 139, 34)
+      doc.text('Выручка сходится', L + 4, y)
       y += 5
     }
     doc.setTextColor(30)
     y += 4
 
-    // Фактический остаток кассы (after revenue, before expenses)
-    row('Фактический остаток кассы', `${fmt(num(cashActual))} ₸`, { bold: true, color: [245, 158, 11] })
-    y += 2
-
-    // ══════════ BLOCK 2: РАСХОДЫ И ИЗЪЯТИЯ ══════════
-    sectionHeader('РАСХОДЫ И ИЗЪЯТИЯ', [220, 53, 69])
+    // ══════════ BLOCK 2: РАСХОДЫ ══════════
+    sectionHeader('РАСХОДЫ', [220, 53, 69])
 
     SECTIONS.forEach(sec => {
       const rows = (withdrawals[sec.key] || []).filter(r => num(r.amount) > 0)
@@ -435,31 +418,35 @@ export default function DailyReportPage() {
 
     boldDivider()
     setBold(11)
-    doc.text('ИТОГО РАСХОДЫ', L + 4, y)
+    doc.text('ИТОГО РАСХОДОВ', L + 4, y)
     doc.setTextColor(220, 53, 69)
     doc.text(`${fmt(totalWithdrawals)} ₸`, R - 2, y, { align: 'right' })
     doc.setTextColor(30)
     y += 8
 
-    // ══════════ BLOCK 3: СВЕРКА КАССЫ ══════════
+    // ══════════ BLOCK 3: КАССА ══════════
     checkPage(80)
-    sectionHeader('СВЕРКА КАССЫ', [59, 130, 246])
+    sectionHeader('КАССА', [59, 130, 246])
 
     row('Остаток на начало', `${fmt(num(cashStart))} ₸`)
     row('+ Наличные продажи', `${fmt(cashSales)} ₸`, { color: [34, 139, 34] })
-    row('− Изъятия', `${fmt(totalWithdrawals)} ₸`, { color: [220, 53, 69] })
+    row('− Расходы наличными', `${fmt(totalWithdrawals)} ₸`, { color: [220, 53, 69] })
     divider()
     row('Ожидаемый остаток', `${fmt(cashExpected)} ₸`, { bold: true, color: [59, 130, 246] })
-    row('Фактический остаток', `${fmt(num(cashActual))} ₸`, { bold: true, color: [34, 139, 34] })
+    row('Фактический остаток', `${fmt(num(cashEnd))} ₸`, { bold: true, color: [34, 139, 34] })
     boldDivider()
 
-    if (discrepancy !== 0) {
-      setBold(12); doc.setTextColor(220, 53, 69)
+    if (discrepancy === 0) {
+      setBold(12); doc.setTextColor(34, 139, 34)
+      doc.text('Расхождений нет', L + 4, y)
+    } else if (Math.abs(discrepancy) <= 500) {
+      setBold(12); doc.setTextColor(245, 158, 11)
       doc.text('РАСХОЖДЕНИЕ', L + 4, y)
       doc.text(`${discrepancy > 0 ? '+' : ''}${fmt(discrepancy)} ₸`, R - 2, y, { align: 'right' })
     } else {
-      setBold(12); doc.setTextColor(34, 139, 34)
-      doc.text('Расхождений нет', L + 4, y)
+      setBold(12); doc.setTextColor(220, 53, 69)
+      doc.text('РАСХОЖДЕНИЕ', L + 4, y)
+      doc.text(`${discrepancy > 0 ? '+' : ''}${fmt(discrepancy)} ₸`, R - 2, y, { align: 'right' })
     }
     doc.setTextColor(30)
     y += 8
@@ -479,12 +466,20 @@ export default function DailyReportPage() {
 
   const buildWhatsAppText = () => {
     let text = `📊 Myata 4YOU — Отчёт за ${date}\n👤 ${profile?.full_name}\n\n`
-    text += `💰 Выручка: ${fmt(totalRevenue)} ₸\n`
+    text += `💰 Выручка по отделам: ${fmt(totalDeptRevenue)} ₸\n`
     departments.forEach(d => { if (num(d.amount)) text += `  ${d.name}: ${fmt(num(d.amount))} ₸\n` })
+    text += `💰 По типам оплат: ${fmt(totalRevenue)} ₸\n`
     text += `\n📤 Расходы: ${fmt(totalWithdrawals)} ₸\n`
-    text += `💵 Касса ожид: ${fmt(cashExpected)} ₸\n`
-    text += `💵 Касса факт: ${fmt(num(cashActual))} ₸\n`
-    text += discrepancy !== 0 ? `⚠️ Расхождение: ${fmt(discrepancy)} ₸` : `✅ Расхождений нет`
+    text += `💵 Касса начало: ${fmt(num(cashStart))} ₸\n`
+    text += `💵 Касса конец: ${fmt(num(cashEnd))} ₸\n`
+    text += `💵 Ожидаемый: ${fmt(cashExpected)} ₸\n`
+    if (discrepancy === 0) {
+      text += `✅ Расхождений нет`
+    } else if (Math.abs(discrepancy) <= 500) {
+      text += `⚠️ Расхождение: ${fmt(discrepancy)} ₸`
+    } else {
+      text += `🚨 Расхождение: ${fmt(discrepancy)} ₸`
+    }
     text += `\n\n📎 PDF отчёт скачан — прикрепите файл к сообщению`
     return text
   }
@@ -559,7 +554,7 @@ export default function DailyReportPage() {
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-mono text-red-400">{fmt(r.total_withdrawals || 0)} ₸</div>
-                      <div className="text-[10px] text-slate-500">изъятия</div>
+                      <div className="text-[10px] text-slate-500">расходы</div>
                     </div>
                     {hasDisc && !isDraft && (
                       <div className="text-right">
@@ -637,165 +632,177 @@ export default function DailyReportPage() {
         </div>
       )}
 
-      {/* КАССА — cashStart auto-fetched, read-only */}
-      <div className="card">
-        <h2 className="text-base font-display font-bold text-brand-400 mb-4">💵 Касса</h2>
-        <div>
-          <label className="label">Остаток на начало смены (из счёта «Касса»)</label>
-          <MoneyInput value={cashStart} onChange={() => {}} disabled={true} className="opacity-50 cursor-not-allowed" />
-        </div>
-      </div>
+      {/* ══════════ БЛОК 1: ДОХОДЫ ══════════ */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-display font-bold text-green-400 flex items-center gap-2">💰 Доходы</h2>
 
-      {/* REVENUE */}
-      <div className="card border-green-500/20 bg-green-500/5">
-        <h2 className="text-base font-display font-bold text-green-400 mb-4">💰 Доходы по типам оплат</h2>
-        <div className="space-y-2">
-          <div className="grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
-            <div className="col-span-4">Тип оплаты</div><div className="col-span-4 text-right">Сумма (₸)</div>
-            <div className="col-span-2 text-right">Чеков</div><div className="col-span-2 text-right">Ср. чек</div>
+        {/* Выручка по отделам */}
+        <div className="card border-green-500/20 bg-green-500/5">
+          <h3 className="text-sm font-display font-bold text-green-300 mb-3">Выручка по отделам</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {departments.map((d, i) => (
+              <div key={i}><label className="label">{d.name}</label><MoneyInput value={d.amount} onChange={v => setDepartments(prev => prev.map((x, j) => j === i ? { ...x, amount: v } : x))} disabled={isLocked} /></div>
+            ))}
           </div>
-          {revenue.map((r, i) => (
-            <div key={i} className="grid grid-cols-12 gap-2 items-center">
-              <div className="col-span-4 text-sm text-slate-300 px-1">{r.type}</div>
-              <div className="col-span-4"><MoneyInput value={r.amount} onChange={v => setRevenue(prev => prev.map((x, j) => j === i ? { ...x, amount: v } : x))} disabled={isLocked} /></div>
-              <div className="col-span-2"><MoneyInput value={r.checks} onChange={v => setRevenue(prev => prev.map((x, j) => j === i ? { ...x, checks: v } : x))} disabled={isLocked} /></div>
-              <div className="col-span-2 text-right text-sm font-mono text-slate-400">{num(r.checks) > 0 ? fmt(num(r.amount) / num(r.checks)) : '—'}</div>
-            </div>
-          ))}
-          <div className="flex items-center justify-between pt-3 border-t border-green-500/20">
-            <span className="text-sm font-bold text-green-400">ИТОГО ВЫРУЧКА</span>
-            <span className="text-lg font-mono font-bold text-green-400">{fmt(totalRevenue)} ₸</span>
-          </div>
-        </div>
-      </div>
-
-      {/* DEPARTMENTS */}
-      <div className="card border-amber-500/20 bg-amber-500/5">
-        <h2 className="text-base font-display font-bold text-amber-400 mb-4">📊 Выручка по отделам</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {departments.map((d, i) => (
-            <div key={i}><label className="label">{d.name}</label><MoneyInput value={d.amount} onChange={v => setDepartments(prev => prev.map((x, j) => j === i ? { ...x, amount: v } : x))} disabled={isLocked} /></div>
-          ))}
-        </div>
-        <div className="pt-3 mt-3 border-t border-amber-500/20 space-y-1">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between pt-3 mt-3 border-t border-green-500/20">
             <span className="text-sm font-bold">Итого по отделам</span>
-            <span className="font-mono text-sm font-bold">{fmt(totalDeptRevenue)} ₸</span>
+            <span className="text-lg font-mono font-bold">{fmt(totalDeptRevenue)} ₸</span>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-500">Итого по типам оплат</span>
-            <span className="font-mono text-xs text-slate-500">{fmt(totalRevenue)} ₸</span>
-          </div>
-          {totalDeptRevenue - totalRevenue !== 0 && totalRevenue > 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-red-400 font-medium">Расхождение выручки</span>
-              <span className="font-mono text-xs text-red-400 font-bold">{fmt(totalDeptRevenue - totalRevenue)} ₸</span>
-            </div>
-          )}
         </div>
-      </div>
 
-      {/* CASH ACTUAL — right after departments */}
-      <div className="card border-yellow-500/20 bg-yellow-500/5">
-        <h2 className="text-base font-display font-bold text-yellow-400 mb-4">💵 Остаток наличных на кассе (Факт)</h2>
-        <MoneyInput value={cashActual} onChange={setCashActual} disabled={isLocked} className="!border-yellow-500/50 !bg-yellow-500/10" />
-      </div>
-
-      {/* Withdrawal Sections */}
-      {SECTIONS.map(sec => {
-        const isOpen = expanded[sec.key]
-        const total = sectionTotal(sec.key)
-        const colorMap = { green: 'border-green-500/20 bg-green-500/5', blue: 'border-blue-500/20 bg-blue-500/5', amber: 'border-amber-500/20 bg-amber-500/5', indigo: 'border-indigo-500/20 bg-indigo-500/5', rose: 'border-rose-500/20 bg-rose-500/5', red: 'border-red-500/20 bg-red-500/5' }
-        const isFixed = sec.fixed; const isPayroll = sec.isPayroll
-        const isCashW = sec.key === 'cash_withdrawals'
-        let suggestions = []
-        if (sec.supplierCat) suggestions = savedSuppliers[sec.supplierCat] || []
-        if (isPayroll) suggestions = savedStaff
-        return (
-          <div key={sec.key} className={cn('card border overflow-visible', colorMap[sec.color])}>
-            <button onClick={() => setExpanded(prev => ({ ...prev, [sec.key]: !prev[sec.key] }))} className="flex items-center justify-between w-full text-left">
-              <div className="flex items-center gap-2">
-                <span>{sec.icon}</span><h2 className="text-sm font-display font-bold">{sec.label}</h2>
-                {total > 0 && <span className="badge-yellow">{fmt(total)} ₸</span>}
+        {/* Доходы по типам оплат */}
+        <div className="card border-green-500/20 bg-green-500/5">
+          <h3 className="text-sm font-display font-bold text-green-300 mb-3">Доходы по типам оплат</h3>
+          <div className="space-y-2">
+            <div className="grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
+              <div className="col-span-4">Тип оплаты</div><div className="col-span-4 text-right">Сумма (₸)</div>
+              <div className="col-span-2 text-right">Чеков</div><div className="col-span-2 text-right">Ср. чек</div>
+            </div>
+            {revenue.map((r, i) => (
+              <div key={i} className="grid grid-cols-12 gap-2 items-center">
+                <div className="col-span-4 text-sm text-slate-300 px-1">{r.type}</div>
+                <div className="col-span-4"><MoneyInput value={r.amount} onChange={v => setRevenue(prev => prev.map((x, j) => j === i ? { ...x, amount: v } : x))} disabled={isLocked} /></div>
+                <div className="col-span-2"><MoneyInput value={r.checks} onChange={v => setRevenue(prev => prev.map((x, j) => j === i ? { ...x, checks: v } : x))} disabled={isLocked} /></div>
+                <div className="col-span-2 text-right text-sm font-mono text-slate-400">{num(r.checks) > 0 ? fmt(num(r.amount) / num(r.checks)) : '—'}</div>
               </div>
-              {isOpen ? <ChevronDown className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
-            </button>
-            {isOpen && (
-              <div className="mt-4 space-y-2">
-                {isCashW ? (
-                  /* Cash withdrawals: amount + comment only */
-                  <>
-                    <div className="grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
-                      <div className="col-span-4 text-right">Сумма (₸)</div>
-                      <div className="col-span-7">Комментарий</div>
-                      <div className="col-span-1" />
-                    </div>
-                    {(withdrawals[sec.key] || []).map((row, idx) => (
-                      <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                        <div className="col-span-4"><MoneyInput value={row.amount} onChange={v => updateWithdrawal(sec.key, idx, 'amount', v)} disabled={isLocked} /></div>
-                        <div className="col-span-7"><input value={row.comment || ''} onChange={e => updateWithdrawal(sec.key, idx, 'comment', e.target.value)} className="input text-sm w-full" placeholder="Причина изъятия" disabled={isLocked} /></div>
-                        <div className="col-span-1 flex justify-center">
-                          {!isLocked && <button onClick={() => removeRow(sec.key, idx)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>}
-                        </div>
-                      </div>
-                    ))}
-                    {!isLocked && <button onClick={() => addRow(sec.key)} className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 mt-2 px-1"><Plus className="w-3.5 h-3.5" /> Добавить изъятие</button>}
-                  </>
-                ) : (
-                  /* Standard sections: name + amount + comment */
-                  <>
-                    <div className="grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
-                      <div className="col-span-5">{isPayroll ? 'Сотрудник' : 'Поставщик'}</div>
-                      <div className="col-span-3 text-right">Сумма (₸)</div>
-                      <div className="col-span-3">Комментарий</div><div className="col-span-1" />
-                    </div>
-                    {withdrawals[sec.key].map((row, idx) => (
-                      <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                        <div className="col-span-5">
-                          {isFixed ? <div className="text-sm text-slate-300 px-3 py-2">{row.name}</div>
-                            : <NameInput value={row.name} onChange={v => updateWithdrawal(sec.key, idx, 'name', v)} suggestions={suggestions} placeholder={isPayroll ? 'Сотрудник' : 'Поставщик'} disabled={isLocked} />}
-                        </div>
-                        <div className="col-span-3"><MoneyInput value={row.amount} onChange={v => updateWithdrawal(sec.key, idx, 'amount', v)} disabled={isLocked} /></div>
-                        <div className="col-span-3"><input value={row.comment || ''} onChange={e => updateWithdrawal(sec.key, idx, 'comment', e.target.value)} className="input text-sm w-full" placeholder="—" disabled={isLocked} /></div>
-                        <div className="col-span-1 flex justify-center">
-                          {!isFixed && !isLocked && <button onClick={() => removeRow(sec.key, idx)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>}
-                        </div>
-                      </div>
-                    ))}
-                    {!isFixed && !isLocked && <button onClick={() => addRow(sec.key)} className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 mt-2 px-1"><Plus className="w-3.5 h-3.5" /> Добавить строку</button>}
-                  </>
-                )}
-                <div className="flex justify-end pt-2 border-t border-slate-800"><span className="text-sm font-semibold font-mono">{fmt(total)} ₸</span></div>
+            ))}
+            <div className="flex items-center justify-between pt-3 border-t border-green-500/20">
+              <span className="text-sm font-bold">Итого по типам оплат</span>
+              <span className="text-lg font-mono font-bold">{fmt(totalRevenue)} ₸</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Сверка выручки */}
+        {totalRevenue > 0 && (
+          <div className={cn('card border', revenueDiscrepancy !== 0 ? 'border-red-500/30 bg-red-500/5' : 'border-green-500/30 bg-green-500/5')}>
+            {revenueDiscrepancy !== 0 ? (
+              <div className="flex items-center gap-2 text-red-400">
+                <AlertTriangle className="w-4 h-4" />
+                <span className="text-sm font-bold">Расхождение выручки: {fmt(revenueDiscrepancy)} ₸</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-green-400">
+                <CheckCircle2 className="w-4 h-4" />
+                <span className="text-sm font-bold">Выручка сходится</span>
               </div>
             )}
           </div>
-        )
-      })}
+        )}
+      </div>
 
-      {/* Total withdrawals */}
-      <div className="card bg-red-500/5 border-red-500/20">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-bold text-red-400">ИТОГО ИЗЪЯТИЙ</span>
-          <span className="text-lg font-mono font-bold text-red-400">{fmt(totalWithdrawals)} ₸</span>
+      {/* ══════════ БЛОК 2: РАСХОДЫ ══════════ */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-display font-bold text-red-400 flex items-center gap-2">📤 Расходы</h2>
+
+        {SECTIONS.map(sec => {
+          const isOpen = expanded[sec.key]
+          const total = sectionTotal(sec.key)
+          const colorMap = { green: 'border-green-500/20 bg-green-500/5', blue: 'border-blue-500/20 bg-blue-500/5', amber: 'border-amber-500/20 bg-amber-500/5', indigo: 'border-indigo-500/20 bg-indigo-500/5', rose: 'border-rose-500/20 bg-rose-500/5', red: 'border-red-500/20 bg-red-500/5' }
+          const isFixed = sec.fixed; const isPayroll = sec.isPayroll
+          const isCashW = sec.key === 'cash_withdrawals'
+          let suggestions = []
+          if (sec.supplierCat) suggestions = savedSuppliers[sec.supplierCat] || []
+          if (isPayroll) suggestions = savedStaff
+          return (
+            <div key={sec.key} className={cn('card border overflow-visible', colorMap[sec.color])}>
+              <button onClick={() => setExpanded(prev => ({ ...prev, [sec.key]: !prev[sec.key] }))} className="flex items-center justify-between w-full text-left">
+                <div className="flex items-center gap-2">
+                  <span>{sec.icon}</span><h3 className="text-sm font-display font-bold">{sec.label}</h3>
+                  {total > 0 && <span className="badge-yellow">{fmt(total)} ₸</span>}
+                </div>
+                {isOpen ? <ChevronDown className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
+              </button>
+              {isOpen && (
+                <div className="mt-4 space-y-2">
+                  {isCashW ? (
+                    <>
+                      <div className="grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
+                        <div className="col-span-4 text-right">Сумма (₸)</div>
+                        <div className="col-span-7">Комментарий</div>
+                        <div className="col-span-1" />
+                      </div>
+                      {(withdrawals[sec.key] || []).map((row, idx) => (
+                        <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                          <div className="col-span-4"><MoneyInput value={row.amount} onChange={v => updateWithdrawal(sec.key, idx, 'amount', v)} disabled={isLocked} /></div>
+                          <div className="col-span-7"><input value={row.comment || ''} onChange={e => updateWithdrawal(sec.key, idx, 'comment', e.target.value)} className="input text-sm w-full" placeholder="Причина изъятия" disabled={isLocked} /></div>
+                          <div className="col-span-1 flex justify-center">
+                            {!isLocked && <button onClick={() => removeRow(sec.key, idx)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>}
+                          </div>
+                        </div>
+                      ))}
+                      {!isLocked && <button onClick={() => addRow(sec.key)} className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 mt-2 px-1"><Plus className="w-3.5 h-3.5" /> Добавить изъятие</button>}
+                    </>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
+                        <div className="col-span-5">{isPayroll ? 'Сотрудник' : 'Поставщик'}</div>
+                        <div className="col-span-3 text-right">Сумма (₸)</div>
+                        <div className="col-span-3">Комментарий</div><div className="col-span-1" />
+                      </div>
+                      {withdrawals[sec.key].map((row, idx) => (
+                        <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                          <div className="col-span-5">
+                            {isFixed ? <div className="text-sm text-slate-300 px-3 py-2">{row.name}</div>
+                              : <NameInput value={row.name} onChange={v => updateWithdrawal(sec.key, idx, 'name', v)} suggestions={suggestions} placeholder={isPayroll ? 'Сотрудник' : 'Поставщик'} disabled={isLocked} />}
+                          </div>
+                          <div className="col-span-3"><MoneyInput value={row.amount} onChange={v => updateWithdrawal(sec.key, idx, 'amount', v)} disabled={isLocked} /></div>
+                          <div className="col-span-3"><input value={row.comment || ''} onChange={e => updateWithdrawal(sec.key, idx, 'comment', e.target.value)} className="input text-sm w-full" placeholder="—" disabled={isLocked} /></div>
+                          <div className="col-span-1 flex justify-center">
+                            {!isFixed && !isLocked && <button onClick={() => removeRow(sec.key, idx)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>}
+                          </div>
+                        </div>
+                      ))}
+                      {!isFixed && !isLocked && <button onClick={() => addRow(sec.key)} className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 mt-2 px-1"><Plus className="w-3.5 h-3.5" /> Добавить строку</button>}
+                    </>
+                  )}
+                  <div className="flex justify-end pt-2 border-t border-slate-800"><span className="text-sm font-semibold font-mono">{fmt(total)} ₸</span></div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        {/* ИТОГО РАСХОДОВ */}
+        <div className="card bg-red-500/5 border-red-500/20">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold text-red-400">ИТОГО РАСХОДОВ</span>
+            <span className="text-lg font-mono font-bold text-red-400">{fmt(totalWithdrawals)} ₸</span>
+          </div>
         </div>
       </div>
 
-      {/* CASH VERIFICATION */}
-      <div className={cn('card border-2', Math.abs(discrepancy) > 500 ? 'border-red-500/50 bg-red-500/10' : 'border-green-500/30 bg-green-500/5')}>
-        <h2 className="text-base font-display font-bold mb-4 flex items-center gap-2">
-          {Math.abs(discrepancy) > 500 ? <AlertTriangle className="w-5 h-5 text-red-400" /> : <CheckCircle2 className="w-5 h-5 text-green-400" />}
-          Сверка кассы
-        </h2>
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between"><span className="text-slate-400">Остаток на начало</span><span className="font-mono">{fmt(num(cashStart))}</span></div>
-          <div className="flex justify-between"><span className="text-slate-400">+ Наличные продажи</span><span className="font-mono text-green-400">{fmt(cashSales)}</span></div>
-          <div className="flex justify-between"><span className="text-slate-400">− Изъятия</span><span className="font-mono text-red-400">{fmt(totalWithdrawals)}</span></div>
-          <div className="h-px bg-slate-700 my-2" />
-          <div className="flex justify-between font-bold"><span>Ожидаемый остаток</span><span className="font-mono text-blue-400">{fmt(cashExpected)} ₸</span></div>
-          <div className="flex justify-between font-bold"><span>Фактический остаток</span><span className="font-mono text-green-400">{fmt(num(cashActual))} ₸</span></div>
-          <div className="h-px bg-slate-700 my-2" />
-          <div className={cn('flex justify-between text-lg font-bold', Math.abs(discrepancy) > 500 ? 'text-red-400' : 'text-green-400')}>
-            <span>РАСХОЖДЕНИЕ</span><span className="font-mono">{discrepancy > 0 ? '+' : ''}{fmt(discrepancy)} ₸</span>
+      {/* ══════════ БЛОК 3: КАССА ══════════ */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-display font-bold text-blue-400 flex items-center gap-2">💵 Касса</h2>
+
+        <div className="card border-blue-500/20 bg-blue-500/5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="label">Остаток на начало смены</label>
+              <MoneyInput value={cashStart} onChange={setCashStart} disabled={isLocked} />
+            </div>
+            <div>
+              <label className="label">Остаток на конец смены</label>
+              <MoneyInput value={cashEnd} onChange={setCashEnd} disabled={isLocked} className="!border-blue-500/50 !bg-blue-500/10" />
+            </div>
+          </div>
+
+          {/* Сверка кассы */}
+          <div className="pt-4 border-t border-blue-500/20 space-y-2 text-sm">
+            <div className="text-xs font-semibold text-slate-500 uppercase mb-2">Сверка кассы</div>
+            <div className="flex justify-between"><span className="text-slate-400">Остаток на начало</span><span className="font-mono">{fmt(num(cashStart))} ₸</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">+ Наличные продажи</span><span className="font-mono text-green-400">{fmt(cashSales)} ₸</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">− Расходы наличными</span><span className="font-mono text-red-400">{fmt(totalWithdrawals)} ₸</span></div>
+            <div className="h-px bg-slate-700 my-2" />
+            <div className="flex justify-between font-bold"><span>Ожидаемый остаток</span><span className="font-mono text-blue-400">{fmt(cashExpected)} ₸</span></div>
+            <div className="flex justify-between font-bold"><span>Фактический остаток</span><span className="font-mono text-green-400">{fmt(num(cashEnd))} ₸</span></div>
+            <div className="h-px bg-slate-700 my-2" />
+            <div className={cn('flex justify-between text-lg font-bold',
+              discrepancy === 0 ? 'text-green-400' : Math.abs(discrepancy) <= 500 ? 'text-yellow-400' : 'text-red-400')}>
+              <span>{discrepancy === 0 ? '✅ Расхождений нет' : Math.abs(discrepancy) <= 500 ? 'Расхождение' : '⚠️ Расхождение'}</span>
+              {discrepancy !== 0 && <span className="font-mono">{discrepancy > 0 ? '+' : ''}{fmt(discrepancy)} ₸</span>}
+            </div>
           </div>
         </div>
       </div>
