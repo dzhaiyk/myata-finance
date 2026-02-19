@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { fmt, cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
@@ -72,6 +73,7 @@ async function loadPdfFonts(doc) {
 export default function DailyReportPage() {
   const { profile, hasPermission } = useAuthStore()
   const canEdit = hasPermission('daily_report.edit')
+  const location = useLocation()
   const [mode, setMode] = useState('journal')
   const [journal, setJournal] = useState([])
   const [journalLoading, setJournalLoading] = useState(true)
@@ -87,7 +89,6 @@ export default function DailyReportPage() {
   const [savedStaff, setSavedStaff] = useState([])
   const [cashStart, setCashStart] = useState('')
   const [cashActual, setCashActual] = useState('')
-  const [inkassation, setInkassation] = useState('')
   const emptyWithdrawals = () => ({
     suppliers_kitchen: [{ name: '', amount: '', comment: '' }],
     suppliers_bar: [{ name: '', amount: '', comment: '' }],
@@ -101,6 +102,12 @@ export default function DailyReportPage() {
   const [departments, setDepartments] = useState(DEPARTMENTS.map(d => ({ name: d, amount: '' })))
 
   useEffect(() => { loadJournal(); loadSavedEntities() }, [])
+
+  // Reset to journal when navigating to this page (even if already here)
+  useEffect(() => {
+    setMode('journal')
+    loadJournal()
+  }, [location.key])
 
   const loadJournal = async () => {
     setJournalLoading(true)
@@ -146,7 +153,6 @@ export default function DailyReportPage() {
     setDate(report.report_date)
     setCashStart(String(d.cash_start || ''))
     setCashActual(String(d.cash_actual || ''))
-    setInkassation(String(d.inkassation || ''))
     if (d.withdrawals) {
       setWithdrawals({
         suppliers_kitchen: d.withdrawals.suppliers_kitchen?.length ? d.withdrawals.suppliers_kitchen : [{ name: '', amount: '', comment: '' }],
@@ -165,7 +171,7 @@ export default function DailyReportPage() {
   const newReport = async () => {
     setReportId(null); setStatus('draft')
     setDate(new Date().toISOString().split('T')[0])
-    setCashStart(''); setCashActual(''); setInkassation('')
+    setCashStart(''); setCashActual('')
     setWithdrawals(emptyWithdrawals())
     setRevenue(PAYMENT_TYPES.map(t => ({ type: t, amount: '', checks: '' })))
     setDepartments(DEPARTMENTS.map(d => ({ name: d, amount: '' })))
@@ -182,7 +188,7 @@ export default function DailyReportPage() {
   const totalRevenue = revenue.reduce((s, r) => s + num(r.amount), 0)
   const totalDeptRevenue = departments.reduce((s, d) => s + num(d.amount), 0)
   const cashSales = num(revenue[0]?.amount)
-  const cashExpected = num(cashStart) + cashSales - totalWithdrawals - num(inkassation)
+  const cashExpected = num(cashStart) + cashSales - totalWithdrawals
   const discrepancy = num(cashActual) - cashExpected
 
   const updateWithdrawal = (section, idx, field, value) => {
@@ -201,7 +207,7 @@ export default function DailyReportPage() {
     updated_at: new Date().toISOString(),
     data: {
       date, manager: profile?.full_name, cash_start: num(cashStart),
-      cash_actual: num(cashActual), inkassation: num(inkassation), withdrawals, revenue, departments,
+      cash_actual: num(cashActual), withdrawals, revenue, departments,
       total_revenue: totalRevenue, total_withdrawals: totalWithdrawals, cash_expected: cashExpected, discrepancy,
     },
     total_revenue: totalRevenue, total_withdrawals: totalWithdrawals, cash_discrepancy: discrepancy,
@@ -402,6 +408,10 @@ export default function DailyReportPage() {
     doc.setTextColor(30)
     y += 4
 
+    // Фактический остаток кассы (after revenue, before expenses)
+    row('Фактический остаток кассы', `${fmt(num(cashActual))} ₸`, { bold: true, color: [245, 158, 11] })
+    y += 2
+
     // ══════════ BLOCK 2: РАСХОДЫ И ИЗЪЯТИЯ ══════════
     sectionHeader('РАСХОДЫ И ИЗЪЯТИЯ', [220, 53, 69])
 
@@ -438,7 +448,6 @@ export default function DailyReportPage() {
     row('Остаток на начало', `${fmt(num(cashStart))} ₸`)
     row('+ Наличные продажи', `${fmt(cashSales)} ₸`, { color: [34, 139, 34] })
     row('− Изъятия', `${fmt(totalWithdrawals)} ₸`, { color: [220, 53, 69] })
-    if (num(inkassation)) row('− Инкассация', `${fmt(num(inkassation))} ₸`, { color: [220, 53, 69] })
     divider()
     row('Ожидаемый остаток', `${fmt(cashExpected)} ₸`, { bold: true, color: [59, 130, 246] })
     row('Фактический остаток', `${fmt(num(cashActual))} ₸`, { bold: true, color: [34, 139, 34] })
@@ -637,6 +646,61 @@ export default function DailyReportPage() {
         </div>
       </div>
 
+      {/* REVENUE */}
+      <div className="card border-green-500/20 bg-green-500/5">
+        <h2 className="text-base font-display font-bold text-green-400 mb-4">💰 Доходы по типам оплат</h2>
+        <div className="space-y-2">
+          <div className="grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
+            <div className="col-span-4">Тип оплаты</div><div className="col-span-4 text-right">Сумма (₸)</div>
+            <div className="col-span-2 text-right">Чеков</div><div className="col-span-2 text-right">Ср. чек</div>
+          </div>
+          {revenue.map((r, i) => (
+            <div key={i} className="grid grid-cols-12 gap-2 items-center">
+              <div className="col-span-4 text-sm text-slate-300 px-1">{r.type}</div>
+              <div className="col-span-4"><MoneyInput value={r.amount} onChange={v => setRevenue(prev => prev.map((x, j) => j === i ? { ...x, amount: v } : x))} disabled={isLocked} /></div>
+              <div className="col-span-2"><MoneyInput value={r.checks} onChange={v => setRevenue(prev => prev.map((x, j) => j === i ? { ...x, checks: v } : x))} disabled={isLocked} /></div>
+              <div className="col-span-2 text-right text-sm font-mono text-slate-400">{num(r.checks) > 0 ? fmt(num(r.amount) / num(r.checks)) : '—'}</div>
+            </div>
+          ))}
+          <div className="flex items-center justify-between pt-3 border-t border-green-500/20">
+            <span className="text-sm font-bold text-green-400">ИТОГО ВЫРУЧКА</span>
+            <span className="text-lg font-mono font-bold text-green-400">{fmt(totalRevenue)} ₸</span>
+          </div>
+        </div>
+      </div>
+
+      {/* DEPARTMENTS */}
+      <div className="card border-amber-500/20 bg-amber-500/5">
+        <h2 className="text-base font-display font-bold text-amber-400 mb-4">📊 Выручка по отделам</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {departments.map((d, i) => (
+            <div key={i}><label className="label">{d.name}</label><MoneyInput value={d.amount} onChange={v => setDepartments(prev => prev.map((x, j) => j === i ? { ...x, amount: v } : x))} disabled={isLocked} /></div>
+          ))}
+        </div>
+        <div className="pt-3 mt-3 border-t border-amber-500/20 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold">Итого по отделам</span>
+            <span className="font-mono text-sm font-bold">{fmt(totalDeptRevenue)} ₸</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-500">Итого по типам оплат</span>
+            <span className="font-mono text-xs text-slate-500">{fmt(totalRevenue)} ₸</span>
+          </div>
+          {totalDeptRevenue - totalRevenue !== 0 && totalRevenue > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-red-400 font-medium">Расхождение выручки</span>
+              <span className="font-mono text-xs text-red-400 font-bold">{fmt(totalDeptRevenue - totalRevenue)} ₸</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* CASH ACTUAL — right after departments */}
+      <div className="card border-yellow-500/20 bg-yellow-500/5">
+        <h2 className="text-base font-display font-bold text-yellow-400 mb-4">💵 Остаток наличных на кассе (Факт)</h2>
+        <MoneyInput value={cashActual} onChange={setCashActual} disabled={isLocked} className="!border-yellow-500/50 !bg-yellow-500/10" />
+      </div>
+
       {/* Withdrawal Sections */}
       {SECTIONS.map(sec => {
         const isOpen = expanded[sec.key]
@@ -708,64 +772,11 @@ export default function DailyReportPage() {
         )
       })}
 
-      {/* Total withdrawals + cash end */}
+      {/* Total withdrawals */}
       <div className="card bg-red-500/5 border-red-500/20">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between">
           <span className="text-sm font-bold text-red-400">ИТОГО ИЗЪЯТИЙ</span>
           <span className="text-lg font-mono font-bold text-red-400">{fmt(totalWithdrawals)} ₸</span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div><label className="label">Инкассация на счёт</label><MoneyInput value={inkassation} onChange={setInkassation} disabled={isLocked} /></div>
-          <div><label className="label">Остаток наличных (ФАКТ)</label><MoneyInput value={cashActual} onChange={setCashActual} disabled={isLocked} className="!border-yellow-500/50 !bg-yellow-500/10" /></div>
-        </div>
-      </div>
-
-      {/* REVENUE */}
-      <div className="card border-green-500/20 bg-green-500/5">
-        <h2 className="text-base font-display font-bold text-green-400 mb-4">💰 Доходы по типам оплат</h2>
-        <div className="space-y-2">
-          <div className="grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
-            <div className="col-span-4">Тип оплаты</div><div className="col-span-4 text-right">Сумма (₸)</div>
-            <div className="col-span-2 text-right">Чеков</div><div className="col-span-2 text-right">Ср. чек</div>
-          </div>
-          {revenue.map((r, i) => (
-            <div key={i} className="grid grid-cols-12 gap-2 items-center">
-              <div className="col-span-4 text-sm text-slate-300 px-1">{r.type}</div>
-              <div className="col-span-4"><MoneyInput value={r.amount} onChange={v => setRevenue(prev => prev.map((x, j) => j === i ? { ...x, amount: v } : x))} disabled={isLocked} /></div>
-              <div className="col-span-2"><MoneyInput value={r.checks} onChange={v => setRevenue(prev => prev.map((x, j) => j === i ? { ...x, checks: v } : x))} disabled={isLocked} /></div>
-              <div className="col-span-2 text-right text-sm font-mono text-slate-400">{num(r.checks) > 0 ? fmt(num(r.amount) / num(r.checks)) : '—'}</div>
-            </div>
-          ))}
-          <div className="flex items-center justify-between pt-3 border-t border-green-500/20">
-            <span className="text-sm font-bold text-green-400">ИТОГО ВЫРУЧКА</span>
-            <span className="text-lg font-mono font-bold text-green-400">{fmt(totalRevenue)} ₸</span>
-          </div>
-        </div>
-      </div>
-
-      {/* DEPARTMENTS */}
-      <div className="card border-amber-500/20 bg-amber-500/5">
-        <h2 className="text-base font-display font-bold text-amber-400 mb-4">📊 Выручка по отделам</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {departments.map((d, i) => (
-            <div key={i}><label className="label">{d.name}</label><MoneyInput value={d.amount} onChange={v => setDepartments(prev => prev.map((x, j) => j === i ? { ...x, amount: v } : x))} disabled={isLocked} /></div>
-          ))}
-        </div>
-        <div className="pt-3 mt-3 border-t border-amber-500/20 space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-bold">Итого по отделам</span>
-            <span className="font-mono text-sm font-bold">{fmt(totalDeptRevenue)} ₸</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-500">Итого по типам оплат</span>
-            <span className="font-mono text-xs text-slate-500">{fmt(totalRevenue)} ₸</span>
-          </div>
-          {totalDeptRevenue - totalRevenue !== 0 && totalRevenue > 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-red-400 font-medium">Расхождение выручки</span>
-              <span className="font-mono text-xs text-red-400 font-bold">{fmt(totalDeptRevenue - totalRevenue)} ₸</span>
-            </div>
-          )}
         </div>
       </div>
 
@@ -779,7 +790,6 @@ export default function DailyReportPage() {
           <div className="flex justify-between"><span className="text-slate-400">Остаток на начало</span><span className="font-mono">{fmt(num(cashStart))}</span></div>
           <div className="flex justify-between"><span className="text-slate-400">+ Наличные продажи</span><span className="font-mono text-green-400">{fmt(cashSales)}</span></div>
           <div className="flex justify-between"><span className="text-slate-400">− Изъятия</span><span className="font-mono text-red-400">{fmt(totalWithdrawals)}</span></div>
-          <div className="flex justify-between"><span className="text-slate-400">− Инкассация</span><span className="font-mono text-red-400">{fmt(num(inkassation))}</span></div>
           <div className="h-px bg-slate-700 my-2" />
           <div className="flex justify-between font-bold"><span>Ожидаемый остаток</span><span className="font-mono text-blue-400">{fmt(cashExpected)} ₸</span></div>
           <div className="flex justify-between font-bold"><span>Фактический остаток</span><span className="font-mono text-green-400">{fmt(num(cashActual))} ₸</span></div>
