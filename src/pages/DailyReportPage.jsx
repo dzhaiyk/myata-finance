@@ -5,7 +5,6 @@ import { supabase } from '@/lib/supabase'
 import { sendTelegramNotification, formatDailyReportNotification, formatCashDiscrepancyAlert } from '@/lib/telegram'
 import { Save, Send, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Plus, Trash2, Calendar, ArrowLeft, FileText, Eye, Clock, Check, Pencil, Download } from 'lucide-react'
 import jsPDF from 'jspdf'
-import html2canvas from 'html2canvas'
 
 const MoneyInput = ({ value, onChange, className = '', disabled = false }) => (
   <input type="text" inputMode="numeric" value={value} disabled={disabled}
@@ -54,24 +53,20 @@ const FIXED_ROWS = {
 const PAYMENT_TYPES = ['Наличные', 'Kaspi', 'Halyk', 'Wolt', 'Glovo', 'Yandex Eda', 'Прочее']
 const DEPARTMENTS = ['Кухня', 'Бар', 'Кальян', 'Прочее']
 
-// Safe DOM helpers for PDF generation
-function el(tag, styles, children) {
-  const node = document.createElement(tag)
-  if (styles) Object.assign(node.style, styles)
-  if (typeof children === 'string') node.textContent = children
-  else if (Array.isArray(children)) children.forEach(c => { if (c) node.appendChild(c) })
-  else if (children instanceof Node) node.appendChild(children)
-  return node
-}
-function tr(cells) {
-  const row = document.createElement('tr')
-  cells.forEach(([text, styles]) => {
-    const td = document.createElement('td')
-    td.textContent = text
-    Object.assign(td.style, { padding: '4px 0', ...(styles || {}) })
-    row.appendChild(td)
-  })
-  return row
+// Load Roboto font into jsPDF for Cyrillic support
+async function loadPdfFonts(doc) {
+  const load = async (url, vfsName, fontName, style) => {
+    const res = await fetch(url)
+    const buffer = await res.arrayBuffer()
+    const bytes = new Uint8Array(buffer)
+    let binary = ''
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+    doc.addFileToVFS(vfsName, btoa(binary))
+    doc.addFont(vfsName, fontName, style)
+  }
+  await load('/fonts/Roboto-Regular.ttf', 'Roboto-Regular.ttf', 'Roboto', 'normal')
+  await load('/fonts/Roboto-Bold.ttf', 'Roboto-Bold.ttf', 'Roboto', 'bold')
+  doc.setFont('Roboto', 'normal')
 }
 
 export default function DailyReportPage() {
@@ -306,103 +301,135 @@ export default function DailyReportPage() {
     loadJournal()
   }
 
-  // Build PDF content as DOM tree (safe, no innerHTML)
-  const buildPdfDom = () => {
-    const root = el('div', {
-      width: '800px', padding: '40px', background: 'white', color: '#1a1a1a',
-      fontFamily: 'system-ui,-apple-system,sans-serif', fontSize: '14px', lineHeight: '1.6',
-    })
+  // Generate PDF using direct jsPDF API with Roboto font
+  const generatePDF = async () => {
+    const doc = new jsPDF('p', 'mm', 'a4')
+    await loadPdfFonts(doc)
 
-    root.appendChild(el('h1', { fontSize: '22px', margin: '0 0 4px' }, `Мята Lounge — Отчёт за ${date}`))
-    root.appendChild(el('p', { color: '#666', margin: '0 0 20px' }, `Менеджер: ${profile?.full_name || '—'}`))
+    const L = 14, R = 196, W = R - L // left, right, width
+    let y = 20
 
-    const makeTable = (rows) => {
-      const table = el('table', { width: '100%', borderCollapse: 'collapse' })
-      rows.forEach(r => table.appendChild(r))
-      return table
+    const checkPage = (needed = 40) => {
+      if (y > 257 - needed) { doc.addPage(); y = 20 }
+    }
+    const setNormal = (size = 10) => { doc.setFont('Roboto', 'normal'); doc.setFontSize(size); doc.setTextColor(30) }
+    const setBold = (size = 10) => { doc.setFont('Roboto', 'bold'); doc.setFontSize(size); doc.setTextColor(30) }
+    const grayLine = () => { doc.setDrawColor(200); doc.line(L, y, R, y); y += 3 }
+    const row = (label, value, opts = {}) => {
+      checkPage(8)
+      if (opts.bold) setBold(10); else setNormal(10)
+      if (opts.color) doc.setTextColor(...opts.color)
+      doc.text(label, L + 2, y)
+      doc.text(value, R - 2, y, { align: 'right' })
+      doc.setTextColor(30)
+      y += 6
+    }
+    const sectionHeader = (title, rgb) => {
+      checkPage(16)
+      doc.setFillColor(...rgb)
+      doc.rect(L, y, W, 8, 'F')
+      doc.setFont('Roboto', 'bold'); doc.setFontSize(11); doc.setTextColor(255, 255, 255)
+      doc.text(title, L + 3, y + 5.5)
+      doc.setTextColor(30)
+      y += 12
+    }
+    const subHeader = (title) => {
+      checkPage(12)
+      setBold(10); doc.setTextColor(80)
+      doc.text(title, L + 2, y)
+      doc.setTextColor(30)
+      y += 6
     }
 
-    // Revenue by payment type
-    root.appendChild(el('h2', { fontSize: '16px', margin: '20px 0 10px', borderBottom: '2px solid #22c55e', paddingBottom: '4px', color: '#333' }, 'Доходы по типам оплат'))
-    const revRows = revenue.filter(r => num(r.amount) > 0).map(r =>
-      tr([[r.type, {}], [`${fmt(num(r.amount))} ₸`, { textAlign: 'right', fontWeight: '600' }]])
-    )
-    revRows.push(tr([['Итого выручка', { padding: '8px 0', fontWeight: '700', borderTop: '2px solid #333' }], [`${fmt(totalRevenue)} ₸`, { textAlign: 'right', fontWeight: '700', fontSize: '16px', borderTop: '2px solid #333' }]]))
-    root.appendChild(makeTable(revRows))
+    // ── HEADER ──
+    setBold(18)
+    doc.text(`Myata 4YOU — Отчёт за ${date}`, L, y); y += 8
+    setNormal(10); doc.setTextColor(120)
+    doc.text(`Менеджер: ${profile?.full_name || '—'}`, L, y); y += 4
+    doc.setTextColor(30)
+    grayLine(); y += 2
 
-    // Departments
-    root.appendChild(el('h2', { fontSize: '16px', margin: '20px 0 10px', borderBottom: '2px solid #f59e0b', paddingBottom: '4px', color: '#333' }, 'Выручка по отделам'))
-    const deptRows = departments.filter(d => num(d.amount) > 0).map(d =>
-      tr([[d.name, {}], [`${fmt(num(d.amount))} ₸`, { textAlign: 'right', fontWeight: '600' }]])
-    )
-    root.appendChild(makeTable(deptRows))
+    // ══════════ BLOCK 1: ДОХОДЫ ══════════
+    sectionHeader('ДОХОДЫ', [34, 139, 34])
 
-    // Withdrawals by section
+    subHeader('Доходы по типам оплат')
+    revenue.forEach(r => {
+      if (num(r.amount) > 0) row(r.type, `${fmt(num(r.amount))} ₸`)
+    })
+    grayLine()
+    row('Итого выручка', `${fmt(totalRevenue)} ₸`, { bold: true })
+    y += 2
+
+    subHeader('Выручка по отделам')
+    departments.forEach(d => {
+      if (num(d.amount) > 0) row(d.name, `${fmt(num(d.amount))} ₸`)
+    })
+    y += 4
+
+    // ══════════ BLOCK 2: РАСХОДЫ И ИЗЪЯТИЯ ══════════
+    sectionHeader('РАСХОДЫ И ИЗЪЯТИЯ', [220, 53, 69])
+
     SECTIONS.forEach(sec => {
       const rows = (withdrawals[sec.key] || []).filter(r => num(r.amount) > 0)
       if (rows.length === 0) return
-      root.appendChild(el('h2', { fontSize: '16px', margin: '20px 0 10px', borderBottom: '2px solid #ef4444', paddingBottom: '4px', color: '#333' }, `${sec.icon} ${sec.label}`))
-      const trs = rows.map(r => {
+      const secTotal = sectionTotal(sec.key)
+      const neededHeight = rows.length * 6 + 18
+      checkPage(neededHeight)
+
+      subHeader(sec.label)
+      rows.forEach(r => {
         const label = r.name || r.comment || '—'
-        const cells = [[label, {}], [`${fmt(num(r.amount))} ₸`, { textAlign: 'right', fontWeight: '600' }]]
-        if (r.comment && r.name) cells.push([r.comment, { color: '#666', paddingLeft: '12px' }])
-        return tr(cells)
+        const comment = r.comment && r.name ? `  (${r.comment})` : ''
+        row(`${label}${comment}`, `${fmt(num(r.amount))} ₸`)
       })
-      trs.push(tr([['Итого', { fontWeight: '600', borderTop: '1px solid #ccc' }], [`${fmt(sectionTotal(sec.key))} ₸`, { textAlign: 'right', fontWeight: '600', borderTop: '1px solid #ccc' }]]))
-      root.appendChild(makeTable(trs))
+      grayLine()
+      row(`Итого ${sec.label}`, `${fmt(secTotal)} ₸`, { bold: true })
+      y += 2
     })
 
-    // Cash verification
-    root.appendChild(el('h2', { fontSize: '16px', margin: '20px 0 10px', borderBottom: '2px solid #3b82f6', paddingBottom: '4px', color: '#333' }, 'Сверка кассы'))
-    const cashRows = [
-      tr([['Остаток на начало', {}], [`${fmt(num(cashStart))} ₸`, { textAlign: 'right' }]]),
-      tr([['+ Наличные продажи', {}], [`${fmt(cashSales)} ₸`, { textAlign: 'right', color: '#22c55e' }]]),
-      tr([['− Изъятия', {}], [`${fmt(totalWithdrawals)} ₸`, { textAlign: 'right', color: '#ef4444' }]]),
-    ]
-    if (num(inkassation)) cashRows.push(tr([['− Инкассация', {}], [`${fmt(num(inkassation))} ₸`, { textAlign: 'right', color: '#ef4444' }]]))
-    cashRows.push(tr([['Ожидаемый остаток', { padding: '8px 0', fontWeight: '700', borderTop: '2px solid #333' }], [`${fmt(cashExpected)} ₸`, { textAlign: 'right', fontWeight: '700', color: '#3b82f6', borderTop: '2px solid #333' }]]))
-    cashRows.push(tr([['Фактический остаток', { fontWeight: '700' }], [`${fmt(num(cashActual))} ₸`, { textAlign: 'right', fontWeight: '700', color: '#22c55e' }]]))
+    grayLine()
+    setBold(11)
+    doc.text('ИТОГО РАСХОДЫ', L + 2, y)
+    doc.setTextColor(220, 53, 69)
+    doc.text(`${fmt(totalWithdrawals)} ₸`, R - 2, y, { align: 'right' })
+    doc.setTextColor(30)
+    y += 8
+
+    // ══════════ BLOCK 3: СВЕРКА КАССЫ ══════════
+    checkPage(80)
+    sectionHeader('СВЕРКА КАССЫ', [59, 130, 246])
+
+    row('Остаток на начало', `${fmt(num(cashStart))} ₸`)
+    row('+ Наличные продажи', `${fmt(cashSales)} ₸`, { color: [34, 139, 34] })
+    row('− Изъятия', `${fmt(totalWithdrawals)} ₸`, { color: [220, 53, 69] })
+    if (num(inkassation)) row('− Инкассация', `${fmt(num(inkassation))} ₸`, { color: [220, 53, 69] })
+    grayLine()
+    row('Ожидаемый остаток', `${fmt(cashExpected)} ₸`, { bold: true, color: [59, 130, 246] })
+    row('Фактический остаток', `${fmt(num(cashActual))} ₸`, { bold: true, color: [34, 139, 34] })
+    grayLine()
+
     if (discrepancy !== 0) {
-      cashRows.push(tr([['РАСХОЖДЕНИЕ', { padding: '8px 0', fontWeight: '700', color: '#ef4444', borderTop: '2px solid #333' }], [`${discrepancy > 0 ? '+' : ''}${fmt(discrepancy)} ₸`, { textAlign: 'right', fontWeight: '700', fontSize: '16px', color: '#ef4444', borderTop: '2px solid #333' }]]))
+      setBold(12); doc.setTextColor(220, 53, 69)
+      doc.text('РАСХОЖДЕНИЕ', L + 2, y)
+      doc.text(`${discrepancy > 0 ? '+' : ''}${fmt(discrepancy)} ₸`, R - 2, y, { align: 'right' })
     } else {
-      cashRows.push(tr([['Расхождений нет', { padding: '8px 0', fontWeight: '700', color: '#22c55e', borderTop: '2px solid #333' }], ['', {}]]))
+      setBold(12); doc.setTextColor(34, 139, 34)
+      doc.text('Расхождений нет', L + 2, y)
     }
-    root.appendChild(makeTable(cashRows))
+    doc.setTextColor(30)
+    y += 8
 
-    return root
-  }
-
-  // Generate PDF using html2canvas + jsPDF
-  const generatePDF = async () => {
-    const pdfRoot = buildPdfDom()
-    pdfRoot.style.position = 'absolute'
-    pdfRoot.style.left = '-9999px'
-    pdfRoot.style.top = '0'
-    document.body.appendChild(pdfRoot)
-
-    try {
-      const canvas = await html2canvas(pdfRoot, { scale: 2, useCORS: true })
-      const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF('p', 'mm', 'a4')
-      const pdfWidth = pdf.internal.pageSize.getWidth()
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width
-      const pageHeight = pdf.internal.pageSize.getHeight()
-
-      if (pdfHeight <= pageHeight) {
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
-      } else {
-        let y = 0
-        while (y < pdfHeight) {
-          if (y > 0) pdf.addPage()
-          pdf.addImage(imgData, 'PNG', 0, -y, pdfWidth, pdfHeight)
-          y += pageHeight
-        }
-      }
-
-      pdf.save(`Myata_Report_${date}.pdf`)
-    } finally {
-      document.body.removeChild(pdfRoot)
+    // ── FOOTER on every page ──
+    const totalPages = doc.getNumberOfPages()
+    const generated = `Сформирован: ${new Date().toLocaleString('ru-RU')}`
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i)
+      doc.setFont('Roboto', 'normal'); doc.setFontSize(8); doc.setTextColor(150)
+      doc.text(generated, L, 287)
+      if (totalPages > 1) doc.text(`${i} / ${totalPages}`, R, 287, { align: 'right' })
     }
+
+    doc.save(`Myata_Report_${date}.pdf`)
   }
 
   const shareWhatsApp = () => {
