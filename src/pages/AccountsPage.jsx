@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
-import { Plus, Edit3, Trash2, ArrowRightLeft, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, Save, RefreshCw, Eye } from 'lucide-react'
+import { Plus, Edit3, Trash2, ArrowRightLeft, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Save, RefreshCw, Eye, Power } from 'lucide-react'
 
 const TYPES = { cash: 'Касса', bank: 'Банк. счёт', deposit: 'Депозит', terminal: 'Терминал' }
 const TYPE_OPTIONS = Object.entries(TYPES).map(([k, v]) => ({ value: k, label: v }))
@@ -20,7 +20,7 @@ export default function AccountsPage() {
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [showTransfer, setShowTransfer] = useState(false)
   const [showManualTx, setShowManualTx] = useState(false)
-  const [acctForm, setAcctForm] = useState({ name: '', type: 'bank', bank_name: '', icon: '🏦', color: '#3b82f6' })
+  const [acctForm, setAcctForm] = useState({ name: '', type: 'bank', bank_name: '', icon: '🏦', color: '#3b82f6', initial_balance: 0, sort_order: 0 })
   const [editAcctId, setEditAcctId] = useState(null)
   const [transferForm, setTransferForm] = useState({ from_id: '', to_id: '', amount: '', date: today(), description: '' })
   const [manualTxForm, setManualTxForm] = useState({ account_id: '', type: 'income', amount: '', date: today(), counterparty: '', description: '' })
@@ -67,7 +67,7 @@ export default function AccountsPage() {
       await supabase.from('accounts').insert(payload)
     }
     setShowAddAccount(false); setEditAcctId(null)
-    setAcctForm({ name: '', type: 'bank', bank_name: '', icon: '🏦', color: '#3b82f6' })
+    setAcctForm({ name: '', type: 'bank', bank_name: '', icon: '🏦', color: '#3b82f6', initial_balance: 0, sort_order: 0 })
     load()
   }
 
@@ -142,6 +142,29 @@ export default function AccountsPage() {
   const deleteTransaction = async (id) => {
     if (!confirm('Удалить операцию?')) return
     await supabase.from('account_transactions').delete().eq('id', id)
+    load()
+  }
+
+  // Move account up/down in sort order
+  const moveAccount = async (accountId, direction) => {
+    const sorted = [...accounts].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+    const idx = sorted.findIndex(a => a.id === accountId)
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= sorted.length) return
+    const current = sorted[idx]
+    const swap = sorted[swapIdx]
+    await Promise.all([
+      supabase.from('accounts').update({ sort_order: swap.sort_order ?? swapIdx }).eq('id', current.id),
+      supabase.from('accounts').update({ sort_order: current.sort_order ?? idx }).eq('id', swap.id),
+    ])
+    load()
+  }
+
+  // Toggle account active/inactive
+  const toggleActive = async (accountId, currentlyActive) => {
+    const action = currentlyActive ? 'деактивировать' : 'активировать'
+    if (!confirm(`${currentlyActive ? 'Деактивировать' : 'Активировать'} этот счёт?`)) return
+    await supabase.from('accounts').update({ is_active: !currentlyActive }).eq('id', accountId)
     load()
   }
 
@@ -452,7 +475,7 @@ export default function AccountsPage() {
       {/* ====== SETTINGS TAB ====== */}
       {tab === 'settings' && canManage && (
         <>
-          <button onClick={() => { setShowAddAccount(true); setEditAcctId(null); setAcctForm({ name: '', type: 'bank', bank_name: '', icon: '🏦', color: '#3b82f6' }) }}
+          <button onClick={() => { setShowAddAccount(true); setEditAcctId(null); setAcctForm({ name: '', type: 'bank', bank_name: '', icon: '🏦', color: '#3b82f6', initial_balance: 0, sort_order: accounts.length }) }}
             className="btn-primary text-sm flex items-center gap-2"><Plus className="w-4 h-4" /> Добавить счёт</button>
 
           {showAddAccount && (
@@ -473,6 +496,8 @@ export default function AccountsPage() {
                   <input type="color" value={acctForm.color} onChange={e => setAcctForm(f => ({...f, color: e.target.value}))} className="input text-sm w-full h-10" /></div>
                 <div><label className="label">Начальный остаток</label>
                   <input type="number" value={acctForm.initial_balance || ''} onChange={e => setAcctForm(f => ({...f, initial_balance: Number(e.target.value)}))} className="input text-sm w-full" placeholder="0" /></div>
+                <div><label className="label">Порядок сортировки</label>
+                  <input type="number" value={acctForm.sort_order ?? ''} onChange={e => setAcctForm(f => ({...f, sort_order: Number(e.target.value)}))} className="input text-sm w-full" placeholder="0" /></div>
               </div>
               <div className="flex gap-2">
                 <button onClick={saveAccount} className="btn-primary text-sm">{editAcctId ? 'Сохранить' : 'Добавить'}</button>
@@ -490,7 +515,8 @@ export default function AccountsPage() {
                 <th className="table-header text-right">Нач. остаток</th>
                 <th className="table-header text-right">Текущий</th>
                 <th className="table-header text-center">Статус</th>
-                <th className="table-header w-16"></th>
+                <th className="table-header text-center">Порядок</th>
+                <th className="table-header w-24"></th>
               </tr></thead>
               <tbody>
                 {accounts.map(a => (
@@ -501,9 +527,20 @@ export default function AccountsPage() {
                     <td className="table-cell text-right font-mono text-xs">{fmt(a.initial_balance || 0)} ₸</td>
                     <td className="table-cell text-right font-mono text-xs font-semibold">{fmt(calcBalance(a.id))} ₸</td>
                     <td className="table-cell text-center"><span className={cn('badge', a.is_active ? 'badge-green' : 'badge-red')}>{a.is_active ? 'Активен' : 'Неактивен'}</span></td>
+                    <td className="table-cell text-center">
+                      <div className="flex items-center justify-center gap-0.5">
+                        <button onClick={() => moveAccount(a.id, 'up')} className="p-1 text-slate-600 hover:text-slate-300" title="Вверх"><ChevronUp className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => moveAccount(a.id, 'down')} className="p-1 text-slate-600 hover:text-slate-300" title="Вниз"><ChevronDown className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </td>
                     <td className="table-cell">
-                      <button onClick={() => { setEditAcctId(a.id); setAcctForm({ ...a }); setShowAddAccount(true) }}
-                        className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-500 hover:text-blue-400"><Edit3 className="w-3.5 h-3.5" /></button>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => { setEditAcctId(a.id); setAcctForm({ ...a }); setShowAddAccount(true) }}
+                          className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-500 hover:text-blue-400" title="Редактировать"><Edit3 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => toggleActive(a.id, a.is_active)}
+                          className={cn('p-1.5 rounded-lg hover:bg-slate-700', a.is_active ? 'text-slate-500 hover:text-red-400' : 'text-slate-500 hover:text-green-400')}
+                          title={a.is_active ? 'Деактивировать' : 'Активировать'}><Power className="w-3.5 h-3.5" /></button>
+                      </div>
                     </td>
                   </tr>
                 ))}

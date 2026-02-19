@@ -3,7 +3,9 @@ import { fmt, cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { sendTelegramNotification, formatDailyReportNotification, formatCashDiscrepancyAlert } from '@/lib/telegram'
-import { Save, Send, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Plus, Trash2, Calendar, ArrowLeft, FileText, Eye, Clock, Check, Pencil } from 'lucide-react'
+import { Save, Send, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Plus, Trash2, Calendar, ArrowLeft, FileText, Eye, Clock, Check, Pencil, Download } from 'lucide-react'
+import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas'
 
 const MoneyInput = ({ value, onChange, className = '', disabled = false }) => (
   <input type="text" inputMode="numeric" value={value} disabled={disabled}
@@ -43,6 +45,7 @@ const SECTIONS = [
   { key: 'tobacco', label: 'Табак и расходники кальян', color: 'amber', icon: '💨', fixed: true },
   { key: 'payroll', label: 'ЗП и авансы персоналу', color: 'indigo', icon: '👥', isPayroll: true },
   { key: 'other', label: 'Прочие расходы', color: 'rose', icon: '📦', fixed: true },
+  { key: 'cash_withdrawals', label: 'Изъятия из кассы', color: 'red', icon: '💸' },
 ]
 const FIXED_ROWS = {
   tobacco: ['Табак', 'Угли', 'Расходники кальян', 'Доставка'],
@@ -50,6 +53,26 @@ const FIXED_ROWS = {
 }
 const PAYMENT_TYPES = ['Наличные', 'Kaspi', 'Halyk', 'Wolt', 'Glovo', 'Yandex Eda', 'Прочее']
 const DEPARTMENTS = ['Кухня', 'Бар', 'Кальян', 'Прочее']
+
+// Safe DOM helpers for PDF generation
+function el(tag, styles, children) {
+  const node = document.createElement(tag)
+  if (styles) Object.assign(node.style, styles)
+  if (typeof children === 'string') node.textContent = children
+  else if (Array.isArray(children)) children.forEach(c => { if (c) node.appendChild(c) })
+  else if (children instanceof Node) node.appendChild(children)
+  return node
+}
+function tr(cells) {
+  const row = document.createElement('tr')
+  cells.forEach(([text, styles]) => {
+    const td = document.createElement('td')
+    td.textContent = text
+    Object.assign(td.style, { padding: '4px 0', ...(styles || {}) })
+    row.appendChild(td)
+  })
+  return row
+}
 
 export default function DailyReportPage() {
   const { profile, hasPermission } = useAuthStore()
@@ -60,15 +83,14 @@ export default function DailyReportPage() {
 
   // Form state
   const [reportId, setReportId] = useState(null)
-  const [status, setStatus] = useState('draft') // draft | submitted
+  const [status, setStatus] = useState('draft')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [saving, setSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState(null)
-  const [expanded, setExpanded] = useState({ suppliers_kitchen: true, suppliers_bar: true, tobacco: true, payroll: true, other: true })
+  const [expanded, setExpanded] = useState({ suppliers_kitchen: true, suppliers_bar: true, tobacco: true, payroll: true, other: true, cash_withdrawals: true })
   const [savedSuppliers, setSavedSuppliers] = useState({ Кухня: [], Бар: [], Кальян: [], Хозтовары: [], Прочее: [] })
   const [savedStaff, setSavedStaff] = useState([])
   const [cashStart, setCashStart] = useState('')
-  const [cashDeposit, setCashDeposit] = useState('')
   const [cashActual, setCashActual] = useState('')
   const [inkassation, setInkassation] = useState('')
   const emptyWithdrawals = () => ({
@@ -77,6 +99,7 @@ export default function DailyReportPage() {
     tobacco: FIXED_ROWS.tobacco.map(n => ({ name: n, amount: '', comment: '' })),
     payroll: [{ name: '', amount: '', comment: '' }],
     other: FIXED_ROWS.other.map(n => ({ name: n, amount: '', comment: '' })),
+    cash_withdrawals: [{ amount: '', comment: '' }],
   })
   const [withdrawals, setWithdrawals] = useState(emptyWithdrawals())
   const [revenue, setRevenue] = useState(PAYMENT_TYPES.map(t => ({ type: t, amount: '', checks: '' })))
@@ -104,13 +127,29 @@ export default function DailyReportPage() {
     if (staffRes.data) setSavedStaff(staffRes.data)
   }
 
+  // Fetch cash account balance from accounts + transactions
+  const getCashBalance = async () => {
+    const { data: cashAccount } = await supabase
+      .from('accounts').select('*').eq('type', 'cash').limit(1).single()
+    if (!cashAccount) return 0
+    const { data: txs } = await supabase
+      .from('account_transactions').select('type, amount')
+      .eq('account_id', cashAccount.id)
+    const initial = Number(cashAccount.initial_balance) || 0
+    const txTotal = (txs || []).reduce((sum, t) => {
+      if (t.type === 'income' || t.type === 'transfer_in') return sum + Number(t.amount)
+      if (t.type === 'expense' || t.type === 'transfer_out') return sum - Number(t.amount)
+      return sum
+    }, 0)
+    return initial + txTotal
+  }
+
   const openReport = (report) => {
     const d = report.data || {}
     setReportId(report.id)
     setStatus(report.status || 'draft')
     setDate(report.report_date)
     setCashStart(String(d.cash_start || ''))
-    setCashDeposit(String(d.cash_deposit || ''))
     setCashActual(String(d.cash_actual || ''))
     setInkassation(String(d.inkassation || ''))
     if (d.withdrawals) {
@@ -120,6 +159,7 @@ export default function DailyReportPage() {
         tobacco: d.withdrawals.tobacco?.length ? d.withdrawals.tobacco : FIXED_ROWS.tobacco.map(n => ({ name: n, amount: '', comment: '' })),
         payroll: d.withdrawals.payroll?.length ? d.withdrawals.payroll : [{ name: '', amount: '', comment: '' }],
         other: d.withdrawals.other?.length ? d.withdrawals.other : FIXED_ROWS.other.map(n => ({ name: n, amount: '', comment: '' })),
+        cash_withdrawals: d.withdrawals.cash_withdrawals?.length ? d.withdrawals.cash_withdrawals : [{ amount: '', comment: '' }],
       })
     }
     if (d.revenue) setRevenue(d.revenue)
@@ -127,31 +167,36 @@ export default function DailyReportPage() {
     setMode('form')
   }
 
-  const newReport = () => {
+  const newReport = async () => {
     setReportId(null); setStatus('draft')
     setDate(new Date().toISOString().split('T')[0])
-    setCashStart(''); setCashDeposit(''); setCashActual(''); setInkassation('')
+    setCashStart(''); setCashActual(''); setInkassation('')
     setWithdrawals(emptyWithdrawals())
     setRevenue(PAYMENT_TYPES.map(t => ({ type: t, amount: '', checks: '' })))
     setDepartments(DEPARTMENTS.map(d => ({ name: d, amount: '' })))
     setLastSaved(null)
     setMode('form')
+    const bal = await getCashBalance()
+    setCashStart(String(bal || 0))
   }
 
   // Calculations
   const num = (v) => Number(v) || 0
-  const sectionTotal = (key) => withdrawals[key].reduce((s, r) => s + num(r.amount), 0)
+  const sectionTotal = (key) => (withdrawals[key] || []).reduce((s, r) => s + num(r.amount), 0)
   const totalWithdrawals = SECTIONS.reduce((s, sec) => s + sectionTotal(sec.key), 0)
   const totalRevenue = revenue.reduce((s, r) => s + num(r.amount), 0)
   const totalDeptRevenue = departments.reduce((s, d) => s + num(d.amount), 0)
   const cashSales = num(revenue[0]?.amount)
-  const cashExpected = num(cashStart) + num(cashDeposit) + cashSales - totalWithdrawals - num(inkassation)
+  const cashExpected = num(cashStart) + cashSales - totalWithdrawals - num(inkassation)
   const discrepancy = num(cashActual) - cashExpected
 
   const updateWithdrawal = (section, idx, field, value) => {
     setWithdrawals(prev => ({ ...prev, [section]: prev[section].map((r, i) => i === idx ? { ...r, [field]: value } : r) }))
   }
-  const addRow = (section) => { setWithdrawals(prev => ({ ...prev, [section]: [...prev[section], { name: '', amount: '', comment: '' }] })) }
+  const addRow = (section) => {
+    const newRow = section === 'cash_withdrawals' ? { amount: '', comment: '' } : { name: '', amount: '', comment: '' }
+    setWithdrawals(prev => ({ ...prev, [section]: [...prev[section], newRow] }))
+  }
   const removeRow = (section, idx) => { setWithdrawals(prev => ({ ...prev, [section]: prev[section].filter((_, i) => i !== idx) })) }
 
   const buildPayload = (newStatus) => ({
@@ -160,14 +205,14 @@ export default function DailyReportPage() {
     submitted_at: newStatus === 'submitted' ? new Date().toISOString() : null,
     updated_at: new Date().toISOString(),
     data: {
-      date, manager: profile?.full_name, cash_start: num(cashStart), cash_deposit: num(cashDeposit),
+      date, manager: profile?.full_name, cash_start: num(cashStart),
       cash_actual: num(cashActual), inkassation: num(inkassation), withdrawals, revenue, departments,
       total_revenue: totalRevenue, total_withdrawals: totalWithdrawals, cash_expected: cashExpected, discrepancy,
     },
     total_revenue: totalRevenue, total_withdrawals: totalWithdrawals, cash_discrepancy: discrepancy,
   })
 
-  // Save as draft (silent, no telegram)
+  // Save as draft
   const saveDraft = async () => {
     setSaving(true)
     try {
@@ -182,7 +227,7 @@ export default function DailyReportPage() {
     setSaving(false)
   }
 
-  // Submit final report (with telegram)
+  // Submit final report
   const submitReport = async () => {
     if (!num(cashActual)) {
       if (!confirm('Фактический остаток кассы не указан. Всё равно отправить?')) return
@@ -194,6 +239,37 @@ export default function DailyReportPage() {
       if (error) throw error
       if (data) setReportId(data.id)
       setStatus('submitted')
+
+      // Sync cash account balance with cashActual
+      if (num(cashActual)) {
+        try {
+          const { data: cashAccount } = await supabase
+            .from('accounts').select('*').eq('type', 'cash').limit(1).single()
+          if (cashAccount) {
+            const { data: txs } = await supabase
+              .from('account_transactions').select('type, amount')
+              .eq('account_id', cashAccount.id)
+            const initial = Number(cashAccount.initial_balance) || 0
+            const txTotal = (txs || []).reduce((sum, t) => {
+              if (t.type === 'income' || t.type === 'transfer_in') return sum + Number(t.amount)
+              if (t.type === 'expense' || t.type === 'transfer_out') return sum - Number(t.amount)
+              return sum
+            }, 0)
+            const currentBalance = initial + txTotal
+            const diff = num(cashActual) - currentBalance
+            if (Math.abs(diff) > 0) {
+              await supabase.from('account_transactions').insert({
+                account_id: cashAccount.id,
+                transaction_date: date,
+                type: diff > 0 ? 'income' : 'expense',
+                amount: Math.abs(diff),
+                description: `Корректировка по отчёту за ${date}`,
+                reference_type: 'daily_report',
+              })
+            }
+          }
+        } catch (_) {}
+      }
 
       // Telegram notifications
       try {
@@ -222,11 +298,120 @@ export default function DailyReportPage() {
     loadJournal()
   }
 
+  // Delete report (admin only)
+  const deleteReport = async (id, reportDate) => {
+    if (!confirm(`Удалить отчёт за ${reportDate}? Это действие необратимо.`)) return
+    await supabase.from('daily_reports').delete().eq('id', id)
+    if (mode === 'form') setMode('journal')
+    loadJournal()
+  }
+
+  // Build PDF content as DOM tree (safe, no innerHTML)
+  const buildPdfDom = () => {
+    const root = el('div', {
+      width: '800px', padding: '40px', background: 'white', color: '#1a1a1a',
+      fontFamily: 'system-ui,-apple-system,sans-serif', fontSize: '14px', lineHeight: '1.6',
+    })
+
+    root.appendChild(el('h1', { fontSize: '22px', margin: '0 0 4px' }, `Мята Lounge — Отчёт за ${date}`))
+    root.appendChild(el('p', { color: '#666', margin: '0 0 20px' }, `Менеджер: ${profile?.full_name || '—'}`))
+
+    const makeTable = (rows) => {
+      const table = el('table', { width: '100%', borderCollapse: 'collapse' })
+      rows.forEach(r => table.appendChild(r))
+      return table
+    }
+
+    // Revenue by payment type
+    root.appendChild(el('h2', { fontSize: '16px', margin: '20px 0 10px', borderBottom: '2px solid #22c55e', paddingBottom: '4px', color: '#333' }, 'Доходы по типам оплат'))
+    const revRows = revenue.filter(r => num(r.amount) > 0).map(r =>
+      tr([[r.type, {}], [`${fmt(num(r.amount))} ₸`, { textAlign: 'right', fontWeight: '600' }]])
+    )
+    revRows.push(tr([['Итого выручка', { padding: '8px 0', fontWeight: '700', borderTop: '2px solid #333' }], [`${fmt(totalRevenue)} ₸`, { textAlign: 'right', fontWeight: '700', fontSize: '16px', borderTop: '2px solid #333' }]]))
+    root.appendChild(makeTable(revRows))
+
+    // Departments
+    root.appendChild(el('h2', { fontSize: '16px', margin: '20px 0 10px', borderBottom: '2px solid #f59e0b', paddingBottom: '4px', color: '#333' }, 'Выручка по отделам'))
+    const deptRows = departments.filter(d => num(d.amount) > 0).map(d =>
+      tr([[d.name, {}], [`${fmt(num(d.amount))} ₸`, { textAlign: 'right', fontWeight: '600' }]])
+    )
+    root.appendChild(makeTable(deptRows))
+
+    // Withdrawals by section
+    SECTIONS.forEach(sec => {
+      const rows = (withdrawals[sec.key] || []).filter(r => num(r.amount) > 0)
+      if (rows.length === 0) return
+      root.appendChild(el('h2', { fontSize: '16px', margin: '20px 0 10px', borderBottom: '2px solid #ef4444', paddingBottom: '4px', color: '#333' }, `${sec.icon} ${sec.label}`))
+      const trs = rows.map(r => {
+        const label = r.name || r.comment || '—'
+        const cells = [[label, {}], [`${fmt(num(r.amount))} ₸`, { textAlign: 'right', fontWeight: '600' }]]
+        if (r.comment && r.name) cells.push([r.comment, { color: '#666', paddingLeft: '12px' }])
+        return tr(cells)
+      })
+      trs.push(tr([['Итого', { fontWeight: '600', borderTop: '1px solid #ccc' }], [`${fmt(sectionTotal(sec.key))} ₸`, { textAlign: 'right', fontWeight: '600', borderTop: '1px solid #ccc' }]]))
+      root.appendChild(makeTable(trs))
+    })
+
+    // Cash verification
+    root.appendChild(el('h2', { fontSize: '16px', margin: '20px 0 10px', borderBottom: '2px solid #3b82f6', paddingBottom: '4px', color: '#333' }, 'Сверка кассы'))
+    const cashRows = [
+      tr([['Остаток на начало', {}], [`${fmt(num(cashStart))} ₸`, { textAlign: 'right' }]]),
+      tr([['+ Наличные продажи', {}], [`${fmt(cashSales)} ₸`, { textAlign: 'right', color: '#22c55e' }]]),
+      tr([['− Изъятия', {}], [`${fmt(totalWithdrawals)} ₸`, { textAlign: 'right', color: '#ef4444' }]]),
+    ]
+    if (num(inkassation)) cashRows.push(tr([['− Инкассация', {}], [`${fmt(num(inkassation))} ₸`, { textAlign: 'right', color: '#ef4444' }]]))
+    cashRows.push(tr([['Ожидаемый остаток', { padding: '8px 0', fontWeight: '700', borderTop: '2px solid #333' }], [`${fmt(cashExpected)} ₸`, { textAlign: 'right', fontWeight: '700', color: '#3b82f6', borderTop: '2px solid #333' }]]))
+    cashRows.push(tr([['Фактический остаток', { fontWeight: '700' }], [`${fmt(num(cashActual))} ₸`, { textAlign: 'right', fontWeight: '700', color: '#22c55e' }]]))
+    if (discrepancy !== 0) {
+      cashRows.push(tr([['РАСХОЖДЕНИЕ', { padding: '8px 0', fontWeight: '700', color: '#ef4444', borderTop: '2px solid #333' }], [`${discrepancy > 0 ? '+' : ''}${fmt(discrepancy)} ₸`, { textAlign: 'right', fontWeight: '700', fontSize: '16px', color: '#ef4444', borderTop: '2px solid #333' }]]))
+    } else {
+      cashRows.push(tr([['Расхождений нет', { padding: '8px 0', fontWeight: '700', color: '#22c55e', borderTop: '2px solid #333' }], ['', {}]]))
+    }
+    root.appendChild(makeTable(cashRows))
+
+    return root
+  }
+
+  // Generate PDF using html2canvas + jsPDF
+  const generatePDF = async () => {
+    const pdfRoot = buildPdfDom()
+    pdfRoot.style.position = 'absolute'
+    pdfRoot.style.left = '-9999px'
+    pdfRoot.style.top = '0'
+    document.body.appendChild(pdfRoot)
+
+    try {
+      const canvas = await html2canvas(pdfRoot, { scale: 2, useCORS: true })
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width
+      const pageHeight = pdf.internal.pageSize.getHeight()
+
+      if (pdfHeight <= pageHeight) {
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
+      } else {
+        let y = 0
+        while (y < pdfHeight) {
+          if (y > 0) pdf.addPage()
+          pdf.addImage(imgData, 'PNG', 0, -y, pdfWidth, pdfHeight)
+          y += pageHeight
+        }
+      }
+
+      pdf.save(`Myata_Report_${date}.pdf`)
+    } finally {
+      document.body.removeChild(pdfRoot)
+    }
+  }
+
   const shareWhatsApp = () => {
+    generatePDF()
     let text = `🍃 *Мята — Отчёт за ${date}*\n👤 ${profile?.full_name}\n\n💰 *Выручка: ${fmt(totalRevenue)} ₸*\n`
     departments.forEach(d => { if (num(d.amount)) text += `  ${d.name}: ${fmt(num(d.amount))} ₸\n` })
     text += `\n📤 Изъятия: ${fmt(totalWithdrawals)} ₸\n💵 Ожид.: ${fmt(cashExpected)} ₸\n💵 Факт: ${fmt(num(cashActual))} ₸\n`
     text += discrepancy !== 0 ? `⚠️ *Расхождение: ${fmt(discrepancy)} ₸*` : `✅ Расхождений нет`
+    text += `\n\n📎 PDF отчёт скачан`
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
   }
 
@@ -273,16 +458,15 @@ export default function DailyReportPage() {
               const hasDisc = Math.abs(disc) > 500
               const isDraft = r.status === 'draft' || !r.status
               return (
-                <button key={r.id} onClick={() => openReport(r)}
-                  className={cn('card w-full text-left flex items-center justify-between hover:border-brand-500/30 transition-all group',
-                    hasDisc && !isDraft && 'border-red-500/20',
-                    isDraft && 'border-yellow-500/20')}>
-                  <div className="flex items-center gap-4">
-                    <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold',
+                <div key={r.id} className={cn('card w-full text-left flex items-center justify-between hover:border-brand-500/30 transition-all group',
+                  hasDisc && !isDraft && 'border-red-500/20',
+                  isDraft && 'border-yellow-500/20')}>
+                  <button onClick={() => openReport(r)} className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0',
                       isDraft ? 'bg-yellow-500/15 text-yellow-400' : hasDisc ? 'bg-red-500/15 text-red-400' : 'bg-green-500/15 text-green-400')}>
                       {new Date(r.report_date + 'T12:00:00').getDate()}
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <div className="text-sm font-medium flex items-center gap-2">
                         {new Date(r.report_date + 'T12:00:00').toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
                         {isDraft ? (
@@ -293,8 +477,8 @@ export default function DailyReportPage() {
                       </div>
                       <div className="text-xs text-slate-500">{r.manager_name || '—'}</div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-6">
+                  </button>
+                  <div className="flex items-center gap-6 shrink-0">
                     <div className="text-right">
                       <div className="text-sm font-mono font-semibold text-green-400">{fmt(r.total_revenue || 0)} ₸</div>
                       <div className="text-[10px] text-slate-500">выручка</div>
@@ -311,9 +495,17 @@ export default function DailyReportPage() {
                         <div className="text-[10px] text-red-500">расхождение</div>
                       </div>
                     )}
-                    <Eye className="w-4 h-4 text-slate-600 group-hover:text-brand-400" />
+                    {canEdit && (
+                      <button onClick={(e) => { e.stopPropagation(); deleteReport(r.id, r.report_date) }}
+                        className="p-2 text-slate-600 hover:text-red-400 transition-colors" title="Удалить отчёт">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button onClick={() => openReport(r)} className="p-1">
+                      <Eye className="w-4 h-4 text-slate-600 group-hover:text-brand-400" />
+                    </button>
                   </div>
-                </button>
+                </div>
               )
             })}
           </div>
@@ -337,7 +529,6 @@ export default function DailyReportPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {/* Status badge */}
           {isSubmitted ? (
             <span className="badge badge-green flex items-center gap-1.5 py-1.5 px-3">
               <Check className="w-3.5 h-3.5" /> Отправлен
@@ -372,12 +563,12 @@ export default function DailyReportPage() {
         </div>
       )}
 
-      {/* КАССА */}
+      {/* КАССА — cashStart auto-fetched, read-only */}
       <div className="card">
         <h2 className="text-base font-display font-bold text-brand-400 mb-4">💵 Касса</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div><label className="label">Остаток на начало смены</label><MoneyInput value={cashStart} onChange={setCashStart} disabled={isLocked} /></div>
-          <div><label className="label">Внесение вчерашней выручки</label><MoneyInput value={cashDeposit} onChange={setCashDeposit} disabled={isLocked} /></div>
+        <div>
+          <label className="label">Остаток на начало смены (из счёта «Касса»)</label>
+          <MoneyInput value={cashStart} onChange={() => {}} disabled={true} className="opacity-50 cursor-not-allowed" />
         </div>
       </div>
 
@@ -385,8 +576,9 @@ export default function DailyReportPage() {
       {SECTIONS.map(sec => {
         const isOpen = expanded[sec.key]
         const total = sectionTotal(sec.key)
-        const colorMap = { green: 'border-green-500/20 bg-green-500/5', blue: 'border-blue-500/20 bg-blue-500/5', amber: 'border-amber-500/20 bg-amber-500/5', indigo: 'border-indigo-500/20 bg-indigo-500/5', rose: 'border-rose-500/20 bg-rose-500/5' }
+        const colorMap = { green: 'border-green-500/20 bg-green-500/5', blue: 'border-blue-500/20 bg-blue-500/5', amber: 'border-amber-500/20 bg-amber-500/5', indigo: 'border-indigo-500/20 bg-indigo-500/5', rose: 'border-rose-500/20 bg-rose-500/5', red: 'border-red-500/20 bg-red-500/5' }
         const isFixed = sec.fixed; const isPayroll = sec.isPayroll
+        const isCashW = sec.key === 'cash_withdrawals'
         let suggestions = []
         if (sec.supplierCat) suggestions = savedSuppliers[sec.supplierCat] || []
         if (isPayroll) suggestions = savedStaff
@@ -401,25 +593,49 @@ export default function DailyReportPage() {
             </button>
             {isOpen && (
               <div className="mt-4 space-y-2">
-                <div className="grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
-                  <div className="col-span-5">{isPayroll ? 'Сотрудник' : 'Поставщик'}</div>
-                  <div className="col-span-3 text-right">Сумма (₸)</div>
-                  <div className="col-span-3">Комментарий</div><div className="col-span-1" />
-                </div>
-                {withdrawals[sec.key].map((row, idx) => (
-                  <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                    <div className="col-span-5">
-                      {isFixed ? <div className="text-sm text-slate-300 px-3 py-2">{row.name}</div>
-                        : <NameInput value={row.name} onChange={v => updateWithdrawal(sec.key, idx, 'name', v)} suggestions={suggestions} placeholder={isPayroll ? 'Сотрудник' : 'Поставщик'} disabled={isLocked} />}
+                {isCashW ? (
+                  /* Cash withdrawals: amount + comment only */
+                  <>
+                    <div className="grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
+                      <div className="col-span-4 text-right">Сумма (₸)</div>
+                      <div className="col-span-7">Комментарий</div>
+                      <div className="col-span-1" />
                     </div>
-                    <div className="col-span-3"><MoneyInput value={row.amount} onChange={v => updateWithdrawal(sec.key, idx, 'amount', v)} disabled={isLocked} /></div>
-                    <div className="col-span-3"><input value={row.comment || ''} onChange={e => updateWithdrawal(sec.key, idx, 'comment', e.target.value)} className="input text-sm w-full" placeholder="—" disabled={isLocked} /></div>
-                    <div className="col-span-1 flex justify-center">
-                      {!isFixed && !isLocked && <button onClick={() => removeRow(sec.key, idx)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>}
+                    {(withdrawals[sec.key] || []).map((row, idx) => (
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-4"><MoneyInput value={row.amount} onChange={v => updateWithdrawal(sec.key, idx, 'amount', v)} disabled={isLocked} /></div>
+                        <div className="col-span-7"><input value={row.comment || ''} onChange={e => updateWithdrawal(sec.key, idx, 'comment', e.target.value)} className="input text-sm w-full" placeholder="Причина изъятия" disabled={isLocked} /></div>
+                        <div className="col-span-1 flex justify-center">
+                          {!isLocked && <button onClick={() => removeRow(sec.key, idx)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>}
+                        </div>
+                      </div>
+                    ))}
+                    {!isLocked && <button onClick={() => addRow(sec.key)} className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 mt-2 px-1"><Plus className="w-3.5 h-3.5" /> Добавить изъятие</button>}
+                  </>
+                ) : (
+                  /* Standard sections: name + amount + comment */
+                  <>
+                    <div className="grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
+                      <div className="col-span-5">{isPayroll ? 'Сотрудник' : 'Поставщик'}</div>
+                      <div className="col-span-3 text-right">Сумма (₸)</div>
+                      <div className="col-span-3">Комментарий</div><div className="col-span-1" />
                     </div>
-                  </div>
-                ))}
-                {!isFixed && !isLocked && <button onClick={() => addRow(sec.key)} className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 mt-2 px-1"><Plus className="w-3.5 h-3.5" /> Добавить строку</button>}
+                    {withdrawals[sec.key].map((row, idx) => (
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-5">
+                          {isFixed ? <div className="text-sm text-slate-300 px-3 py-2">{row.name}</div>
+                            : <NameInput value={row.name} onChange={v => updateWithdrawal(sec.key, idx, 'name', v)} suggestions={suggestions} placeholder={isPayroll ? 'Сотрудник' : 'Поставщик'} disabled={isLocked} />}
+                        </div>
+                        <div className="col-span-3"><MoneyInput value={row.amount} onChange={v => updateWithdrawal(sec.key, idx, 'amount', v)} disabled={isLocked} /></div>
+                        <div className="col-span-3"><input value={row.comment || ''} onChange={e => updateWithdrawal(sec.key, idx, 'comment', e.target.value)} className="input text-sm w-full" placeholder="—" disabled={isLocked} /></div>
+                        <div className="col-span-1 flex justify-center">
+                          {!isFixed && !isLocked && <button onClick={() => removeRow(sec.key, idx)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>}
+                        </div>
+                      </div>
+                    ))}
+                    {!isFixed && !isLocked && <button onClick={() => addRow(sec.key)} className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 mt-2 px-1"><Plus className="w-3.5 h-3.5" /> Добавить строку</button>}
+                  </>
+                )}
                 <div className="flex justify-end pt-2 border-t border-slate-800"><span className="text-sm font-semibold font-mono">{fmt(total)} ₸</span></div>
               </div>
             )}
@@ -435,13 +651,13 @@ export default function DailyReportPage() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div><label className="label">Инкассация на счёт</label><MoneyInput value={inkassation} onChange={setInkassation} disabled={isLocked} /></div>
-          <div><label className="label">Остаток наличных (ФАКТ) ⭐</label><MoneyInput value={cashActual} onChange={setCashActual} disabled={isLocked} className="!border-yellow-500/50 !bg-yellow-500/10" /></div>
+          <div><label className="label">Остаток наличных (ФАКТ)</label><MoneyInput value={cashActual} onChange={setCashActual} disabled={isLocked} className="!border-yellow-500/50 !bg-yellow-500/10" /></div>
         </div>
       </div>
 
       {/* REVENUE */}
       <div className="card border-green-500/20 bg-green-500/5">
-        <h2 className="text-base font-display font-bold text-green-400 mb-4">💰 Доходы (из iiko)</h2>
+        <h2 className="text-base font-display font-bold text-green-400 mb-4">💰 Доходы по типам оплат</h2>
         <div className="space-y-2">
           <div className="grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
             <div className="col-span-4">Тип оплаты</div><div className="col-span-4 text-right">Сумма (₸)</div>
@@ -487,7 +703,6 @@ export default function DailyReportPage() {
         </h2>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between"><span className="text-slate-400">Остаток на начало</span><span className="font-mono">{fmt(num(cashStart))}</span></div>
-          <div className="flex justify-between"><span className="text-slate-400">+ Внесение</span><span className="font-mono">{fmt(num(cashDeposit))}</span></div>
           <div className="flex justify-between"><span className="text-slate-400">+ Наличные продажи</span><span className="font-mono text-green-400">{fmt(cashSales)}</span></div>
           <div className="flex justify-between"><span className="text-slate-400">− Изъятия</span><span className="font-mono text-red-400">{fmt(totalWithdrawals)}</span></div>
           <div className="flex justify-between"><span className="text-slate-400">− Инкассация</span><span className="font-mono text-red-400">{fmt(num(inkassation))}</span></div>
@@ -517,10 +732,21 @@ export default function DailyReportPage() {
               <Send className="w-4 h-4" /> Обновить и отправить
             </button>
           )}
+          <button onClick={generatePDF} className="btn-secondary flex items-center justify-center gap-2">
+            <Download className="w-4 h-4" /> PDF
+          </button>
           <button onClick={shareWhatsApp} className="btn-secondary flex items-center justify-center gap-2">
             WhatsApp
           </button>
         </div>
+      )}
+
+      {/* Delete report button (admin only, existing reports) */}
+      {canEdit && reportId && (
+        <button onClick={() => deleteReport(reportId, date)}
+          className="w-full py-3 rounded-xl text-sm font-medium text-red-400 border border-red-500/20 hover:bg-red-500/10 transition-colors flex items-center justify-center gap-2">
+          <Trash2 className="w-4 h-4" /> Удалить отчёт
+        </button>
       )}
     </div>
   )

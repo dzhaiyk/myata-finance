@@ -5,7 +5,7 @@ import { TrendingUp, DollarSign, ShoppingCart, Users, AlertTriangle, ArrowUpRigh
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
 export default function DashboardPage() {
-  const [year, setYear] = useState(2025)
+  const [year, setYear] = useState(2026)
   const [reports, setReports] = useState([])
   const [pnl, setPnl] = useState([])
   const [loading, setLoading] = useState(true)
@@ -96,9 +96,7 @@ export default function DashboardPage() {
           <p className="text-sm text-slate-500 mt-1">Мята Platinum 4YOU — Финансовый обзор</p>
         </div>
         <select value={year} onChange={e => setYear(Number(e.target.value))} className="input text-sm">
-          <option value={2025}>2025</option>
-          <option value={2024}>2024</option>
-          <option value={2023}>2023</option>
+          <option value={2026}>2026</option>
         </select>
       </div>
 
