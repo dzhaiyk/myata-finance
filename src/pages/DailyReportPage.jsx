@@ -278,9 +278,16 @@ export default function DailyReportPage() {
         }
       } catch (_) {}
 
+      // Generate PDF (auto-download)
+      await generatePDF()
+
+      // Open WhatsApp with text summary
+      const waText = buildWhatsAppText()
+      window.open(`https://wa.me/?text=${encodeURIComponent(waText)}`, '_blank')
+
       setLastSaved(new Date())
       loadJournal()
-      alert('✅ Отчёт отправлен!')
+      setMode('journal')
     } catch (e) { alert('Ошибка: ' + e.message) }
     setSaving(false)
   }
@@ -432,14 +439,16 @@ export default function DailyReportPage() {
     doc.save(`Myata_Report_${date}.pdf`)
   }
 
-  const shareWhatsApp = () => {
-    generatePDF()
-    let text = `🍃 *Мята — Отчёт за ${date}*\n👤 ${profile?.full_name}\n\n💰 *Выручка: ${fmt(totalRevenue)} ₸*\n`
+  const buildWhatsAppText = () => {
+    let text = `📊 Myata 4YOU — Отчёт за ${date}\n👤 ${profile?.full_name}\n\n`
+    text += `💰 Выручка: ${fmt(totalRevenue)} ₸\n`
     departments.forEach(d => { if (num(d.amount)) text += `  ${d.name}: ${fmt(num(d.amount))} ₸\n` })
-    text += `\n📤 Изъятия: ${fmt(totalWithdrawals)} ₸\n💵 Ожид.: ${fmt(cashExpected)} ₸\n💵 Факт: ${fmt(num(cashActual))} ₸\n`
-    text += discrepancy !== 0 ? `⚠️ *Расхождение: ${fmt(discrepancy)} ₸*` : `✅ Расхождений нет`
-    text += `\n\n📎 PDF отчёт скачан`
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
+    text += `\n📤 Расходы: ${fmt(totalWithdrawals)} ₸\n`
+    text += `💵 Касса ожид: ${fmt(cashExpected)} ₸\n`
+    text += `💵 Касса факт: ${fmt(num(cashActual))} ₸\n`
+    text += discrepancy !== 0 ? `⚠️ Расхождение: ${fmt(discrepancy)} ₸` : `✅ Расхождений нет`
+    text += `\n\n📎 PDF отчёт скачан — прикрепите файл к сообщению`
+    return text
   }
 
   const isSubmitted = status === 'submitted'
@@ -749,21 +758,11 @@ export default function DailyReportPage() {
           <button onClick={saveDraft} disabled={saving} className="btn-secondary flex items-center justify-center gap-2 flex-1">
             <Save className="w-4 h-4" />{saving ? 'Сохранение...' : 'Сохранить черновик'}
           </button>
-          {!isSubmitted && (
-            <button onClick={submitReport} disabled={saving} className="btn-primary flex items-center justify-center gap-2 flex-1">
-              <Send className="w-4 h-4" /> Отправить отчёт
-            </button>
-          )}
-          {isSubmitted && (
-            <button onClick={submitReport} disabled={saving} className="btn-primary flex items-center justify-center gap-2 flex-1">
-              <Send className="w-4 h-4" /> Обновить и отправить
-            </button>
-          )}
+          <button onClick={submitReport} disabled={saving} className="btn-primary flex items-center justify-center gap-2 flex-1">
+            <Send className="w-4 h-4" /> Отправить отчёт
+          </button>
           <button onClick={generatePDF} className="btn-secondary flex items-center justify-center gap-2">
             <Download className="w-4 h-4" /> PDF
-          </button>
-          <button onClick={shareWhatsApp} className="btn-secondary flex items-center justify-center gap-2">
-            WhatsApp
           </button>
         </div>
       )}
