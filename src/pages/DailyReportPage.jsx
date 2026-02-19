@@ -81,7 +81,10 @@ export default function DailyReportPage() {
   // Form state
   const [reportId, setReportId] = useState(null)
   const [status, setStatus] = useState('draft')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 1)
+    return d.toISOString().split('T')[0]
+  })
   const [saving, setSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState(null)
   const [expanded, setExpanded] = useState({ suppliers_kitchen: true, suppliers_bar: true, tobacco: true, payroll: true, other: true, cash_withdrawals: true })
@@ -129,6 +132,23 @@ export default function DailyReportPage() {
     if (staffRes.data) setSavedStaff(staffRes.data)
   }
 
+  // Fetch cash account balance from accounts + transactions
+  const getCashBalance = async () => {
+    const { data: cashAccount } = await supabase
+      .from('accounts').select('*').eq('type', 'cash').limit(1).single()
+    if (!cashAccount) return 0
+    const { data: txs } = await supabase
+      .from('account_transactions').select('type, amount')
+      .eq('account_id', cashAccount.id)
+    const initial = Number(cashAccount.initial_balance) || 0
+    const txTotal = (txs || []).reduce((sum, t) => {
+      if (t.type === 'income' || t.type === 'transfer_in') return sum + Number(t.amount)
+      if (t.type === 'expense' || t.type === 'transfer_out') return sum - Number(t.amount)
+      return sum
+    }, 0)
+    return initial + txTotal
+  }
+
   const openReport = (report) => {
     const d = report.data || {}
     setReportId(report.id)
@@ -152,15 +172,18 @@ export default function DailyReportPage() {
     setMode('form')
   }
 
-  const newReport = () => {
+  const newReport = async () => {
     setReportId(null); setStatus('draft')
-    setDate(new Date().toISOString().split('T')[0])
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
+    setDate(yesterday.toISOString().split('T')[0])
     setCashStart(''); setCashEnd('')
     setWithdrawals(emptyWithdrawals())
     setRevenue(PAYMENT_TYPES.map(t => ({ type: t, amount: '', checks: '' })))
     setDepartments(DEPARTMENTS.map(d => ({ name: d, amount: '' })))
     setLastSaved(null)
     setMode('form')
+    const bal = await getCashBalance()
+    setCashStart(String(bal || 0))
   }
 
   // Calculations
@@ -383,16 +406,17 @@ export default function DailyReportPage() {
     y += 2
 
     // Сверка выручки
-    if (revenueDiscrepancy !== 0 && totalRevenue > 0) {
-      doc.setFont('Roboto', 'bold'); doc.setFontSize(9); doc.setTextColor(220, 53, 69)
-      doc.text(`Расхождение выручки: ${fmt(revenueDiscrepancy)} ₸`, L + 4, y)
-      y += 5
-    } else if (totalRevenue > 0) {
-      doc.setFont('Roboto', 'normal'); doc.setFontSize(9); doc.setTextColor(34, 139, 34)
-      doc.text('Выручка сходится', L + 4, y)
-      y += 5
+    if (totalRevenue > 0 || totalDeptRevenue > 0) {
+      divider()
+      if (revenueDiscrepancy !== 0) {
+        row('Расхождение выручки', `${fmt(revenueDiscrepancy)} ₸`, { bold: true, color: [220, 53, 69] })
+      } else {
+        setNormal(9); doc.setTextColor(34, 139, 34)
+        doc.text('Выручка сходится', L + 4, y)
+        doc.setTextColor(30)
+        y += 5
+      }
     }
-    doc.setTextColor(30)
     y += 4
 
     // ══════════ BLOCK 2: РАСХОДЫ ══════════
@@ -674,19 +698,23 @@ export default function DailyReportPage() {
         </div>
 
         {/* Сверка выручки */}
-        {totalRevenue > 0 && (
+        {(totalRevenue > 0 || totalDeptRevenue > 0) && (
           <div className={cn('card border', revenueDiscrepancy !== 0 ? 'border-red-500/30 bg-red-500/5' : 'border-green-500/30 bg-green-500/5')}>
-            {revenueDiscrepancy !== 0 ? (
-              <div className="flex items-center gap-2 text-red-400">
-                <AlertTriangle className="w-4 h-4" />
-                <span className="text-sm font-bold">Расхождение выручки: {fmt(revenueDiscrepancy)} ₸</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-green-400">
-                <CheckCircle2 className="w-4 h-4" />
-                <span className="text-sm font-bold">Выручка сходится</span>
-              </div>
-            )}
+            <div className="space-y-1.5 text-sm">
+              <div className="flex justify-between"><span className="text-slate-400">Итого по отделам</span><span className="font-mono">{fmt(totalDeptRevenue)} ₸</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Итого по типам оплат</span><span className="font-mono">{fmt(totalRevenue)} ₸</span></div>
+              <div className="h-px bg-slate-700 my-1" />
+              {revenueDiscrepancy !== 0 ? (
+                <div className="flex items-center justify-between text-red-400 font-bold">
+                  <span className="flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> Расхождение выручки</span>
+                  <span className="font-mono">{fmt(revenueDiscrepancy)} ₸</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 text-green-400 font-bold">
+                  <CheckCircle2 className="w-4 h-4" /> Выручка сходится
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -779,8 +807,8 @@ export default function DailyReportPage() {
         <div className="card border-blue-500/20 bg-blue-500/5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="label">Остаток на начало смены</label>
-              <MoneyInput value={cashStart} onChange={setCashStart} disabled={isLocked} />
+              <label className="label">Остаток на начало смены (из счёта «Касса»)</label>
+              <MoneyInput value={cashStart} onChange={() => {}} disabled={true} className="opacity-50 cursor-not-allowed" />
             </div>
             <div>
               <label className="label">Остаток на конец смены</label>
