@@ -309,11 +309,13 @@ export default function DailyReportPage() {
   }
 
   // Generate PDF using direct jsPDF API with Roboto font
+  const revenueDiscrepancy = totalDeptRevenue - totalRevenue
+
   const generatePDF = async () => {
     const doc = new jsPDF('p', 'mm', 'a4')
     await loadPdfFonts(doc)
 
-    const L = 14, R = 196, W = R - L // left, right, width
+    const L = 14, R = 196, W = R - L
     let y = 20
 
     const checkPage = (needed = 40) => {
@@ -321,12 +323,27 @@ export default function DailyReportPage() {
     }
     const setNormal = (size = 10) => { doc.setFont('Roboto', 'normal'); doc.setFontSize(size); doc.setTextColor(30) }
     const setBold = (size = 10) => { doc.setFont('Roboto', 'bold'); doc.setFontSize(size); doc.setTextColor(30) }
-    const grayLine = () => { doc.setDrawColor(200); doc.line(L, y, R, y); y += 3 }
+
+    // Thin divider: gap above → line → gap below (no text overlap)
+    const divider = () => {
+      y += 2
+      doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.3)
+      doc.line(L, y, R, y)
+      y += 4
+    }
+    // Bold divider for totals
+    const boldDivider = () => {
+      y += 2
+      doc.setDrawColor(100, 100, 100); doc.setLineWidth(0.5)
+      doc.line(L, y, R, y)
+      y += 4
+    }
+
     const row = (label, value, opts = {}) => {
       checkPage(8)
-      if (opts.bold) setBold(10); else setNormal(10)
+      if (opts.bold) setBold(opts.size || 10); else setNormal(opts.size || 10)
       if (opts.color) doc.setTextColor(...opts.color)
-      doc.text(label, L + 2, y)
+      doc.text(label, L + 4, y)
       doc.text(value, R - 2, y, { align: 'right' })
       doc.setTextColor(30)
       y += 6
@@ -343,18 +360,18 @@ export default function DailyReportPage() {
     const subHeader = (title) => {
       checkPage(12)
       setBold(10); doc.setTextColor(80)
-      doc.text(title, L + 2, y)
+      doc.text(title, L + 4, y)
       doc.setTextColor(30)
-      y += 6
+      y += 7
     }
 
     // ── HEADER ──
     setBold(18)
     doc.text(`Myata 4YOU — Отчёт за ${date}`, L, y); y += 8
     setNormal(10); doc.setTextColor(120)
-    doc.text(`Менеджер: ${profile?.full_name || '—'}`, L, y); y += 4
+    doc.text(`Менеджер: ${profile?.full_name || '—'}`, L, y); y += 2
     doc.setTextColor(30)
-    grayLine(); y += 2
+    boldDivider()
 
     // ══════════ BLOCK 1: ДОХОДЫ ══════════
     sectionHeader('ДОХОДЫ', [34, 139, 34])
@@ -363,14 +380,26 @@ export default function DailyReportPage() {
     revenue.forEach(r => {
       if (num(r.amount) > 0) row(r.type, `${fmt(num(r.amount))} ₸`)
     })
-    grayLine()
+    divider()
     row('Итого выручка', `${fmt(totalRevenue)} ₸`, { bold: true })
-    y += 2
+    y += 3
 
     subHeader('Выручка по отделам')
     departments.forEach(d => {
       if (num(d.amount) > 0) row(d.name, `${fmt(num(d.amount))} ₸`)
     })
+    divider()
+    row('Итого по отделам', `${fmt(totalDeptRevenue)} ₸`, { bold: true })
+    setNormal(9); doc.setTextColor(120)
+    doc.text('Итого по типам оплат', L + 4, y)
+    doc.text(`${fmt(totalRevenue)} ₸`, R - 2, y, { align: 'right' })
+    y += 5
+    if (revenueDiscrepancy !== 0) {
+      doc.setFont('Roboto', 'bold'); doc.setFontSize(9); doc.setTextColor(220, 53, 69)
+      doc.text(`Расхождение: ${fmt(revenueDiscrepancy)} ₸`, L + 4, y)
+      y += 5
+    }
+    doc.setTextColor(30)
     y += 4
 
     // ══════════ BLOCK 2: РАСХОДЫ И ИЗЪЯТИЯ ══════════
@@ -380,7 +409,7 @@ export default function DailyReportPage() {
       const rows = (withdrawals[sec.key] || []).filter(r => num(r.amount) > 0)
       if (rows.length === 0) return
       const secTotal = sectionTotal(sec.key)
-      const neededHeight = rows.length * 6 + 18
+      const neededHeight = rows.length * 6 + 22
       checkPage(neededHeight)
 
       subHeader(sec.label)
@@ -389,14 +418,14 @@ export default function DailyReportPage() {
         const comment = r.comment && r.name ? `  (${r.comment})` : ''
         row(`${label}${comment}`, `${fmt(num(r.amount))} ₸`)
       })
-      grayLine()
+      divider()
       row(`Итого ${sec.label}`, `${fmt(secTotal)} ₸`, { bold: true })
       y += 2
     })
 
-    grayLine()
+    boldDivider()
     setBold(11)
-    doc.text('ИТОГО РАСХОДЫ', L + 2, y)
+    doc.text('ИТОГО РАСХОДЫ', L + 4, y)
     doc.setTextColor(220, 53, 69)
     doc.text(`${fmt(totalWithdrawals)} ₸`, R - 2, y, { align: 'right' })
     doc.setTextColor(30)
@@ -410,18 +439,18 @@ export default function DailyReportPage() {
     row('+ Наличные продажи', `${fmt(cashSales)} ₸`, { color: [34, 139, 34] })
     row('− Изъятия', `${fmt(totalWithdrawals)} ₸`, { color: [220, 53, 69] })
     if (num(inkassation)) row('− Инкассация', `${fmt(num(inkassation))} ₸`, { color: [220, 53, 69] })
-    grayLine()
+    divider()
     row('Ожидаемый остаток', `${fmt(cashExpected)} ₸`, { bold: true, color: [59, 130, 246] })
     row('Фактический остаток', `${fmt(num(cashActual))} ₸`, { bold: true, color: [34, 139, 34] })
-    grayLine()
+    boldDivider()
 
     if (discrepancy !== 0) {
       setBold(12); doc.setTextColor(220, 53, 69)
-      doc.text('РАСХОЖДЕНИЕ', L + 2, y)
+      doc.text('РАСХОЖДЕНИЕ', L + 4, y)
       doc.text(`${discrepancy > 0 ? '+' : ''}${fmt(discrepancy)} ₸`, R - 2, y, { align: 'right' })
     } else {
       setBold(12); doc.setTextColor(34, 139, 34)
-      doc.text('Расхождений нет', L + 2, y)
+      doc.text('Расхождений нет', L + 4, y)
     }
     doc.setTextColor(30)
     y += 8
@@ -722,12 +751,21 @@ export default function DailyReportPage() {
             <div key={i}><label className="label">{d.name}</label><MoneyInput value={d.amount} onChange={v => setDepartments(prev => prev.map((x, j) => j === i ? { ...x, amount: v } : x))} disabled={isLocked} /></div>
           ))}
         </div>
-        <div className="flex items-center justify-between pt-3 mt-3 border-t border-amber-500/20">
-          <span className="text-sm font-semibold">Итого</span>
-          <div className="flex items-center gap-3">
+        <div className="pt-3 mt-3 border-t border-amber-500/20 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold">Итого по отделам</span>
             <span className="font-mono text-sm font-bold">{fmt(totalDeptRevenue)} ₸</span>
-            {totalDeptRevenue !== totalRevenue && totalRevenue > 0 && <span className="badge-red text-[10px]">≠ Выручке ({fmt(totalRevenue - totalDeptRevenue)})</span>}
           </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-500">Итого по типам оплат</span>
+            <span className="font-mono text-xs text-slate-500">{fmt(totalRevenue)} ₸</span>
+          </div>
+          {totalDeptRevenue - totalRevenue !== 0 && totalRevenue > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-red-400 font-medium">Расхождение выручки</span>
+              <span className="font-mono text-xs text-red-400 font-bold">{fmt(totalDeptRevenue - totalRevenue)} ₸</span>
+            </div>
+          )}
         </div>
       </div>
 
