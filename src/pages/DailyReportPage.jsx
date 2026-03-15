@@ -103,6 +103,9 @@ export default function DailyReportPage() {
   const [withdrawals, setWithdrawals] = useState(emptyWithdrawals())
   const [revenue, setRevenue] = useState(PAYMENT_TYPES.map(t => ({ type: t, amount: '', checks: '' })))
   const [departments, setDepartments] = useState(DEPARTMENTS.map(d => ({ name: d, amount: '' })))
+  const [allAccounts, setAllAccounts] = useState([]) // all accounts for parent lookup
+  const [terminalAccounts, setTerminalAccounts] = useState([]) // sub-accounts (have parent_account_id)
+  const [terminals, setTerminals] = useState({}) // { accountId: amount }
 
   useEffect(() => { loadJournal(); loadSavedEntities() }, [])
 
@@ -120,9 +123,10 @@ export default function DailyReportPage() {
   }
 
   const loadSavedEntities = async () => {
-    const [supRes, staffRes] = await Promise.all([
+    const [supRes, staffRes, acctRes] = await Promise.all([
       supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
       supabase.from('staff').select('*').eq('is_active', true).order('full_name'),
+      supabase.from('accounts').select('*').eq('is_active', true).order('sort_order, id'),
     ])
     if (supRes.data) {
       const grouped = { Кухня: [], Бар: [], Кальян: [], Хозтовары: [], Прочее: [] }
@@ -130,6 +134,12 @@ export default function DailyReportPage() {
       setSavedSuppliers(grouped)
     }
     if (staffRes.data) setSavedStaff(staffRes.data)
+    if (acctRes.data) {
+      const allAccounts = acctRes.data
+      setTerminalAccounts(allAccounts.filter(a => a.parent_account_id))
+      // Store all accounts for parent name lookup
+      setAllAccounts(allAccounts)
+    }
   }
 
   // Fetch cash account balance from accounts + transactions
@@ -169,6 +179,7 @@ export default function DailyReportPage() {
     }
     if (d.revenue) setRevenue(d.revenue)
     if (d.departments) setDepartments(d.departments)
+    setTerminals(d.terminals || {})
     setMode('form')
   }
 
@@ -180,6 +191,7 @@ export default function DailyReportPage() {
     setWithdrawals(emptyWithdrawals())
     setRevenue(PAYMENT_TYPES.map(t => ({ type: t, amount: '', checks: '' })))
     setDepartments(DEPARTMENTS.map(d => ({ name: d, amount: '' })))
+    setTerminals({})
     setLastSaved(null)
     setMode('form')
     const bal = await getCashBalance()
@@ -193,6 +205,15 @@ export default function DailyReportPage() {
   const totalRevenue = revenue.reduce((s, r) => s + num(r.amount), 0)
   const totalDeptRevenue = departments.reduce((s, d) => s + num(d.amount), 0)
   const revenueDiscrepancy = totalDeptRevenue - totalRevenue
+  // Group terminal accounts by parent, compute totals per parent
+  const terminalsByParent = terminalAccounts.reduce((acc, ta) => {
+    const pid = ta.parent_account_id
+    if (!acc[pid]) acc[pid] = { accounts: [], total: 0 }
+    acc[pid].accounts.push(ta)
+    acc[pid].total += num(terminals[ta.id])
+    return acc
+  }, {})
+
   const cashSales = num(revenue.find(r => r.type === 'Наличные')?.amount)
   const cashExpected = num(cashStart) + cashSales - totalWithdrawals
   const discrepancy = num(cashEnd) - cashExpected
@@ -213,7 +234,7 @@ export default function DailyReportPage() {
     updated_at: new Date().toISOString(),
     data: {
       date, manager: profile?.full_name, cash_start: num(cashStart),
-      cash_end: num(cashEnd), withdrawals, revenue, departments,
+      cash_end: num(cashEnd), withdrawals, revenue, departments, terminals,
       total_revenue: totalRevenue, total_dept_revenue: totalDeptRevenue,
       total_withdrawals: totalWithdrawals, cash_expected: cashExpected, discrepancy,
     },
@@ -417,6 +438,22 @@ export default function DailyReportPage() {
         y += 5
       }
     }
+
+    // Терминалы
+    if (terminalAccounts.length > 0 && Object.values(terminals).some(v => num(v) > 0)) {
+      y += 4
+      subHeader('Терминалы')
+      Object.entries(terminalsByParent).forEach(([parentId, group]) => {
+        const parent = allAccounts.find(a => a.id === Number(parentId))
+        if (group.total <= 0) return
+        setNormal(9); doc.setTextColor(120)
+        doc.text(parent?.name || 'Счёт', L + 4, y); y += 5; doc.setTextColor(30)
+        group.accounts.forEach(ta => {
+          if (num(terminals[ta.id]) > 0) row(`  ${ta.name}`, `${fmt(num(terminals[ta.id]))} ₸`)
+        })
+        row(`  Итого`, `${fmt(group.total)} ₸`, { bold: true })
+      })
+    }
     y += 4
 
     // ══════════ BLOCK 2: РАСХОДЫ ══════════
@@ -493,6 +530,16 @@ export default function DailyReportPage() {
     text += `💰 Выручка по отделам: ${fmt(totalDeptRevenue)} ₸\n`
     departments.forEach(d => { if (num(d.amount)) text += `  ${d.name}: ${fmt(num(d.amount))} ₸\n` })
     text += `💰 По типам оплат: ${fmt(totalRevenue)} ₸\n`
+    if (terminalAccounts.length > 0 && Object.values(terminals).some(v => num(v) > 0)) {
+      text += `\n📱 Терминалы:\n`
+      Object.entries(terminalsByParent).forEach(([parentId, group]) => {
+        const parent = allAccounts.find(a => a.id === Number(parentId))
+        group.accounts.forEach(ta => {
+          if (num(terminals[ta.id]) > 0) text += `  ${ta.name}: ${fmt(num(terminals[ta.id]))} ₸\n`
+        })
+        text += `  Итого (${parent?.name || '?'}): ${fmt(group.total)} ₸\n`
+      })
+    }
     text += `\n📤 Расходы: ${fmt(totalWithdrawals)} ₸\n`
     text += `💵 Касса начало: ${fmt(num(cashStart))} ₸\n`
     text += `💵 Касса конец: ${fmt(num(cashEnd))} ₸\n`
@@ -715,6 +762,46 @@ export default function DailyReportPage() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Терминалы (подсчёта) */}
+        {terminalAccounts.length > 0 && (
+          <div className="card border-orange-500/20 bg-orange-500/5">
+            <h3 className="text-sm font-display font-bold text-orange-300 mb-3">📱 Терминалы</h3>
+            {Object.entries(terminalsByParent).map(([parentId, group]) => {
+              const parent = allAccounts.find(a => a.id === Number(parentId))
+              // Find matching payment type by parent's bank_name
+              const matchingPaymentType = revenue.find(r => parent?.bank_name && r.type.toLowerCase().includes(parent.bank_name.toLowerCase()))
+              const paymentAmount = num(matchingPaymentType?.amount)
+              const terminalDiscrepancy = paymentAmount > 0 || group.total > 0 ? group.total - paymentAmount : null
+              return (
+                <div key={parentId} className="mb-4 last:mb-0">
+                  <div className="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-1.5">
+                    {parent?.icon} {parent?.name || 'Счёт'}
+                  </div>
+                  <div className="space-y-2">
+                    {group.accounts.map(ta => (
+                      <div key={ta.id} className="flex items-center gap-3">
+                        <span className="text-sm text-slate-300 w-40 shrink-0">{ta.icon} {ta.name}</span>
+                        <MoneyInput value={terminals[ta.id] || ''} onChange={v => setTerminals(prev => ({ ...prev, [ta.id]: v }))} disabled={isLocked} />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between pt-2 mt-2 border-t border-orange-500/20">
+                    <span className="text-sm font-bold">Итого</span>
+                    <span className="text-sm font-mono font-bold">{fmt(group.total)} ₸</span>
+                  </div>
+                  {terminalDiscrepancy !== null && (
+                    <div className={cn('flex items-center justify-between mt-1 text-xs',
+                      terminalDiscrepancy === 0 ? 'text-green-400' : 'text-red-400')}>
+                      <span>{terminalDiscrepancy === 0 ? '✅ Сходится с «' : '⚠️ Расхождение с «'}{matchingPaymentType?.type || '?'}»</span>
+                      {terminalDiscrepancy !== 0 && <span className="font-mono font-bold">{terminalDiscrepancy > 0 ? '+' : ''}{fmt(terminalDiscrepancy)} ₸</span>}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

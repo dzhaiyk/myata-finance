@@ -20,7 +20,7 @@ export default function AccountsPage() {
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [showTransfer, setShowTransfer] = useState(false)
   const [showManualTx, setShowManualTx] = useState(false)
-  const [acctForm, setAcctForm] = useState({ name: '', type: 'bank', bank_name: '', icon: '🏦', color: '#3b82f6', initial_balance: 0, sort_order: 0 })
+  const [acctForm, setAcctForm] = useState({ name: '', type: 'bank', bank_name: '', icon: '🏦', color: '#3b82f6', initial_balance: 0, sort_order: 0, parent_account_id: null })
   const [editAcctId, setEditAcctId] = useState(null)
   const [transferForm, setTransferForm] = useState({ from_id: '', to_id: '', amount: '', date: today(), description: '' })
   const [manualTxForm, setManualTxForm] = useState({ account_id: '', type: 'income', amount: '', date: today(), counterparty: '', description: '' })
@@ -67,7 +67,7 @@ export default function AccountsPage() {
       await supabase.from('accounts').insert(payload)
     }
     setShowAddAccount(false); setEditAcctId(null)
-    setAcctForm({ name: '', type: 'bank', bank_name: '', icon: '🏦', color: '#3b82f6', initial_balance: 0, sort_order: 0 })
+    setAcctForm({ name: '', type: 'bank', bank_name: '', icon: '🏦', color: '#3b82f6', initial_balance: 0, sort_order: 0, parent_account_id: null })
     load()
   }
 
@@ -496,6 +496,11 @@ export default function AccountsPage() {
                   <input type="color" value={acctForm.color} onChange={e => setAcctForm(f => ({...f, color: e.target.value}))} className="input text-sm w-full h-10" /></div>
                 <div><label className="label">Начальный остаток</label>
                   <input type="number" value={acctForm.initial_balance || ''} onChange={e => setAcctForm(f => ({...f, initial_balance: Number(e.target.value)}))} className="input text-sm w-full" placeholder="0" /></div>
+                <div><label className="label">Родительский счёт</label>
+                  <select value={acctForm.parent_account_id || ''} onChange={e => setAcctForm(f => ({...f, parent_account_id: e.target.value ? Number(e.target.value) : null}))} className="input text-sm w-full">
+                    <option value="">— Нет (основной счёт)</option>
+                    {accounts.filter(a => !a.parent_account_id && a.id !== editAcctId).map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+                  </select></div>
                 <div><label className="label">Порядок сортировки</label>
                   <input type="number" value={acctForm.sort_order ?? ''} onChange={e => setAcctForm(f => ({...f, sort_order: Number(e.target.value)}))} className="input text-sm w-full" placeholder="0" /></div>
               </div>
@@ -521,7 +526,9 @@ export default function AccountsPage() {
               <tbody>
                 {accounts.map(a => (
                   <tr key={a.id} className={cn('hover:bg-slate-800/30', !a.is_active && 'opacity-50')}>
-                    <td className="table-cell font-medium">{a.icon} {a.name}</td>
+                    <td className="table-cell font-medium">{a.parent_account_id ? <span className="text-slate-600 mr-1">└</span> : ''}{a.icon} {a.name}
+                      {a.parent_account_id && <span className="text-[10px] text-slate-600 ml-1">→ {accounts.find(p => p.id === a.parent_account_id)?.name}</span>}
+                    </td>
                     <td className="table-cell text-slate-400 text-xs">{TYPES[a.type]}</td>
                     <td className="table-cell text-slate-400 text-xs">{a.bank_name || '—'}</td>
                     <td className="table-cell text-right font-mono text-xs">{fmt(a.initial_balance || 0)} ₸</td>
