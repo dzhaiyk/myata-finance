@@ -64,9 +64,6 @@ export default function AccountsPage() {
     const { name, type, bank_name, icon, color, initial_balance, sort_order, parent_account_id } = acctForm
     const cleanParent = parent_account_id ? Number(parent_account_id) : null
     const payload = { name, type, bank_name: bank_name || null, icon, color, initial_balance, sort_order, parent_account_id: cleanParent }
-    // DEBUG: убрать после отладки
-    const parentName = cleanParent ? accounts.find(a => a.id === cleanParent)?.name : 'нет'
-    if (!confirm(`Сохранить?\nРодитель: ${parentName} (id=${cleanParent})\n\nНажмите OK для сохранения`)) return
     let error
     if (editAcctId) {
       const res = await supabase.from('accounts').update(payload).eq('id', editAcctId)
@@ -191,8 +188,21 @@ export default function AccountsPage() {
     load()
   }
 
-  const totalBalance = accounts.filter(a => a.is_active).reduce((s, a) => s + calcBalance(a.id), 0)
-  const activeAccounts = accounts.filter(a => a.is_active)
+  // Sort accounts: parent first, then its children, then next parent, etc.
+  const sortedAccounts = (() => {
+    const roots = accounts.filter(a => !a.parent_account_id)
+    const result = []
+    roots.forEach(root => {
+      result.push(root)
+      accounts.filter(a => a.parent_account_id === root.id).forEach(child => result.push(child))
+    })
+    // Any orphans (parent deleted but child remains)
+    accounts.filter(a => a.parent_account_id && !accounts.find(p => p.id === a.parent_account_id)).forEach(o => result.push(o))
+    return result
+  })()
+
+  const totalBalance = accounts.filter(a => a.is_active && !a.parent_account_id).reduce((s, a) => s + calcBalance(a.id), 0)
+  const activeAccounts = sortedAccounts.filter(a => a.is_active)
 
   if (loading) return <div className="text-center text-slate-500 py-20">Загрузка...</div>
 
@@ -301,12 +311,13 @@ export default function AccountsPage() {
             <div className="text-xs text-slate-500 mt-1">{activeAccounts.length} активных счетов</div>
           </div>
 
-          {/* Account cards */}
+          {/* Account cards — parents with nested children */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {activeAccounts.map(acct => {
+            {activeAccounts.filter(a => !a.parent_account_id).map(acct => {
               const bal = calcBalance(acct.id)
               const lastBalance = balances.find(b => b.account_id === acct.id)
               const hasDisc = lastBalance && lastBalance.discrepancy && Math.abs(lastBalance.discrepancy) > 100
+              const children = activeAccounts.filter(c => c.parent_account_id === acct.id)
               return (
                 <div key={acct.id} className={cn('card-hover', hasDisc && 'border-red-500/30')}>
                   <div className="flex items-start justify-between mb-3">
@@ -325,6 +336,22 @@ export default function AccountsPage() {
                         hasDisc ? <span className="text-red-400">расхождение {fmt(lastBalance.discrepancy)} ₸</span>
                           : <span className="text-green-400">✓ сходится</span>
                       ) : 'не проведена'}
+                    </div>
+                  )}
+                  {children.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-slate-800 space-y-2">
+                      {children.map(child => {
+                        const cBal = calcBalance(child.id)
+                        return (
+                          <div key={child.id} className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                              <span>{child.icon}</span>
+                              <span>{child.name}</span>
+                            </div>
+                            <span className="text-xs font-mono font-semibold" style={{ color: child.color }}>{fmt(cBal)} ₸</span>
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
@@ -382,7 +409,7 @@ export default function AccountsPage() {
                 const actual = reconcileInputs[acct.id] !== undefined ? reconcileInputs[acct.id] : (existingBal?.actual_balance ?? '')
                 const disc = actual !== '' ? Number(actual) - expected : null
                 return (
-                  <div key={acct.id} className={cn('bg-slate-900 rounded-xl p-4', disc !== null && Math.abs(disc) > 100 && 'ring-1 ring-red-500/30')}>
+                  <div key={acct.id} className={cn('bg-slate-900 rounded-xl p-4', acct.parent_account_id && 'ml-6 border-l-2 border-slate-800', disc !== null && Math.abs(disc) > 100 && 'ring-1 ring-red-500/30')}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span>{acct.icon}</span>
@@ -568,7 +595,7 @@ export default function AccountsPage() {
                 <th className="table-header w-28"></th>
               </tr></thead>
               <tbody>
-                {accounts.map(a => (
+                {sortedAccounts.map(a => (
                   <tr key={a.id} className={cn('hover:bg-slate-800/30', !a.is_active && 'opacity-50')}>
                     <td className="table-cell font-medium">
                       {a.parent_account_id ? <span className="text-slate-600 mr-1">└</span> : ''}{a.icon} {a.name}
