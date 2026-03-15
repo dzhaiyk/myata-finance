@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
-import { Plus, Edit3, Trash2, ArrowRightLeft, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Save, RefreshCw, Eye, Power } from 'lucide-react'
+import { Plus, Edit3, Trash2, ArrowRightLeft, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Save, RefreshCw, Eye, Power, X } from 'lucide-react'
 
 const TYPES = { cash: 'Касса', bank: 'Банк. счёт', deposit: 'Депозит', terminal: 'Терминал' }
 const TYPE_OPTIONS = Object.entries(TYPES).map(([k, v]) => ({ value: k, label: v }))
@@ -61,12 +61,16 @@ export default function AccountsPage() {
   const saveAccount = async () => {
     if (!acctForm.name.trim()) return alert('Введите название')
     const { name, type, bank_name, icon, color, initial_balance, sort_order, parent_account_id } = acctForm
-    const payload = { name, type, bank_name, icon, color, initial_balance, sort_order, parent_account_id }
+    const payload = { name, type, bank_name: bank_name || null, icon, color, initial_balance, sort_order, parent_account_id: parent_account_id || null }
+    let error
     if (editAcctId) {
-      await supabase.from('accounts').update(payload).eq('id', editAcctId)
+      const res = await supabase.from('accounts').update(payload).eq('id', editAcctId)
+      error = res.error
     } else {
-      await supabase.from('accounts').insert(payload)
+      const res = await supabase.from('accounts').insert(payload)
+      error = res.error
     }
+    if (error) { alert('Ошибка сохранения: ' + error.message); return }
     setShowAddAccount(false); setEditAcctId(null)
     setAcctForm({ name: '', type: 'bank', bank_name: '', icon: '🏦', color: '#3b82f6', initial_balance: 0, sort_order: 0, parent_account_id: null })
     load()
@@ -166,6 +170,19 @@ export default function AccountsPage() {
     const action = currentlyActive ? 'деактивировать' : 'активировать'
     if (!confirm(`${currentlyActive ? 'Деактивировать' : 'Активировать'} этот счёт?`)) return
     await supabase.from('accounts').update({ is_active: !currentlyActive }).eq('id', accountId)
+    load()
+  }
+
+  // Delete account permanently
+  const deleteAccount = async (accountId) => {
+    const acct = accounts.find(a => a.id === accountId)
+    if (!confirm(`Удалить счёт «${acct?.name}» навсегда? Все операции по этому счёту тоже будут удалены.`)) return
+    // Delete child records first
+    await supabase.from('account_balances').delete().eq('account_id', accountId)
+    await supabase.from('account_transactions').delete().eq('account_id', accountId)
+    // Unlink children
+    await supabase.from('accounts').update({ parent_account_id: null }).eq('parent_account_id', accountId)
+    await supabase.from('accounts').delete().eq('id', accountId)
     load()
   }
 
@@ -479,9 +496,16 @@ export default function AccountsPage() {
           <button onClick={() => { setShowAddAccount(true); setEditAcctId(null); setAcctForm({ name: '', type: 'bank', bank_name: '', icon: '🏦', color: '#3b82f6', initial_balance: 0, sort_order: accounts.length, parent_account_id: null }) }}
             className="btn-primary text-sm flex items-center gap-2"><Plus className="w-4 h-4" /> Добавить счёт</button>
 
-          {showAddAccount && (
+          {showAddAccount && (() => {
+            // Parent account options: only root accounts, exclude self when editing
+            const parentOptions = accounts.filter(a => !a.parent_account_id && a.id !== editAcctId)
+            const selectedParentId = acctForm.parent_account_id
+            return (
             <div className="card border-brand-500/30 space-y-4">
-              <div className="text-sm font-semibold text-brand-400">{editAcctId ? 'Редактировать' : 'Новый счёт'}</div>
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-brand-400">{editAcctId ? 'Редактировать счёт' : 'Новый счёт'}</div>
+                <button onClick={() => setShowAddAccount(false)} className="p-1 text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <div><label className="label">Название *</label>
                   <input value={acctForm.name} onChange={e => setAcctForm(f => ({...f, name: e.target.value}))} className="input text-sm w-full" placeholder="Kaspi Gold" /></div>
@@ -498,10 +522,23 @@ export default function AccountsPage() {
                 <div><label className="label">Начальный остаток</label>
                   <input type="number" value={acctForm.initial_balance || ''} onChange={e => setAcctForm(f => ({...f, initial_balance: Number(e.target.value)}))} className="input text-sm w-full" placeholder="0" /></div>
                 <div><label className="label">Родительский счёт</label>
-                  <select value={acctForm.parent_account_id || ''} onChange={e => setAcctForm(f => ({...f, parent_account_id: e.target.value ? Number(e.target.value) : null}))} className="input text-sm w-full">
+                  <select
+                    value={selectedParentId != null ? String(selectedParentId) : ''}
+                    onChange={e => {
+                      const val = e.target.value
+                      setAcctForm(f => ({...f, parent_account_id: val ? Number(val) : null}))
+                    }}
+                    className="input text-sm w-full"
+                  >
                     <option value="">— Нет (основной счёт)</option>
-                    {accounts.filter(a => !a.parent_account_id && a.id !== editAcctId).map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
-                  </select></div>
+                    {parentOptions.map(a => <option key={a.id} value={String(a.id)}>{a.icon} {a.name}</option>)}
+                  </select>
+                  {selectedParentId && (
+                    <div className="text-[10px] text-brand-400 mt-1">
+                      Привязан к: {parentOptions.find(a => a.id === selectedParentId)?.name || `ID ${selectedParentId}`}
+                    </div>
+                  )}
+                </div>
                 <div><label className="label">Порядок сортировки</label>
                   <input type="number" value={acctForm.sort_order ?? ''} onChange={e => setAcctForm(f => ({...f, sort_order: Number(e.target.value)}))} className="input text-sm w-full" placeholder="0" /></div>
               </div>
@@ -510,7 +547,8 @@ export default function AccountsPage() {
                 <button onClick={() => setShowAddAccount(false)} className="btn-secondary text-sm">Отмена</button>
               </div>
             </div>
-          )}
+            )
+          })()}
 
           <div className="card overflow-x-auto p-0">
             <table className="w-full text-sm">
@@ -522,12 +560,13 @@ export default function AccountsPage() {
                 <th className="table-header text-right">Текущий</th>
                 <th className="table-header text-center">Статус</th>
                 <th className="table-header text-center">Порядок</th>
-                <th className="table-header w-24"></th>
+                <th className="table-header w-28"></th>
               </tr></thead>
               <tbody>
                 {accounts.map(a => (
                   <tr key={a.id} className={cn('hover:bg-slate-800/30', !a.is_active && 'opacity-50')}>
-                    <td className="table-cell font-medium">{a.parent_account_id ? <span className="text-slate-600 mr-1">└</span> : ''}{a.icon} {a.name}
+                    <td className="table-cell font-medium">
+                      {a.parent_account_id ? <span className="text-slate-600 mr-1">└</span> : ''}{a.icon} {a.name}
                       {a.parent_account_id && <span className="text-[10px] text-slate-600 ml-1">→ {accounts.find(p => p.id === a.parent_account_id)?.name}</span>}
                     </td>
                     <td className="table-cell text-slate-400 text-xs">{TYPES[a.type]}</td>
@@ -542,12 +581,14 @@ export default function AccountsPage() {
                       </div>
                     </td>
                     <td className="table-cell">
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-0.5">
                         <button onClick={() => { setEditAcctId(a.id); setAcctForm({ ...a }); setShowAddAccount(true) }}
                           className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-500 hover:text-blue-400" title="Редактировать"><Edit3 className="w-3.5 h-3.5" /></button>
                         <button onClick={() => toggleActive(a.id, a.is_active)}
-                          className={cn('p-1.5 rounded-lg hover:bg-slate-700', a.is_active ? 'text-slate-500 hover:text-red-400' : 'text-slate-500 hover:text-green-400')}
+                          className={cn('p-1.5 rounded-lg hover:bg-slate-700', a.is_active ? 'text-slate-500 hover:text-yellow-400' : 'text-slate-500 hover:text-green-400')}
                           title={a.is_active ? 'Деактивировать' : 'Активировать'}><Power className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => deleteAccount(a.id)}
+                          className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-500 hover:text-red-400" title="Удалить навсегда"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </td>
                   </tr>
