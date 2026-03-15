@@ -5,6 +5,7 @@ import { cn, fmt } from '@/lib/utils'
 import { Plus, Edit3, Trash2, ArrowRightLeft, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Save, RefreshCw, Eye, Power, X } from 'lucide-react'
 
 const TYPES = { cash: 'Касса', bank: 'Банк. счёт', deposit: 'Депозит', terminal: 'Терминал' }
+const TYPE_ICONS = { cash: '💵', bank: '🏦', deposit: '💰', terminal: '📱' }
 const TYPE_OPTIONS = Object.entries(TYPES).map(([k, v]) => ({ value: k, label: v }))
 
 const today = () => new Date().toISOString().split('T')[0]
@@ -61,7 +62,11 @@ export default function AccountsPage() {
   const saveAccount = async () => {
     if (!acctForm.name.trim()) return alert('Введите название')
     const { name, type, bank_name, icon, color, initial_balance, sort_order, parent_account_id } = acctForm
-    const payload = { name, type, bank_name: bank_name || null, icon, color, initial_balance, sort_order, parent_account_id: parent_account_id || null }
+    const cleanParent = parent_account_id ? Number(parent_account_id) : null
+    const payload = { name, type, bank_name: bank_name || null, icon, color, initial_balance, sort_order, parent_account_id: cleanParent }
+    // DEBUG: убрать после отладки
+    const parentName = cleanParent ? accounts.find(a => a.id === cleanParent)?.name : 'нет'
+    if (!confirm(`Сохранить?\nРодитель: ${parentName} (id=${cleanParent})\n\nНажмите OK для сохранения`)) return
     let error
     if (editAcctId) {
       const res = await supabase.from('accounts').update(payload).eq('id', editAcctId)
@@ -510,7 +515,7 @@ export default function AccountsPage() {
                 <div><label className="label">Название *</label>
                   <input value={acctForm.name} onChange={e => setAcctForm(f => ({...f, name: e.target.value}))} className="input text-sm w-full" placeholder="Kaspi Gold" /></div>
                 <div><label className="label">Тип</label>
-                  <select value={acctForm.type} onChange={e => setAcctForm(f => ({...f, type: e.target.value}))} className="input text-sm w-full">
+                  <select value={acctForm.type} onChange={e => { const t = e.target.value; setAcctForm(f => ({...f, type: t, icon: TYPE_ICONS[t] || f.icon})) }} className="input text-sm w-full">
                     {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select></div>
                 <div><label className="label">Банк</label>
