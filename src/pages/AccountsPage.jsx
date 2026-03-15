@@ -476,7 +476,7 @@ export default function AccountsPage() {
       {/* ====== SETTINGS TAB ====== */}
       {tab === 'settings' && canManage && (
         <>
-          <button onClick={() => { setShowAddAccount(true); setEditAcctId(null); setAcctForm({ name: '', type: 'bank', bank_name: '', icon: '🏦', color: '#3b82f6', initial_balance: 0, sort_order: accounts.length }) }}
+          <button onClick={() => { setShowAddAccount(true); setEditAcctId(null); setAcctForm({ name: '', type: 'bank', bank_name: '', icon: '🏦', color: '#3b82f6', initial_balance: 0, sort_order: accounts.length, parent_account_id: null }) }}
             className="btn-primary text-sm flex items-center gap-2"><Plus className="w-4 h-4" /> Добавить счёт</button>
 
           {showAddAccount && (
