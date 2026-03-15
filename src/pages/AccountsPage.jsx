@@ -60,7 +60,8 @@ export default function AccountsPage() {
   // Save account
   const saveAccount = async () => {
     if (!acctForm.name.trim()) return alert('Введите название')
-    const payload = { ...acctForm }
+    const { name, type, bank_name, icon, color, initial_balance, sort_order, parent_account_id } = acctForm
+    const payload = { name, type, bank_name, icon, color, initial_balance, sort_order, parent_account_id }
     if (editAcctId) {
       await supabase.from('accounts').update(payload).eq('id', editAcctId)
     } else {
