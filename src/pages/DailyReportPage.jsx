@@ -194,8 +194,20 @@ export default function DailyReportPage() {
     setTerminals({})
     setLastSaved(null)
     setMode('form')
-    const bal = await getCashBalance()
-    setCashStart(String(bal || 0))
+    // Касса на начало = касса на конец предыдущей закрытой смены
+    const { data: prevReport } = await supabase
+      .from('daily_reports').select('data')
+      .eq('status', 'submitted')
+      .order('report_date', { ascending: false })
+      .limit(1).single()
+    const prevCashEnd = prevReport?.data?.cash_end ?? prevReport?.data?.cash_actual
+    if (prevCashEnd != null) {
+      setCashStart(String(prevCashEnd))
+    } else {
+      // Fallback: если нет закрытых смен, берём из счёта
+      const bal = await getCashBalance()
+      setCashStart(String(bal || 0))
+    }
   }
 
   // Calculations
@@ -275,6 +287,13 @@ export default function DailyReportPage() {
           const { data: cashAccount } = await supabase
             .from('accounts').select('*').eq('type', 'cash').limit(1).single()
           if (cashAccount) {
+            // Удалить старые корректировки за эту дату (предотвращение дублей)
+            await supabase.from('account_transactions')
+              .delete()
+              .eq('account_id', cashAccount.id)
+              .eq('reference_type', 'daily_report')
+              .eq('transaction_date', date)
+
             const { data: txs } = await supabase
               .from('account_transactions').select('type, amount')
               .eq('account_id', cashAccount.id)
@@ -328,7 +347,12 @@ export default function DailyReportPage() {
 
   // Reopen submitted report for editing (admin only)
   const reopenReport = async () => {
-    if (!confirm('Вернуть отчёт в черновик для редактирования?')) return
+    if (!confirm('Вернуть отчёт в черновик? Транзакции по этому отчёту будут удалены и пересозданы при повторной отправке.')) return
+    // Удалить account_transactions за эту дату
+    await supabase.from('account_transactions')
+      .delete()
+      .eq('reference_type', 'daily_report')
+      .eq('transaction_date', date)
     setStatus('draft')
     await supabase.from('daily_reports').update({ status: 'draft', submitted_at: null }).eq('id', reportId)
     loadJournal()
@@ -336,7 +360,13 @@ export default function DailyReportPage() {
 
   // Delete report (admin only)
   const deleteReport = async (id, reportDate) => {
-    if (!confirm(`Удалить отчёт за ${reportDate}? Это действие необратимо.`)) return
+    if (!confirm(`Удалить отчёт за ${reportDate}? Все связанные транзакции будут удалены.`)) return
+    // Удалить связанные транзакции из account_transactions
+    await supabase.from('account_transactions')
+      .delete()
+      .eq('reference_type', 'daily_report')
+      .eq('transaction_date', reportDate)
+    // Удалить сам отчёт
     await supabase.from('daily_reports').delete().eq('id', id)
     if (mode === 'form') setMode('journal')
     loadJournal()
@@ -556,7 +586,7 @@ export default function DailyReportPage() {
   }
 
   const isSubmitted = status === 'submitted'
-  const isLocked = isSubmitted && !canEdit
+  const isLocked = isSubmitted
 
   // ============ JOURNAL VIEW ============
   if (mode === 'journal') {
@@ -693,7 +723,7 @@ export default function DailyReportPage() {
         <div className="card border-green-500/20 bg-green-500/5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <CheckCircle2 className="w-5 h-5 text-green-400" />
-            <span className="text-sm text-green-400 font-medium">Отчёт отправлен. {isLocked ? 'Только просмотр.' : 'Можно редактировать.'}</span>
+            <span className="text-sm text-green-400 font-medium">Отчёт отправлен. Только просмотр.</span>
           </div>
           {canEdit && (
             <button onClick={reopenReport} className="btn-secondary text-xs flex items-center gap-1.5">
