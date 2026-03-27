@@ -77,6 +77,9 @@ export default function DailyReportPage() {
   const [mode, setMode] = useState('journal')
   const [journal, setJournal] = useState([])
   const [journalLoading, setJournalLoading] = useState(true)
+  const [journalPage, setJournalPage] = useState(0)
+  const [journalTotal, setJournalTotal] = useState(0)
+  const JOURNAL_PAGE_SIZE = 20
 
   // Form state
   const [reportId, setReportId] = useState(null)
@@ -115,10 +118,17 @@ export default function DailyReportPage() {
     loadJournal()
   }, [location.key])
 
-  const loadJournal = async () => {
+  const loadJournal = async (page = journalPage) => {
     setJournalLoading(true)
-    const { data } = await supabase.from('daily_reports').select('*').order('report_date', { ascending: false }).limit(20)
+    const from = page * JOURNAL_PAGE_SIZE
+    const to = from + JOURNAL_PAGE_SIZE - 1
+    const { data, count } = await supabase
+      .from('daily_reports').select('*', { count: 'exact' })
+      .order('status', { ascending: true })       // draft first
+      .order('report_date', { ascending: false })
+      .range(from, to)
     setJournal(data || [])
+    setJournalTotal(count || 0)
     setJournalLoading(false)
   }
 
@@ -595,7 +605,7 @@ export default function DailyReportPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-display font-bold tracking-tight">Журнал отчётов</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Последние {journal.length} отчётов</p>
+            <p className="text-sm text-slate-500 mt-0.5">Отчёты {journalPage * JOURNAL_PAGE_SIZE + 1}–{Math.min((journalPage + 1) * JOURNAL_PAGE_SIZE, journalTotal)} из {journalTotal}</p>
           </div>
           <button onClick={newReport} className="btn-primary text-sm flex items-center gap-2">
             <Plus className="w-4 h-4" /> Новый отчёт
@@ -605,11 +615,24 @@ export default function DailyReportPage() {
         <div className="card flex items-center gap-3">
           <Calendar className="w-4 h-4 text-slate-500" />
           <span className="text-sm text-slate-400">Открыть за дату:</span>
-          <input type="date" className="input text-sm" onChange={e => {
+          <input type="date" className="input text-sm" onChange={async e => {
             if (!e.target.value) return
-            const existing = journal.find(r => r.report_date === e.target.value)
-            if (existing) openReport(existing)
-            else { setDate(e.target.value); newReport(); setDate(e.target.value) }
+            const pickedDate = e.target.value
+            const { data: existing } = await supabase
+              .from('daily_reports').select('*')
+              .eq('report_date', pickedDate).limit(1).single()
+            if (existing) {
+              openReport(existing)
+            } else {
+              setReportId(null); setStatus('draft')
+              setCashStart(''); setCashEnd('')
+              setWithdrawals(emptyWithdrawals())
+              setRevenue(PAYMENT_TYPES.map(t => ({ type: t, amount: '', checks: '' })))
+              setDepartments(DEPARTMENTS.map(d => ({ name: d, amount: '' })))
+              setTerminals({}); setLastSaved(null)
+              setDate(pickedDate)
+              setMode('form')
+            }
           }} />
         </div>
 
@@ -678,6 +701,26 @@ export default function DailyReportPage() {
                 </div>
               )
             })}
+            {/* Pagination */}
+            {journalTotal > JOURNAL_PAGE_SIZE && (
+              <div className="flex items-center justify-between pt-4">
+                <button
+                  onClick={() => { const p = journalPage - 1; setJournalPage(p); loadJournal(p) }}
+                  disabled={journalPage === 0}
+                  className="btn-secondary text-sm flex items-center gap-1.5 disabled:opacity-30 disabled:pointer-events-none">
+                  <ArrowLeft className="w-3.5 h-3.5" /> Назад
+                </button>
+                <span className="text-xs text-slate-500">
+                  Стр. {journalPage + 1} из {Math.ceil(journalTotal / JOURNAL_PAGE_SIZE)}
+                </span>
+                <button
+                  onClick={() => { const p = journalPage + 1; setJournalPage(p); loadJournal(p) }}
+                  disabled={(journalPage + 1) * JOURNAL_PAGE_SIZE >= journalTotal}
+                  className="btn-secondary text-sm flex items-center gap-1.5 disabled:opacity-30 disabled:pointer-events-none">
+                  Вперёд <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
