@@ -718,19 +718,19 @@ export default function DailyReportPage() {
             {journalTotal > JOURNAL_PAGE_SIZE && (
               <div className="flex items-center justify-between pt-4">
                 <button
-                  onClick={() => { const p = journalPage - 1; setJournalPage(p); loadJournal(p) }}
-                  disabled={journalPage === 0}
+                  onClick={() => { const p = journalPage + 1; setJournalPage(p); loadJournal(p) }}
+                  disabled={(journalPage + 1) * JOURNAL_PAGE_SIZE >= journalTotal}
                   className="btn-secondary text-sm flex items-center gap-1.5 disabled:opacity-30 disabled:pointer-events-none">
-                  <ArrowLeft className="w-3.5 h-3.5" /> Назад
+                  <ArrowLeft className="w-3.5 h-3.5" /> Старые
                 </button>
                 <span className="text-xs text-slate-500">
                   Стр. {journalPage + 1} из {Math.ceil(journalTotal / JOURNAL_PAGE_SIZE)}
                 </span>
                 <button
-                  onClick={() => { const p = journalPage + 1; setJournalPage(p); loadJournal(p) }}
-                  disabled={(journalPage + 1) * JOURNAL_PAGE_SIZE >= journalTotal}
+                  onClick={() => { const p = journalPage - 1; setJournalPage(p); loadJournal(p) }}
+                  disabled={journalPage === 0}
                   className="btn-secondary text-sm flex items-center gap-1.5 disabled:opacity-30 disabled:pointer-events-none">
-                  Вперёд <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
+                  Новые <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
                 </button>
               </div>
             )}
