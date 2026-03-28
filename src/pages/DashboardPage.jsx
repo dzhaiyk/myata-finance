@@ -110,9 +110,10 @@ export default function DashboardPage() {
   const totalWithdrawals = completedReports.reduce((s, r) => s + (r.total_withdrawals || 0), 0)
   const discrepancies = reports.filter(r => Math.abs(r.cash_discrepancy || 0) > 500)
 
-  // Monthly breakdown — always 12 months
+  // Monthly breakdown — always 12 months, only completed months have data
   const monthlyData = MONTHS_RU.map((name, i) => {
-    const monthReports = reports.filter(r => new Date(r.report_date).getMonth() === i)
+    if (!monthsWithBank.has(i)) return { month: name.slice(0, 3), revenue: 0, expenses: 0 }
+    const monthReports = completedReports.filter(r => new Date(r.report_date).getMonth() === i)
     const rev = monthReports.reduce((s, r) => s + (r.total_revenue || 0), 0)
     const exp = monthReports.reduce((s, r) => s + (r.total_withdrawals || 0), 0)
     return { month: name.slice(0, 3), revenue: rev, expenses: exp }
