@@ -44,7 +44,7 @@ export default function AccountsPage() {
   }
 
   // Calculate current balance from initial + all transactions
-  const calcBalance = (accountId) => {
+  const calcOwnBalance = (accountId) => {
     const acct = accounts.find(a => a.id === accountId)
     if (!acct) return 0
     const initial = Number(acct.initial_balance) || 0
@@ -56,6 +56,15 @@ export default function AccountsPage() {
         return sum
       }, 0)
     return initial + txTotal
+  }
+
+  // Parent balance = sum of children balances; leaf = own balance
+  const calcBalance = (accountId) => {
+    const children = accounts.filter(a => a.parent_account_id === accountId)
+    if (children.length > 0) {
+      return children.reduce((sum, child) => sum + calcOwnBalance(child.id), 0)
+    }
+    return calcOwnBalance(accountId)
   }
 
   // Save account
