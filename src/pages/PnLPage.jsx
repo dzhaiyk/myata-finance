@@ -241,16 +241,17 @@ export default function PnLPage() {
       }
     })
 
-    // Calculate group sums (level 1 = sum of its level 2 children)
+    // Calculate group sums (each group = sum of its direct children)
     const groups = ['capex', 'payroll', 'foodcost', 'marketing', 'rent', 'utilities', 'opex_other', 'taxes']
     groups.forEach(gKey => {
       const gIdx = PNL_STRUCTURE.findIndex(l => l.key === gKey)
       if (gIdx < 0) return
+      const gLevel = PNL_STRUCTURE[gIdx].level
       let sum = 0
       for (let i = gIdx + 1; i < PNL_STRUCTURE.length; i++) {
         const line = PNL_STRUCTURE[i]
-        if (line.level <= 1 && i !== gIdx + 1) break
-        if (line.level === 2) sum += v[line.key] || 0
+        if (line.level <= gLevel) break
+        if (line.level === gLevel + 1 && !line.calc) sum += v[line.key] || 0
       }
       v[gKey] = sum
     })
