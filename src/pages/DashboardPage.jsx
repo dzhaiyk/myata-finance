@@ -90,14 +90,16 @@ export default function DashboardPage() {
     setLoading(false)
   }
 
-  // Determine which months have bank import data (completed months)
+  // Determine which months are "completed": past month + has bank import data
+  const now = new Date()
+  const currentMonth = now.getFullYear() === year ? now.getMonth() : 12 // 0-based; if viewing past year, all months are past
   const monthsWithBank = new Set()
   bankTx.forEach(tx => {
     const m = new Date(tx.transaction_date).getMonth()
-    monthsWithBank.add(m)
+    if (m < currentMonth) monthsWithBank.add(m) // only past months
   })
 
-  // Use only completed months (have both reports AND bank data) for KPIs
+  // Use only completed months (past + has bank data) for KPIs
   const completedReports = reports.filter(r => {
     const m = new Date(r.report_date).getMonth()
     return monthsWithBank.has(m)
