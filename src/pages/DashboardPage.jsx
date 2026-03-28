@@ -160,7 +160,7 @@ export default function DashboardPage() {
   ].filter(d => d.value > 0)
   const deptTotal = deptData.reduce((s, d) => s + d.value, 0)
 
-  // Food cost by department (completed months)
+  // Food cost by department (completed months: cash from daily reports + bank)
   const fcTotals = { kitchen: 0, bar: 0, hookah: 0 }
   completedReports.forEach(r => {
     const w = r.data?.withdrawals || {}
@@ -168,6 +168,15 @@ export default function DashboardPage() {
     fcTotals.kitchen += sum(w.suppliers_kitchen)
     fcTotals.bar += sum(w.suppliers_bar)
     fcTotals.hookah += sum(w.tobacco)
+  })
+  // Add bank food cost transactions
+  const fcBankMap = { cogs_kitchen: 'kitchen', cogs_bar: 'bar', cogs_hookah: 'hookah' }
+  bankTx.forEach(tx => {
+    if (!tx.is_debit || !tx.category) return
+    const m = new Date(tx.transaction_date).getMonth()
+    if (!monthsWithBank.has(m)) return
+    const dept = fcBankMap[tx.category]
+    if (dept) fcTotals[dept] += Math.abs(Number(tx.amount) || 0)
   })
   const fcData = [
     { name: 'Кухня', value: fcTotals.kitchen, color: '#22c55e' },
