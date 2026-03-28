@@ -212,6 +212,8 @@ export default function BankImportPage() {
   const [categories, setCategories] = useState([])
   const [rules, setRules] = useState([])
   const [ruleConditions, setRuleConditions] = useState([])
+  const [bankAccounts, setBankAccounts] = useState([])
+  const [selectedAccountId, setSelectedAccountId] = useState(null)
   const [showRules, setShowRules] = useState(false)
   const [showAddRule, setShowAddRule] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -234,19 +236,23 @@ export default function BankImportPage() {
     setLoading(true)
     const startDate = `${filterYear}-${String(filterMonth).padStart(2, '0')}-01`
     const endDate = lastOfMonth(filterYear, filterMonth)
-    const [txRes, catRes, rulesRes, condRes] = await Promise.all([
+    const [txRes, catRes, rulesRes, condRes, acctRes] = await Promise.all([
       supabase.from('bank_transactions').select('*', { count: 'exact' })
         .gte('transaction_date', startDate).lte('transaction_date', endDate)
         .order('transaction_date', { ascending: false }),
       supabase.from('categories').select('*').eq('is_active', true).order('sort_order'),
       supabase.from('bank_rules').select('*').eq('is_active', true).order('created_at'),
       supabase.from('bank_rule_conditions').select('*').order('sort_order'),
+      supabase.from('accounts').select('*').eq('type', 'bank').eq('is_active', true).order('name'),
     ])
     setTransactions(txRes.data || [])
     setTxCount(txRes.count || 0)
     setCategories(catRes.data || [])
     setRules(rulesRes.data || [])
     setRuleConditions(condRes.data || [])
+    const accts = acctRes.data || []
+    setBankAccounts(accts)
+    if (!selectedAccountId && accts.length > 0) setSelectedAccountId(accts[0].id)
     setLoading(false)
   }
 
@@ -298,6 +304,7 @@ export default function BankImportPage() {
   // Step 1: Parse file → stage rows for preview (no DB write)
   const handleFile = async (e) => {
     const file = e.target.files[0]; if (!file) return
+    if (!selectedAccountId) { alert('Выберите счёт для импорта'); e.target.value = ''; return }
     setImporting(true)
     try {
       const XLSX = await import('xlsx')
@@ -334,6 +341,7 @@ export default function BankImportPage() {
           confidence: ruleMatch ? 'auto' : tx.confidence || 'low', import_file: file.name, import_batch_id: batchId,
           tx_hash: await generateTxHash(tx),
           period_from: firstOfMonth(txY, txM), period_to: lastOfMonth(txY, txM),
+          account_id: selectedAccountId,
         })
       }
       // Check for duplicates but don't insert yet
@@ -374,6 +382,23 @@ export default function BankImportPage() {
         }
       } else {
         alert(`Сохранено ${stagedRows.length} записей`)
+      }
+      // Create account_transactions for the linked bank account
+      const accountId = stagedRows[0]?.account_id
+      if (accountId) {
+        const acctTxs = stagedRows
+          .filter(r => r.category !== 'uncategorized' && r.category !== 'internal')
+          .map(r => ({
+            account_id: accountId,
+            transaction_date: r.transaction_date,
+            type: r.is_debit ? 'expense' : 'income',
+            amount: Number(r.amount),
+            description: r.beneficiary || r.purpose || r.category,
+            reference_type: 'bank_import',
+          }))
+        if (acctTxs.length > 0) {
+          await supabase.from('account_transactions').insert(acctTxs)
+        }
       }
       setStagedRows(null)
       load()
@@ -541,6 +566,10 @@ export default function BankImportPage() {
               <Settings className="w-4 h-4" /> Правила ({fullRules.length})
             </button>
           )}
+          <select value={selectedAccountId || ''} onChange={e => setSelectedAccountId(Number(e.target.value))}
+            className="input text-sm">
+            {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+          </select>
           <label className={cn('btn-primary text-sm flex items-center gap-2 cursor-pointer', importing && 'opacity-50')}>
             <Upload className="w-4 h-4" />{importing ? 'Импорт...' : 'Загрузить Excel'}
             <input type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" disabled={importing} />
