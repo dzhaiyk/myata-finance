@@ -292,7 +292,16 @@ export default function PnLPage() {
   }
   const deleteAdj = async (id) => { await supabase.from('pnl_data').delete().eq('id', id); loadData() }
 
-  const pct = (val) => values.revenue > 0 ? ((val / values.revenue) * 100).toFixed(1) + '%' : '—'
+  const pct = (val, key) => {
+    // Food cost subcategories: % from corresponding department revenue
+    const fcDeptMap = { fc_kitchen: 'rev_kitchen', fc_bar: 'rev_bar', fc_hookah: 'rev_hookah' }
+    const deptKey = fcDeptMap[key]
+    if (deptKey) {
+      const deptRev = values[deptKey] || 0
+      return deptRev > 0 ? ((val / deptRev) * 100).toFixed(1) + '%' : '—'
+    }
+    return values.revenue > 0 ? ((val / values.revenue) * 100).toFixed(1) + '%' : '—'
+  }
   const fmtPct = (val) => (val * 100).toFixed(1) + '%'
 
   if (loading) return <div className="text-center text-slate-500 py-20">Загрузка...</div>
@@ -420,7 +429,7 @@ export default function PnLPage() {
               <span className="text-sm text-slate-400">{line.label}</span>
               <div className="flex items-center gap-4">
                 <span className="font-mono text-sm text-slate-300">{fmt(val)} ₸</span>
-                <span className="text-[10px] text-slate-500 w-12 text-right">{val > 0 ? pct(val) : '—'}</span>
+                <span className="text-[10px] text-slate-500 w-12 text-right">{val > 0 ? pct(val, line.key) : '—'}</span>
               </div>
             </div>
           )
