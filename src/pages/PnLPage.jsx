@@ -141,8 +141,12 @@ export default function PnLPage() {
   const [bankTx, setBankTx] = useState([])
   const [adjustments, setAdjustments] = useState([])
   const [loading, setLoading] = useState(true)
-  const [allExpanded, setAllExpanded] = useState(true)
-  const [collapsed, setCollapsed] = useState({})
+  const [allExpanded, setAllExpanded] = useState(false)
+  const [collapsed, setCollapsed] = useState(() => {
+    const c = {}
+    PNL_STRUCTURE.filter(l => l.level <= 1 && l.calc === 'sum_children').forEach(l => { c[l.key] = true })
+    return c
+  })
   const [showAddAdj, setShowAddAdj] = useState(false)
   const [adjForm, setAdjForm] = useState({ type: 'income', amount: '', description: '' })
 

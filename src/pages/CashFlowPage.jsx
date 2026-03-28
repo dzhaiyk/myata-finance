@@ -34,8 +34,12 @@ const CF_STRUCTURE = [
 
 export default function CashFlowPage() {
   const [year, setYear] = useState('2025')
-  const [allExpanded, setAllExpanded] = useState(true)
-  const [collapsed, setCollapsed] = useState({})
+  const [allExpanded, setAllExpanded] = useState(false)
+  const [collapsed, setCollapsed] = useState(() => {
+    const c = {}
+    CF_STRUCTURE.filter(l => l.collapsible).forEach(l => { c[l.key] = true })
+    return c
+  })
   const visibleMonths = MONTHS_RU.slice(0, 10)
 
   const toggleAll = () => {
