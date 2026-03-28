@@ -54,6 +54,38 @@ const FIXED_ROWS = {
 const PAYMENT_TYPES = ['Наличные', 'Kaspi', 'Halyk', 'Wolt', 'Glovo', 'Yandex Eda', 'Прочее']
 const DEPARTMENTS = ['Кухня', 'Бар', 'Кальян', 'Прочее']
 
+const JournalPagination = ({ page, total, pageSize, onChange }) => {
+  const totalPages = Math.ceil(total / pageSize)
+  const pages = []
+  for (let i = 0; i < totalPages; i++) {
+    if (i === 0 || i === totalPages - 1 || Math.abs(i - page) <= 1) {
+      pages.push(i)
+    } else if (pages[pages.length - 1] !== '...') {
+      pages.push('...')
+    }
+  }
+  return (
+    <div className="flex items-center justify-center gap-1.5 py-3">
+      <button onClick={() => onChange(page + 1)} disabled={page >= totalPages - 1}
+        className="btn-secondary text-xs px-2.5 py-1.5 disabled:opacity-30 disabled:pointer-events-none">
+        ← Старые
+      </button>
+      {pages.map((p, i) =>
+        p === '...' ? <span key={`dots-${i}`} className="text-slate-600 px-1">...</span> : (
+          <button key={p} onClick={() => onChange(p)}
+            className={`text-xs px-2.5 py-1.5 rounded-lg transition-colors ${p === page ? 'bg-brand-500/20 text-brand-400 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+            {p + 1}
+          </button>
+        )
+      )}
+      <button onClick={() => onChange(page - 1)} disabled={page === 0}
+        className="btn-secondary text-xs px-2.5 py-1.5 disabled:opacity-30 disabled:pointer-events-none">
+        Новые →
+      </button>
+    </div>
+  )
+}
+
 // Load Roboto font into jsPDF for Cyrillic support
 async function loadPdfFonts(doc) {
   const load = async (url, vfsName, fontName, style) => {
@@ -628,9 +660,10 @@ export default function DailyReportPage() {
         <div className="card flex items-center gap-3">
           <Calendar className="w-4 h-4 text-slate-500" />
           <span className="text-sm text-slate-400">Открыть за дату:</span>
-          <input type="date" className="input text-sm" onChange={async e => {
-            if (!e.target.value) return
-            const pickedDate = e.target.value
+          <input type="date" id="journal-date-picker" className="input text-sm" />
+          <button className="btn-primary text-sm" onClick={async () => {
+            const pickedDate = document.getElementById('journal-date-picker').value
+            if (!pickedDate) return
             const { data: existing } = await supabase
               .from('daily_reports').select('*')
               .eq('report_date', pickedDate).limit(1).single()
@@ -646,7 +679,7 @@ export default function DailyReportPage() {
               setDate(pickedDate)
               setMode('form')
             }
-          }} />
+          }}>Открыть</button>
         </div>
 
         {journalLoading ? (
@@ -659,6 +692,7 @@ export default function DailyReportPage() {
           </div>
         ) : (
           <div className="space-y-2">
+            {journalTotal > JOURNAL_PAGE_SIZE && <JournalPagination page={journalPage} total={journalTotal} pageSize={JOURNAL_PAGE_SIZE} onChange={p => { setJournalPage(p); loadJournal(p) }} />}
             {journal.map(r => {
               const disc = r.cash_discrepancy || 0
               const hasDisc = Math.abs(disc) > 500
@@ -714,26 +748,7 @@ export default function DailyReportPage() {
                 </div>
               )
             })}
-            {/* Pagination */}
-            {journalTotal > JOURNAL_PAGE_SIZE && (
-              <div className="flex items-center justify-between pt-4">
-                <button
-                  onClick={() => { const p = journalPage + 1; setJournalPage(p); loadJournal(p) }}
-                  disabled={(journalPage + 1) * JOURNAL_PAGE_SIZE >= journalTotal}
-                  className="btn-secondary text-sm flex items-center gap-1.5 disabled:opacity-30 disabled:pointer-events-none">
-                  <ArrowLeft className="w-3.5 h-3.5" /> Старые
-                </button>
-                <span className="text-xs text-slate-500">
-                  Стр. {journalPage + 1} из {Math.ceil(journalTotal / JOURNAL_PAGE_SIZE)}
-                </span>
-                <button
-                  onClick={() => { const p = journalPage - 1; setJournalPage(p); loadJournal(p) }}
-                  disabled={journalPage === 0}
-                  className="btn-secondary text-sm flex items-center gap-1.5 disabled:opacity-30 disabled:pointer-events-none">
-                  Новые <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
-                </button>
-              </div>
-            )}
+            {journalTotal > JOURNAL_PAGE_SIZE && <JournalPagination page={journalPage} total={journalTotal} pageSize={JOURNAL_PAGE_SIZE} onChange={p => { setJournalPage(p); loadJournal(p) }} />}
           </div>
         )}
       </div>
@@ -980,7 +995,7 @@ export default function DailyReportPage() {
         <div className="card border-blue-500/20 bg-blue-500/5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="label">Остаток на начало смены (из счёта «Касса»)</label>
+              <label className="label">Остаток на начало смены</label>
               <MoneyInput value={cashStart} onChange={() => {}} disabled={true} className="opacity-50 cursor-not-allowed" />
             </div>
             <div>
