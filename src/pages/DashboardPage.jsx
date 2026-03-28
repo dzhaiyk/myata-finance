@@ -5,48 +5,59 @@ import { DollarSign, TrendingDown, ShoppingCart, Percent, AlertTriangle, FileTex
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts'
 
 const fmtM = (v) => {
-  if (v === 0) return '0'
+  if (!v || v === 0) return ''
   if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(1) + 'М'
   if (Math.abs(v) >= 1e3) return (v / 1e3).toFixed(0) + 'К'
   return String(v)
 }
 
+// OpEx categories from PnL structure (keys match PnL level-2 groups under opex)
+const OPEX_CATEGORIES = [
+  { key: 'payroll', label: 'ФОТ', color: '#818cf8', dailyFields: ['payroll'] },
+  { key: 'foodcost', label: 'Food Cost', color: '#f59e0b', dailyFields: ['suppliers_kitchen', 'suppliers_bar', 'tobacco'] },
+  { key: 'marketing', label: 'Маркетинг', color: '#ec4899', dailyFields: [] },
+  { key: 'rent', label: 'Аренда', color: '#8b5cf6', dailyFields: [] },
+  { key: 'utilities', label: 'Коммунальные', color: '#06b6d4', dailyFields: [] },
+  { key: 'opex_other', label: 'OpEx прочее', color: '#f472b6', dailyFields: ['other'] },
+  { key: 'taxes', label: 'Налоги', color: '#ef4444', dailyFields: [] },
+]
+
 const PieWithLegend = ({ title, data, total }) => (
   <div className="card">
-    <h3 className="text-sm font-semibold text-slate-300 mb-4">{title}</h3>
-    <div className="flex items-center gap-4">
-      <div className="shrink-0" style={{ width: 150, height: 150 }}>
+    <h3 className="text-sm font-semibold text-slate-300 mb-3">{title}</h3>
+    <div className="flex justify-center">
+      <div style={{ width: 180, height: 180 }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie data={data} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={3} dataKey="value">
+            <Pie data={data} cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={3} dataKey="value">
               {data.map((d, i) => <Cell key={i} fill={d.color} />)}
             </Pie>
             <Tooltip formatter={(v) => [fmt(v) + ' ₸']} contentStyle={{ background: '#172033', border: '1px solid #293548', borderRadius: 12, fontSize: 12 }} />
           </PieChart>
         </ResponsiveContainer>
       </div>
-      <div className="space-y-2.5 flex-1 min-w-0">
-        {data.map(d => {
-          const pct = total > 0 ? (d.value / total * 100).toFixed(1) : 0
-          return (
-            <div key={d.name}>
-              <div className="flex items-center justify-between mb-0.5">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
-                  <span className="text-xs text-slate-400 truncate">{d.name}</span>
-                </div>
-                <span className="text-xs font-mono font-bold shrink-0 ml-1" style={{ color: d.color }}>{pct}%</span>
+    </div>
+    <div className="space-y-2 mt-3">
+      {data.map(d => {
+        const pct = total > 0 ? (d.value / total * 100).toFixed(1) : 0
+        return (
+          <div key={d.name}>
+            <div className="flex items-center justify-between mb-0.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
+                <span className="text-xs text-slate-400 truncate">{d.name}</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full rounded-full" style={{ width: `${pct}%`, background: d.color }} />
-                </div>
-                <span className="font-mono text-[9px] text-slate-500 w-14 text-right shrink-0">{fmtK(d.value)}</span>
+              <div className="flex items-center gap-2 shrink-0 ml-1">
+                <span className="font-mono text-[10px] text-slate-500">{fmtK(d.value)}</span>
+                <span className="text-xs font-mono font-bold w-10 text-right" style={{ color: d.color }}>{pct}%</span>
               </div>
             </div>
-          )
-        })}
-      </div>
+            <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-full rounded-full" style={{ width: `${pct}%`, background: d.color }} />
+            </div>
+          </div>
+        )
+      })}
     </div>
   </div>
 )
@@ -55,7 +66,7 @@ export default function DashboardPage() {
   const [year, setYear] = useState(2026)
   const [reports, setReports] = useState([])
   const [allReports, setAllReports] = useState([])
-  const [pnl, setPnl] = useState([])
+  const [bankTx, setBankTx] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -67,22 +78,34 @@ export default function DashboardPage() {
     const startDate = `${year}-01-01`
     const endDate = `${year}-12-31`
 
-    const [reportsRes, pnlRes, allReportsRes] = await Promise.all([
-      supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).order('report_date'),
-      supabase.from('pnl_data').select('*').eq('year', year),
+    const [reportsRes, allReportsRes, bankRes] = await Promise.all([
+      supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted').order('report_date'),
       supabase.from('daily_reports').select('id, report_date, total_revenue, status').eq('status', 'submitted').order('report_date'),
+      supabase.from('bank_transactions').select('transaction_date, amount, is_debit, category').gte('transaction_date', startDate).lte('transaction_date', endDate),
     ])
 
     setReports(reportsRes.data || [])
     setAllReports(allReportsRes.data || [])
-    setPnl(pnlRes.data || [])
+    setBankTx(bankRes.data || [])
     setLoading(false)
   }
 
-  // === KPIs ===
-  const totalRevenue = reports.reduce((s, r) => s + (r.total_revenue || 0), 0)
-  const totalWithdrawals = reports.reduce((s, r) => s + (r.total_withdrawals || 0), 0)
-  const reportCount = reports.length
+  // Determine which months have bank import data (completed months)
+  const monthsWithBank = new Set()
+  bankTx.forEach(tx => {
+    const m = new Date(tx.transaction_date).getMonth()
+    monthsWithBank.add(m)
+  })
+
+  // Use only completed months (have both reports AND bank data) for KPIs
+  const completedReports = reports.filter(r => {
+    const m = new Date(r.report_date).getMonth()
+    return monthsWithBank.has(m)
+  })
+
+  // === KPIs from completed months ===
+  const totalRevenue = completedReports.reduce((s, r) => s + (r.total_revenue || 0), 0)
+  const totalWithdrawals = completedReports.reduce((s, r) => s + (r.total_withdrawals || 0), 0)
   const discrepancies = reports.filter(r => Math.abs(r.cash_discrepancy || 0) > 500)
 
   // Monthly breakdown — always 12 months
@@ -93,9 +116,9 @@ export default function DashboardPage() {
     return { month: name.slice(0, 3), revenue: rev, expenses: exp }
   })
 
-  // Department breakdown
+  // Department breakdown (completed months)
   const deptTotals = { kitchen: 0, bar: 0, hookah: 0, other: 0 }
-  reports.forEach(r => {
+  completedReports.forEach(r => {
     const deps = r.data?.departments || []
     if (Array.isArray(deps)) {
       deps.forEach((d, i) => {
@@ -113,9 +136,9 @@ export default function DashboardPage() {
   ].filter(d => d.value > 0)
   const deptTotal = deptData.reduce((s, d) => s + d.value, 0)
 
-  // Food cost by department (from daily report withdrawals)
+  // Food cost by department (completed months)
   const fcTotals = { kitchen: 0, bar: 0, hookah: 0 }
-  reports.forEach(r => {
+  completedReports.forEach(r => {
     const w = r.data?.withdrawals || {}
     const sum = (arr) => (arr || []).reduce((s, row) => s + (Number(row.amount) || 0), 0)
     fcTotals.kitchen += sum(w.suppliers_kitchen)
@@ -129,32 +152,51 @@ export default function DashboardPage() {
   ].filter(d => d.value > 0)
   const fcTotal = fcData.reduce((s, d) => s + d.value, 0)
   const fcPct = totalRevenue > 0 ? fcTotal / totalRevenue : 0
+  const fcColor = fcPct < 0.35 ? 'green' : fcPct < 0.45 ? 'yellow' : 'red'
 
-  // Expense categories breakdown (from daily report withdrawals)
-  const expCats = { kitchen: 0, bar: 0, hookah: 0, payroll: 0, other: 0, cashWithdrawals: 0 }
-  reports.forEach(r => {
+  // Expense categories from PnL structure (completed months, from daily reports)
+  const expCatTotals = {}
+  OPEX_CATEGORIES.forEach(cat => { expCatTotals[cat.key] = 0 })
+  completedReports.forEach(r => {
     const w = r.data?.withdrawals || {}
     const sum = (arr) => (arr || []).reduce((s, row) => s + (Number(row.amount) || 0), 0)
-    expCats.kitchen += sum(w.suppliers_kitchen)
-    expCats.bar += sum(w.suppliers_bar)
-    expCats.hookah += sum(w.tobacco)
-    expCats.payroll += sum(w.payroll)
-    expCats.other += sum(w.other)
-    expCats.cashWithdrawals += sum(w.cash_withdrawals)
+    OPEX_CATEGORIES.forEach(cat => {
+      cat.dailyFields.forEach(field => {
+        expCatTotals[cat.key] += sum(w[field])
+      })
+    })
   })
-  const expData = [
-    { name: 'Закуп кухня', value: expCats.kitchen, color: '#22c55e' },
-    { name: 'Закуп бар', value: expCats.bar, color: '#3b82f6' },
-    { name: 'Закуп кальян', value: expCats.hookah, color: '#f59e0b' },
-    { name: 'Авансы', value: expCats.payroll, color: '#818cf8' },
-    { name: 'Прочие расходы', value: expCats.other, color: '#f472b6' },
-    { name: 'Изъятия', value: expCats.cashWithdrawals, color: '#ef4444' },
-  ].filter(d => d.value > 0)
+  // Add bank transaction categories for non-cash expense categories
+  const bankCatMap = {
+    payroll: /^payroll/,
+    marketing: /^mkt/,
+    rent: /^rent/,
+    utilities: /^util/,
+    taxes: /^tax/,
+    opex_other: /^(bank_fee|opex_)/,
+  }
+  bankTx.forEach(tx => {
+    if (!tx.is_debit || !tx.category) return
+    const m = new Date(tx.transaction_date).getMonth()
+    if (!monthsWithBank.has(m)) return
+    for (const [catKey, regex] of Object.entries(bankCatMap)) {
+      if (regex.test(tx.category)) {
+        expCatTotals[catKey] += Math.abs(Number(tx.amount) || 0)
+        break
+      }
+    }
+  })
+  const expData = OPEX_CATEGORIES.map(cat => ({
+    name: cat.label, value: expCatTotals[cat.key], color: cat.color
+  })).filter(d => d.value > 0)
   const expTotal = expData.reduce((s, d) => s + d.value, 0)
 
   // Operating margin
   const opMargin = totalRevenue > 0 ? (totalRevenue - totalWithdrawals) / totalRevenue : 0
   const marginColor = opMargin >= 0.30 ? 'green' : opMargin >= 0.15 ? 'yellow' : 'red'
+
+  // Completed months label
+  const completedMonthNames = [...monthsWithBank].sort((a, b) => a - b).map(m => MONTHS_RU[m].slice(0, 3))
 
   // === RECORDS (all time) ===
   const WEEKDAYS_RU = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
@@ -218,7 +260,9 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-display font-bold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-slate-500 mt-1">Мята Platinum 4YOU — Финансовый обзор</p>
+          <p className="text-sm text-slate-500 mt-1">
+            Мята Platinum 4YOU — {completedMonthNames.length > 0 ? `Данные: ${completedMonthNames.join(', ')}` : 'Финансовый обзор'}
+          </p>
         </div>
         <select value={year} onChange={e => setYear(Number(e.target.value))} className="input text-sm">
           <option value={2026}>2026</option>
@@ -229,28 +273,30 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="card-hover bg-gradient-to-br from-green-500/20 to-green-600/5 border-green-500/20">
           <div className="flex items-start justify-between mb-3">
-            <div className="stat-label">Доходы (YTD)</div>
+            <div className="stat-label">Доходы</div>
             <DollarSign className="w-4 h-4 text-green-500" />
           </div>
           <div className="stat-value text-green-400">{(totalRevenue / 1e6).toFixed(1)}М ₸</div>
-          <div className="text-xs text-slate-500 mt-2">{reportCount} отчётов</div>
+          <div className="text-xs text-slate-500 mt-2">{completedReports.length} отчётов</div>
         </div>
 
         <div className="card-hover bg-gradient-to-br from-red-500/20 to-red-600/5 border-red-500/20">
           <div className="flex items-start justify-between mb-3">
-            <div className="stat-label">Расходы (YTD)</div>
+            <div className="stat-label">Расходы</div>
             <TrendingDown className="w-4 h-4 text-red-500" />
           </div>
           <div className="stat-value text-red-400">{(totalWithdrawals / 1e6).toFixed(1)}М ₸</div>
           <div className="text-xs text-slate-500 mt-2">из кассы</div>
         </div>
 
-        <div className="card-hover bg-gradient-to-br from-yellow-500/20 to-yellow-600/5 border-yellow-500/20">
+        <div className={`card-hover bg-gradient-to-br ${fcColor === 'green' ? 'from-green-500/20 to-green-600/5 border-green-500/20' : fcColor === 'yellow' ? 'from-yellow-500/20 to-yellow-600/5 border-yellow-500/20' : 'from-red-500/20 to-red-600/5 border-red-500/20'}`}>
           <div className="flex items-start justify-between mb-3">
             <div className="stat-label">Food Cost</div>
-            <ShoppingCart className="w-4 h-4 text-yellow-500" />
+            <ShoppingCart className="w-4 h-4 text-slate-500" />
           </div>
-          <div className="stat-value text-yellow-400">{fcPct > 0 ? fmtPct(fcPct) : '—'}</div>
+          <div className={`stat-value ${fcColor === 'green' ? 'text-green-400' : fcColor === 'yellow' ? 'text-yellow-400' : 'text-red-400'}`}>
+            {fcPct > 0 ? fmtPct(fcPct) : '—'}
+          </div>
           <div className="text-xs text-slate-500 mt-2">{fcTotal > 0 ? fmtK(fcTotal) + ' ₸' : 'Нет данных'}</div>
         </div>
 
@@ -266,27 +312,27 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Monthly bar chart — full width */}
+      {/* Monthly bar chart — full width, extra top margin for labels */}
       <div className="card">
         <h3 className="text-sm font-semibold text-slate-300 mb-4">Доходы vs Расходы (помесячно)</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={monthlyData} barGap={2}>
+        <ResponsiveContainer width="100%" height={320}>
+          <BarChart data={monthlyData} barGap={2} margin={{ top: 25, right: 10, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis dataKey="month" tick={{ fill: '#64748b', fontSize: 11 }} />
             <YAxis tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={v => fmtM(v)} />
             <Tooltip contentStyle={{ background: '#172033', border: '1px solid #293548', borderRadius: 12, fontSize: 12 }}
               formatter={(v) => [fmt(v) + ' ₸']} labelStyle={{ color: '#94a3b8' }} />
             <Bar dataKey="revenue" fill="#22c55e" radius={[4, 4, 0, 0]} name="Доходы">
-              <LabelList dataKey="revenue" position="top" formatter={v => v > 0 ? fmtM(v) : ''} style={{ fill: '#86efac', fontSize: 10, fontFamily: 'JetBrains Mono' }} />
+              <LabelList dataKey="revenue" position="top" formatter={fmtM} style={{ fill: '#86efac', fontSize: 10, fontFamily: 'JetBrains Mono' }} />
             </Bar>
             <Bar dataKey="expenses" fill="#ef4444" radius={[4, 4, 0, 0]} opacity={0.7} name="Расходы">
-              <LabelList dataKey="expenses" position="top" formatter={v => v > 0 ? fmtM(v) : ''} style={{ fill: '#fca5a5', fontSize: 10, fontFamily: 'JetBrains Mono' }} />
+              <LabelList dataKey="expenses" position="top" formatter={fmtM} style={{ fill: '#fca5a5', fontSize: 10, fontFamily: 'JetBrains Mono' }} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Three pie charts row */}
+      {/* Three pie charts row — legend below chart */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {deptData.length > 0 && <PieWithLegend title="Выручка по отделам" data={deptData} total={deptTotal} />}
         {fcData.length > 0 && <PieWithLegend title="Food Cost по отделам" data={fcData} total={fcTotal} />}
@@ -380,9 +426,9 @@ export default function DashboardPage() {
       {/* Cash discrepancy alerts — at the very bottom */}
       {discrepancies.length > 0 && (
         <div className="card border-red-500/20 bg-red-500/5">
-          <div className="text-sm font-semibold text-red-400 mb-3">⚠️ Расхождения кассы</div>
+          <div className="text-sm font-semibold text-red-400 mb-3">⚠️ Расхождения кассы ({discrepancies.length})</div>
           <div className="space-y-2">
-            {discrepancies.slice(0, 5).map(r => (
+            {discrepancies.map(r => (
               <div key={r.id} className="flex items-center justify-between text-sm">
                 <span className="text-slate-400">{r.report_date} — {r.manager_name}</span>
                 <span className="font-mono text-red-400 font-semibold">{fmt(r.cash_discrepancy)} ₸</span>

@@ -55,70 +55,70 @@ const PNL_STRUCTURE = [
   { key: 'opex', label: 'OpEx (ежемесячные расходы)', level: 1, section: 'expenses', calc: 'sum_children' },
 
   // ФОТ
-  { key: 'payroll', label: 'ФОТ', level: 1, section: 'expenses', calc: 'sum_children', parent: 'opex' },
-  { key: 'payroll_mgmt', label: 'ФОТ Менеджмент', level: 2, section: 'expenses', source: 'bank:payroll_mgmt' },
-  { key: 'payroll_kitchen', label: 'ФОТ Кухня', level: 2, section: 'expenses', source: 'bank:payroll_kitchen' },
-  { key: 'payroll_bar', label: 'ФОТ Бар', level: 2, section: 'expenses', source: 'bank:payroll_bar' },
-  { key: 'payroll_hookah', label: 'ФОТ Дымный коктейль', level: 2, section: 'expenses', source: 'bank:payroll_hookah' },
-  { key: 'payroll_hall', label: 'ФОТ Зал', level: 2, section: 'expenses', source: 'bank:payroll_hall' },
-  { key: 'payroll_transport', label: 'Развозка', level: 2, section: 'expenses', source: 'bank:payroll_transport' },
-  { key: 'payroll_cash', label: 'ФОТ из кассы (авансы)', level: 2, section: 'expenses', source: 'daily:payroll' },
-  { key: 'payroll_other', label: 'ФОТ Прочее', level: 2, section: 'expenses', source: 'bank:payroll_other' },
+  { key: 'payroll', label: 'ФОТ', level: 2, section: 'expenses', calc: 'sum_children', parent: 'opex' },
+  { key: 'payroll_mgmt', label: 'ФОТ Менеджмент', level: 3, section: 'expenses', source: 'bank:payroll_mgmt' },
+  { key: 'payroll_kitchen', label: 'ФОТ Кухня', level: 3, section: 'expenses', source: 'bank:payroll_kitchen' },
+  { key: 'payroll_bar', label: 'ФОТ Бар', level: 3, section: 'expenses', source: 'bank:payroll_bar' },
+  { key: 'payroll_hookah', label: 'ФОТ Дымный коктейль', level: 3, section: 'expenses', source: 'bank:payroll_hookah' },
+  { key: 'payroll_hall', label: 'ФОТ Зал', level: 3, section: 'expenses', source: 'bank:payroll_hall' },
+  { key: 'payroll_transport', label: 'Развозка', level: 3, section: 'expenses', source: 'bank:payroll_transport' },
+  { key: 'payroll_cash', label: 'ФОТ из кассы (авансы)', level: 3, section: 'expenses', source: 'daily:payroll' },
+  { key: 'payroll_other', label: 'ФОТ Прочее', level: 3, section: 'expenses', source: 'bank:payroll_other' },
 
   // Food Cost
-  { key: 'foodcost', label: 'Food cost', level: 1, section: 'expenses', calc: 'sum_children', parent: 'opex' },
-  { key: 'fc_kitchen', label: 'Закуп кухня', level: 2, section: 'expenses', source: 'both:cogs_kitchen', dailyField: 'suppliers_kitchen' },
-  { key: 'fc_bar', label: 'Закуп бар', level: 2, section: 'expenses', source: 'both:cogs_bar', dailyField: 'suppliers_bar' },
-  { key: 'fc_hookah', label: 'Закуп кальян', level: 2, section: 'expenses', source: 'both:cogs_hookah', dailyField: 'tobacco' },
+  { key: 'foodcost', label: 'Food cost', level: 2, section: 'expenses', calc: 'sum_children', parent: 'opex' },
+  { key: 'fc_kitchen', label: 'Закуп кухня', level: 3, section: 'expenses', source: 'both:cogs_kitchen', dailyField: 'suppliers_kitchen' },
+  { key: 'fc_bar', label: 'Закуп бар', level: 3, section: 'expenses', source: 'both:cogs_bar', dailyField: 'suppliers_bar' },
+  { key: 'fc_hookah', label: 'Закуп кальян', level: 3, section: 'expenses', source: 'both:cogs_hookah', dailyField: 'tobacco' },
 
   // Маркетинг
-  { key: 'marketing', label: 'Маркетинг', level: 1, section: 'expenses', calc: 'sum_children', parent: 'opex' },
-  { key: 'mkt_smm', label: 'СММ', level: 2, section: 'expenses', source: 'bank:mkt_smm' },
-  { key: 'mkt_target', label: 'Таргет', level: 2, section: 'expenses', source: 'bank:mkt_target' },
-  { key: 'mkt_2gis', label: '2ГИС', level: 2, section: 'expenses', source: 'bank:mkt_2gis' },
-  { key: 'mkt_yandex', label: 'Яндекс', level: 2, section: 'expenses', source: 'bank:mkt_yandex' },
-  { key: 'mkt_google', label: 'Google', level: 2, section: 'expenses', source: 'bank:mkt_google' },
-  { key: 'mkt_other', label: 'Маркетинг прочее', level: 2, section: 'expenses', source: 'bank:mkt_other' },
+  { key: 'marketing', label: 'Маркетинг', level: 2, section: 'expenses', calc: 'sum_children', parent: 'opex' },
+  { key: 'mkt_smm', label: 'СММ', level: 3, section: 'expenses', source: 'bank:mkt_smm' },
+  { key: 'mkt_target', label: 'Таргет', level: 3, section: 'expenses', source: 'bank:mkt_target' },
+  { key: 'mkt_2gis', label: '2ГИС', level: 3, section: 'expenses', source: 'bank:mkt_2gis' },
+  { key: 'mkt_yandex', label: 'Яндекс', level: 3, section: 'expenses', source: 'bank:mkt_yandex' },
+  { key: 'mkt_google', label: 'Google', level: 3, section: 'expenses', source: 'bank:mkt_google' },
+  { key: 'mkt_other', label: 'Маркетинг прочее', level: 3, section: 'expenses', source: 'bank:mkt_other' },
 
   // Аренда
-  { key: 'rent', label: 'Аренда', level: 1, section: 'expenses', calc: 'sum_children', parent: 'opex' },
-  { key: 'rent_premises', label: 'Аренда помещения', level: 2, section: 'expenses', source: 'bank:rent_premises' },
-  { key: 'rent_warehouse', label: 'Аренда склада и кровли', level: 2, section: 'expenses', source: 'bank:rent_warehouse' },
-  { key: 'rent_property_tax', label: 'Налог на недвижимость', level: 2, section: 'expenses', source: 'bank:rent_property_tax' },
+  { key: 'rent', label: 'Аренда', level: 2, section: 'expenses', calc: 'sum_children', parent: 'opex' },
+  { key: 'rent_premises', label: 'Аренда помещения', level: 3, section: 'expenses', source: 'bank:rent_premises' },
+  { key: 'rent_warehouse', label: 'Аренда склада и кровли', level: 3, section: 'expenses', source: 'bank:rent_warehouse' },
+  { key: 'rent_property_tax', label: 'Налог на недвижимость', level: 3, section: 'expenses', source: 'bank:rent_property_tax' },
 
   // Коммунальные
-  { key: 'utilities', label: 'Коммунальные платежи', level: 1, section: 'expenses', calc: 'sum_children', parent: 'opex' },
-  { key: 'util_electric', label: 'Электричество', level: 2, section: 'expenses', source: 'bank:util_electric' },
-  { key: 'util_water', label: 'Водоснабжение', level: 2, section: 'expenses', source: 'bank:util_water' },
-  { key: 'util_heating', label: 'Отопление', level: 2, section: 'expenses', source: 'bank:util_heating' },
-  { key: 'util_bi', label: 'BI Service', level: 2, section: 'expenses', source: 'bank:util_bi' },
-  { key: 'util_internet', label: 'Интернет и связь', level: 2, section: 'expenses', source: 'bank:util_internet' },
-  { key: 'util_waste', label: 'Вывоз мусора', level: 2, section: 'expenses', source: 'bank:util_waste' },
-  { key: 'util_other', label: 'Ком. услуги прочее', level: 2, section: 'expenses', source: 'bank:util_other' },
+  { key: 'utilities', label: 'Коммунальные платежи', level: 2, section: 'expenses', calc: 'sum_children', parent: 'opex' },
+  { key: 'util_electric', label: 'Электричество', level: 3, section: 'expenses', source: 'bank:util_electric' },
+  { key: 'util_water', label: 'Водоснабжение', level: 3, section: 'expenses', source: 'bank:util_water' },
+  { key: 'util_heating', label: 'Отопление', level: 3, section: 'expenses', source: 'bank:util_heating' },
+  { key: 'util_bi', label: 'BI Service', level: 3, section: 'expenses', source: 'bank:util_bi' },
+  { key: 'util_internet', label: 'Интернет и связь', level: 3, section: 'expenses', source: 'bank:util_internet' },
+  { key: 'util_waste', label: 'Вывоз мусора', level: 3, section: 'expenses', source: 'bank:util_waste' },
+  { key: 'util_other', label: 'Ком. услуги прочее', level: 3, section: 'expenses', source: 'bank:util_other' },
 
   // OpEx прочее
-  { key: 'opex_other', label: 'OpEx прочее', level: 1, section: 'expenses', calc: 'sum_children', parent: 'opex' },
-  { key: 'opex_household', label: 'Хозтовары', level: 2, section: 'expenses', source: 'both:household', dailyField: 'other' },
-  { key: 'opex_bank_fee', label: 'Комиссия банка', level: 2, section: 'expenses', source: 'bank:bank_fee' },
-  { key: 'opex_security', label: 'Система безопасности', level: 2, section: 'expenses', source: 'bank:opex_security' },
-  { key: 'opex_software', label: 'Программное обеспечение', level: 2, section: 'expenses', source: 'bank:opex_software' },
-  { key: 'opex_menu', label: 'Меню', level: 2, section: 'expenses', source: 'bank:opex_menu' },
-  { key: 'opex_pest', label: 'Дератизация/дезинсекция', level: 2, section: 'expenses', source: 'bank:opex_pest' },
-  { key: 'opex_grease', label: 'Чистка жироуловителей', level: 2, section: 'expenses', source: 'bank:opex_grease' },
-  { key: 'opex_repair', label: 'Мелкий ремонт', level: 2, section: 'expenses', source: 'bank:opex_repair' },
-  { key: 'opex_uniform', label: 'Форма для персонала', level: 2, section: 'expenses', source: 'bank:opex_uniform' },
-  { key: 'opex_music', label: 'Авторские права на музыку', level: 2, section: 'expenses', source: 'bank:opex_music' },
-  { key: 'opex_royalty', label: 'Роялти', level: 2, section: 'expenses', source: 'bank:opex_royalty' },
-  { key: 'opex_misc', label: 'Прочее', level: 2, section: 'expenses', source: 'bank:opex_misc' },
+  { key: 'opex_other', label: 'OpEx прочее', level: 2, section: 'expenses', calc: 'sum_children', parent: 'opex' },
+  { key: 'opex_household', label: 'Хозтовары', level: 3, section: 'expenses', source: 'both:household', dailyField: 'other' },
+  { key: 'opex_bank_fee', label: 'Комиссия банка', level: 3, section: 'expenses', source: 'bank:bank_fee' },
+  { key: 'opex_security', label: 'Система безопасности', level: 3, section: 'expenses', source: 'bank:opex_security' },
+  { key: 'opex_software', label: 'Программное обеспечение', level: 3, section: 'expenses', source: 'bank:opex_software' },
+  { key: 'opex_menu', label: 'Меню', level: 3, section: 'expenses', source: 'bank:opex_menu' },
+  { key: 'opex_pest', label: 'Дератизация/дезинсекция', level: 3, section: 'expenses', source: 'bank:opex_pest' },
+  { key: 'opex_grease', label: 'Чистка жироуловителей', level: 3, section: 'expenses', source: 'bank:opex_grease' },
+  { key: 'opex_repair', label: 'Мелкий ремонт', level: 3, section: 'expenses', source: 'bank:opex_repair' },
+  { key: 'opex_uniform', label: 'Форма для персонала', level: 3, section: 'expenses', source: 'bank:opex_uniform' },
+  { key: 'opex_music', label: 'Авторские права на музыку', level: 3, section: 'expenses', source: 'bank:opex_music' },
+  { key: 'opex_royalty', label: 'Роялти', level: 3, section: 'expenses', source: 'bank:opex_royalty' },
+  { key: 'opex_misc', label: 'Прочее', level: 3, section: 'expenses', source: 'bank:opex_misc' },
 
   // Налоги
-  { key: 'taxes', label: 'Налоги', level: 1, section: 'expenses', calc: 'sum_children', parent: 'opex' },
-  { key: 'tax_retail', label: 'Розничный налог', level: 2, section: 'expenses', source: 'bank:tax_retail' },
-  { key: 'tax_payroll', label: 'Налоги по зарплате', level: 2, section: 'expenses', source: 'bank:tax_payroll' },
-  { key: 'tax_insurance', label: 'Страхование сотрудников', level: 2, section: 'expenses', source: 'bank:tax_insurance' },
-  { key: 'tax_alcohol', label: 'Лицензия на алкоголь', level: 2, section: 'expenses', source: 'bank:tax_alcohol' },
-  { key: 'tax_hookah', label: 'Лицензия на дымный коктейль', level: 2, section: 'expenses', source: 'bank:tax_hookah' },
-  { key: 'tax_other', label: 'Налоги прочее', level: 2, section: 'expenses', source: 'bank:tax_other' },
+  { key: 'taxes', label: 'Налоги', level: 2, section: 'expenses', calc: 'sum_children', parent: 'opex' },
+  { key: 'tax_retail', label: 'Розничный налог', level: 3, section: 'expenses', source: 'bank:tax_retail' },
+  { key: 'tax_payroll', label: 'Налоги по зарплате', level: 3, section: 'expenses', source: 'bank:tax_payroll' },
+  { key: 'tax_insurance', label: 'Страхование сотрудников', level: 3, section: 'expenses', source: 'bank:tax_insurance' },
+  { key: 'tax_alcohol', label: 'Лицензия на алкоголь', level: 3, section: 'expenses', source: 'bank:tax_alcohol' },
+  { key: 'tax_hookah', label: 'Лицензия на дымный коктейль', level: 3, section: 'expenses', source: 'bank:tax_hookah' },
+  { key: 'tax_other', label: 'Налоги прочее', level: 3, section: 'expenses', source: 'bank:tax_other' },
 
   // === RESULTS ===
   { key: 'op_profit', label: 'Операционная прибыль (Доходы - OpEx)', level: 0, section: 'result', calc: 'revenue_minus_opex' },
@@ -144,8 +144,10 @@ export default function PnLPage() {
   const [allExpanded, setAllExpanded] = useState(false)
   const [collapsed, setCollapsed] = useState(() => {
     const c = {}
-    // Level 0 (ДОХОДЫ, РАСХОДЫ) — развёрнуты; Level 1 (подкатегории) — свёрнуты
-    PNL_STRUCTURE.filter(l => l.level === 1 && l.calc === 'sum_children').forEach(l => { c[l.key] = true })
+    // Level 0 (ДОХОДЫ, РАСХОДЫ) — развёрнуты
+    // Level 1 (CapEx, OpEx) — развёрнуты
+    // Level 2 (ФОТ, Food cost, Маркетинг...) — свёрнуты
+    PNL_STRUCTURE.filter(l => l.level === 2 && l.calc === 'sum_children').forEach(l => { c[l.key] = true })
     return c
   })
   const [showAddAdj, setShowAddAdj] = useState(false)
@@ -277,7 +279,7 @@ export default function PnLPage() {
     const newState = !allExpanded
     setAllExpanded(newState)
     const c = {}
-    PNL_STRUCTURE.filter(l => l.level <= 1 && l.calc === 'sum_children').forEach(l => { c[l.key] = !newState })
+    PNL_STRUCTURE.filter(l => l.calc === 'sum_children').forEach(l => { c[l.key] = !newState })
     setCollapsed(c)
   }
   const toggleSection = (key) => setCollapsed(p => ({ ...p, [key]: !p[key] }))
@@ -299,25 +301,17 @@ export default function PnLPage() {
   // Count period-allocated bank transactions for info display
   const periodAllocatedCount = bankTx.filter(tx => tx.period_from && tx.period_to).length
 
-  // Determine which lines are visible (hidden if parent collapsed)
+  // Determine which lines are visible (hidden if any ancestor is collapsed)
   const isVisible = (line, idx) => {
     if (line.level === 0) return true
-    // Find parent group
+    // Walk backwards to find all ancestors and check if any are collapsed
+    let targetLevel = line.level
     for (let i = idx - 1; i >= 0; i--) {
-      const parent = PNL_STRUCTURE[i]
-      if (parent.level < line.level && parent.calc === 'sum_children') {
-        if (collapsed[parent.key]) return false
-        // Check grandparent
-        if (parent.level === 1) {
-          for (let j = i - 1; j >= 0; j--) {
-            const gp = PNL_STRUCTURE[j]
-            if (gp.level < parent.level && gp.calc === 'sum_children') {
-              if (collapsed[gp.key]) return false
-              break
-            }
-          }
-        }
-        return true
+      const ancestor = PNL_STRUCTURE[i]
+      if (ancestor.level < targetLevel && ancestor.calc === 'sum_children') {
+        if (collapsed[ancestor.key]) return false
+        targetLevel = ancestor.level
+        if (targetLevel === 0) break
       }
     }
     return true
@@ -399,13 +393,13 @@ export default function PnLPage() {
             )
           }
 
-          // Header (level 0) or Group (level 1) — clickable
+          // Header or Group — clickable
           if (isGroup) {
+            const padLeft = line.level === 0 ? 'pl-4' : line.level === 1 ? 'pl-6' : 'pl-10'
             return (
               <button key={line.key} onClick={() => toggleSection(line.key)}
                 className={cn('flex items-center justify-between w-full text-left px-4 py-3 hover:bg-slate-900/50 transition-colors',
-                  line.level === 0 && 'bg-slate-900/50',
-                  line.level === 1 && 'pl-6')}>
+                  line.level === 0 && 'bg-slate-900/50', padLeft)}>
                 <div className="flex items-center gap-2">
                   {isCollapsed ? <ChevronRight className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
                   <span className={cn('text-sm font-bold', color)}>{line.label}</span>
@@ -418,9 +412,10 @@ export default function PnLPage() {
             )
           }
 
-          // Leaf line (level 2)
+          // Leaf line
+          const leafPad = line.level <= 2 ? 'pl-10' : 'pl-14'
           return (
-            <div key={line.key} className="flex items-center justify-between px-4 py-2 pl-10">
+            <div key={line.key} className={cn('flex items-center justify-between px-4 py-2', leafPad)}>
               <span className="text-sm text-slate-400">{line.label}</span>
               <div className="flex items-center gap-4">
                 <span className="font-mono text-sm text-slate-300">{fmt(val)} ₸</span>
