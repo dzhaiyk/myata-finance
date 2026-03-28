@@ -56,29 +56,32 @@ const DEPARTMENTS = ['Кухня', 'Бар', 'Кальян', 'Прочее']
 
 const JournalPagination = ({ page, total, pageSize, onChange }) => {
   const totalPages = Math.ceil(total / pageSize)
+  // Display pages in reverse: display page 1 = oldest (internal last), display page N = newest (internal 0)
+  const displayPage = totalPages - page // 1-based, 1=oldest, totalPages=newest
   const pages = []
-  for (let i = 0; i < totalPages; i++) {
-    if (i === 0 || i === totalPages - 1 || Math.abs(i - page) <= 1) {
-      pages.push(i)
+  for (let d = 1; d <= totalPages; d++) {
+    if (d === 1 || d === totalPages || Math.abs(d - displayPage) <= 1) {
+      pages.push(d)
     } else if (pages[pages.length - 1] !== '...') {
       pages.push('...')
     }
   }
+  const goToDisplay = (d) => onChange(totalPages - d) // convert display page to internal
   return (
     <div className="flex items-center justify-center gap-1.5 py-3">
-      <button onClick={() => onChange(page + 1)} disabled={page >= totalPages - 1}
+      <button onClick={() => goToDisplay(displayPage - 1)} disabled={displayPage <= 1}
         className="btn-secondary text-xs px-2.5 py-1.5 disabled:opacity-30 disabled:pointer-events-none">
         ← Старые
       </button>
-      {pages.map((p, i) =>
-        p === '...' ? <span key={`dots-${i}`} className="text-slate-600 px-1">...</span> : (
-          <button key={p} onClick={() => onChange(p)}
-            className={`text-xs px-2.5 py-1.5 rounded-lg transition-colors ${p === page ? 'bg-brand-500/20 text-brand-400 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            {p + 1}
+      {pages.map((d, i) =>
+        d === '...' ? <span key={`dots-${i}`} className="text-slate-600 px-1">...</span> : (
+          <button key={d} onClick={() => goToDisplay(d)}
+            className={`text-xs px-2.5 py-1.5 rounded-lg transition-colors ${d === displayPage ? 'bg-brand-500/20 text-brand-400 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+            {d}
           </button>
         )
       )}
-      <button onClick={() => onChange(page - 1)} disabled={page === 0}
+      <button onClick={() => goToDisplay(displayPage + 1)} disabled={displayPage >= totalPages}
         className="btn-secondary text-xs px-2.5 py-1.5 disabled:opacity-30 disabled:pointer-events-none">
         Новые →
       </button>
