@@ -195,30 +195,48 @@ export default function DashboardPage() {
             </ResponsiveContainer>
           </div>
 
-          {deptData.length > 0 && (
-            <div className="card">
-              <h3 className="text-sm font-semibold text-slate-300 mb-4">Выручка по отделам</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie data={deptData} cx="50%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={4} dataKey="value">
-                    {deptData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                  </Pie>
-                  <Tooltip formatter={(v) => [fmt(v) + ' ₸']} contentStyle={{ background: '#172033', border: '1px solid #293548', borderRadius: 12, fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="space-y-2 mt-2">
-                {deptData.map(d => (
-                  <div key={d.name} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
-                      <span className="text-slate-400">{d.name}</span>
-                    </div>
-                    <span className="font-mono text-xs">{fmtK(d.value)} ₸</span>
+          {deptData.length > 0 && (() => {
+            const deptTotal = deptData.reduce((s, d) => s + d.value, 0)
+            return (
+              <div className="card">
+                <h3 className="text-sm font-semibold text-slate-300 mb-4">Выручка по отделам</h3>
+                <div className="flex items-center gap-4">
+                  <div className="shrink-0" style={{ width: 170, height: 170 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={deptData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={4} dataKey="value">
+                          {deptData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                        </Pie>
+                        <Tooltip formatter={(v) => [fmt(v) + ' ₸']} contentStyle={{ background: '#172033', border: '1px solid #293548', borderRadius: 12, fontSize: 12 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
                   </div>
-                ))}
+                  <div className="space-y-3 flex-1">
+                    {deptData.map(d => {
+                      const pct = deptTotal > 0 ? (d.value / deptTotal * 100).toFixed(1) : 0
+                      return (
+                        <div key={d.name}>
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
+                              <span className="text-sm text-slate-400">{d.name}</span>
+                            </div>
+                            <span className="text-sm font-mono font-bold" style={{ color: d.color }}>{pct}%</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${pct}%`, background: d.color }} />
+                            </div>
+                            <span className="font-mono text-[10px] text-slate-500 w-16 text-right">{fmtK(d.value)} ₸</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
         </div>
       )}
 
