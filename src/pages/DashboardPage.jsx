@@ -114,7 +114,7 @@ export default function DashboardPage() {
     if (!monthsWithBank.has(i)) return { month: name.slice(0, 3), revenue: 0, expenses: 0 }
     const monthReports = completedReports.filter(r => new Date(r.report_date).getMonth() === i)
     const rev = monthReports.reduce((s, r) => s + (r.total_revenue || 0), 0)
-    return { month: name.slice(0, 3), revenue: rev, expenses: 0 } // expenses filled after expTotal
+    return { month: name.slice(0, 3), revenue: rev, expenses: 0 } // expenses filled after totalExpenses
   })
 
   // Department breakdown (completed months)
@@ -370,7 +370,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {deptData.length > 0 && <PieWithLegend title="Выручка по отделам" data={deptData} total={deptTotal} />}
         {fcData.length > 0 && <PieWithLegend title="Food Cost по отделам" data={fcData} total={fcTotal} />}
-        {expData.length > 0 && <PieWithLegend title="Расходы по категориям" data={expData} total={expTotal} />}
+        {expData.length > 0 && <PieWithLegend title="Расходы по категориям" data={expData} total={totalExpenses} />}
       </div>
 
       {/* Records */}
