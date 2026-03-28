@@ -169,13 +169,11 @@ export default function DailyReportPage() {
     return initial + txTotal
   }
 
-  const openReport = (report) => {
+  const openReport = async (report) => {
     const d = report.data || {}
     setReportId(report.id)
     setStatus(report.status || 'draft')
     setDate(report.report_date)
-    setCashStart(String(d.cash_start || ''))
-    // Backward compat: cash_end (new) or cash_actual (old)
     setCashEnd(String(d.cash_end || d.cash_actual || ''))
     if (d.withdrawals) {
       setWithdrawals({
@@ -191,6 +189,21 @@ export default function DailyReportPage() {
     if (d.departments) setDepartments(d.departments)
     setTerminals(d.terminals || {})
     setMode('form')
+
+    // Для черновиков: касса на начало = касса на конец предыдущей закрытой смены
+    const isDraft = !report.status || report.status === 'draft'
+    if (isDraft) {
+      const { data: prevReport } = await supabase
+        .from('daily_reports').select('data')
+        .eq('status', 'submitted')
+        .lt('report_date', report.report_date)
+        .order('report_date', { ascending: false })
+        .limit(1).single()
+      const prevCashEnd = prevReport?.data?.cash_end ?? prevReport?.data?.cash_actual
+      setCashStart(prevCashEnd != null ? String(prevCashEnd) : String(d.cash_start || ''))
+    } else {
+      setCashStart(String(d.cash_start || ''))
+    }
   }
 
   const newReport = async () => {
