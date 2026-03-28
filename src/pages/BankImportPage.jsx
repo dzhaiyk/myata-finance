@@ -208,6 +208,7 @@ export default function BankImportPage() {
   const { hasPermission } = useAuthStore()
   const canManage = hasPermission('bank_import.categorize')
   const [transactions, setTransactions] = useState([])
+  const [txCount, setTxCount] = useState(0)
   const [categories, setCategories] = useState([])
   const [rules, setRules] = useState([])
   const [ruleConditions, setRuleConditions] = useState([])
@@ -219,23 +220,30 @@ export default function BankImportPage() {
   const [stagedRows, setStagedRows] = useState(null) // parsed rows awaiting confirmation
   const [stagedMeta, setStagedMeta] = useState({ hidden: 0, duplicates: 0, fileName: '' })
   const [savingStaged, setSavingStaged] = useState(false)
+  const [filterMonth, setFilterMonth] = useState(() => new Date().getMonth() + 1)
+  const [filterYear, setFilterYear] = useState(() => new Date().getFullYear())
   const [newRule, setNewRule] = useState({
     name: '', logic: 'and', category_code: '', action: 'categorize',
     conditions: [{ field: 'beneficiary', operator: 'contains', value: '' }],
   })
   const [editingRule, setEditingRule] = useState(null) // { id, name, logic, category_code, action, conditions: [...] }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [filterMonth, filterYear])
 
   const load = async () => {
     setLoading(true)
+    const startDate = `${filterYear}-${String(filterMonth).padStart(2, '0')}-01`
+    const endDate = lastOfMonth(filterYear, filterMonth)
     const [txRes, catRes, rulesRes, condRes] = await Promise.all([
-      supabase.from('bank_transactions').select('*').order('transaction_date', { ascending: false }).limit(500),
+      supabase.from('bank_transactions').select('*', { count: 'exact' })
+        .gte('transaction_date', startDate).lte('transaction_date', endDate)
+        .order('transaction_date', { ascending: false }),
       supabase.from('categories').select('*').eq('is_active', true).order('sort_order'),
       supabase.from('bank_rules').select('*').eq('is_active', true).order('created_at'),
       supabase.from('bank_rule_conditions').select('*').order('sort_order'),
     ])
     setTransactions(txRes.data || [])
+    setTxCount(txRes.count || 0)
     setCategories(catRes.data || [])
     setRules(rulesRes.data || [])
     setRuleConditions(condRes.data || [])
@@ -518,9 +526,15 @@ export default function BankImportPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-display font-bold tracking-tight">Импорт выписки</h1>
-          <p className="text-sm text-slate-500 mt-0.5">{transactions.length} записей{uncatCount > 0 ? ` · ${uncatCount} не распознано` : ''}</p>
+          <p className="text-sm text-slate-500 mt-0.5">{txCount} записей за {MONTHS_SHORT[filterMonth - 1]} {filterYear}{uncatCount > 0 ? ` · ${uncatCount} не распознано` : ''}</p>
         </div>
         <div className="flex items-center gap-2">
+          <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="input text-sm">
+            {MONTHS_SHORT.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
+          <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} className="input text-sm">
+            {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
           {canManage && (
             <button onClick={() => setShowRules(!showRules)}
               className={cn('btn-secondary text-sm flex items-center gap-2', showRules && 'border-brand-500/50')}>
