@@ -139,6 +139,14 @@ export default function DashboardPage() {
   })
   const maxWeekdayAvg = Math.max(...weekdayStats.map(w => w.avg), 1)
 
+  // Median daily revenue (current year reports)
+  const dailyRevenues = reports.map(r => r.total_revenue || 0).filter(v => v > 0).sort((a, b) => a - b)
+  const median = dailyRevenues.length > 0
+    ? dailyRevenues.length % 2 === 1
+      ? dailyRevenues[Math.floor(dailyRevenues.length / 2)]
+      : Math.round((dailyRevenues[Math.floor(dailyRevenues.length / 2) - 1] + dailyRevenues[Math.floor(dailyRevenues.length / 2)]) / 2)
+    : 0
+
   if (loading) return <div className="text-center text-slate-500 py-20">Загрузка данных...</div>
 
   return (
@@ -287,22 +295,31 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2 mb-4">
             <CalendarDays className="w-4 h-4 text-brand-400" />
             <h3 className="text-sm font-semibold text-slate-300">Средняя выручка по дням недели</h3>
-            <span className="text-[10px] text-slate-600 ml-auto">за всё время ({allReports.length} смен)</span>
+            <span className="text-[10px] text-slate-600 ml-auto">за всё время ({allReports.length} смен) · медиана {fmt(median)} ₸</span>
           </div>
           <div className="grid grid-cols-7 gap-2">
-            {weekdayStats.map(w => (
-              <div key={w.day} className="text-center">
-                <div className="text-[10px] text-slate-500 mb-2">{w.short}</div>
-                <div className="relative h-24 flex items-end justify-center mb-2">
-                  <div
-                    className="w-full max-w-[40px] rounded-t-lg bg-brand-500/30 border border-brand-500/20 transition-all"
-                    style={{ height: `${Math.max((w.avg / maxWeekdayAvg) * 100, 4)}%` }}
-                  />
+            {weekdayStats.map(w => {
+              const aboveMedian = w.avg >= median
+              const barColor = aboveMedian ? 'bg-green-400/30 border-green-400/30' : 'bg-rose-400/30 border-rose-400/30'
+              const textColor = aboveMedian ? 'text-green-400' : 'text-rose-400'
+              const medianPct = maxWeekdayAvg > 0 ? (median / maxWeekdayAvg) * 100 : 0
+              return (
+                <div key={w.day} className="text-center">
+                  <div className="text-[10px] text-slate-500 mb-2">{w.short}</div>
+                  <div className="relative h-24 flex items-end justify-center mb-2">
+                    <div
+                      className={`w-full max-w-[40px] rounded-t-lg border transition-all ${barColor}`}
+                      style={{ height: `${Math.max((w.avg / maxWeekdayAvg) * 100, 4)}%` }}
+                    />
+                    {/* Median line */}
+                    <div className="absolute left-0 right-0 border-t border-dashed border-yellow-500/60 pointer-events-none"
+                      style={{ bottom: `${medianPct}%` }} />
+                  </div>
+                  <div className={`text-xs font-mono font-semibold ${textColor}`}>{fmtK(w.avg)}</div>
+                  <div className="text-[9px] text-slate-600">{w.count} смен</div>
                 </div>
-                <div className="text-xs font-mono font-semibold text-slate-300">{fmtK(w.avg)}</div>
-                <div className="text-[9px] text-slate-600">{w.count} смен</div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
