@@ -109,35 +109,12 @@ export default function DashboardPage() {
   const totalRevenue = completedReports.reduce((s, r) => s + (r.total_revenue || 0), 0)
   const discrepancies = reports.filter(r => Math.abs(r.cash_discrepancy || 0) > 500)
 
-  // Compute real expenses per month (cash from daily reports + bank debit transactions)
-  const monthlyExpenses = {}
-  // Cash expenses from daily reports
-  completedReports.forEach(r => {
-    const m = new Date(r.report_date).getMonth()
-    if (!monthlyExpenses[m]) monthlyExpenses[m] = 0
-    const w = r.data?.withdrawals || {}
-    const sum = (arr) => (arr || []).reduce((s, row) => s + (Number(row.amount) || 0), 0)
-    monthlyExpenses[m] += sum(w.suppliers_kitchen) + sum(w.suppliers_bar) + sum(w.tobacco) + sum(w.payroll) + sum(w.other)
-  })
-  // Bank debit transactions (excluding internal transfers)
-  bankTx.forEach(tx => {
-    if (!tx.is_debit || !tx.category || tx.category === 'uncategorized' || tx.category === 'internal') return
-    const m = new Date(tx.transaction_date).getMonth()
-    if (!monthsWithBank.has(m)) return
-    // Skip categories already counted from daily reports (cogs_kitchen, cogs_bar, cogs_hookah, household)
-    if (/^cogs_|^household$/.test(tx.category)) return
-    if (!monthlyExpenses[m]) monthlyExpenses[m] = 0
-    monthlyExpenses[m] += Math.abs(Number(tx.amount) || 0)
-  })
-
-  const totalExpenses = Object.values(monthlyExpenses).reduce((s, v) => s + v, 0)
-
   // Monthly breakdown — always 12 months, only completed months have data
   const monthlyData = MONTHS_RU.map((name, i) => {
     if (!monthsWithBank.has(i)) return { month: name.slice(0, 3), revenue: 0, expenses: 0 }
     const monthReports = completedReports.filter(r => new Date(r.report_date).getMonth() === i)
     const rev = monthReports.reduce((s, r) => s + (r.total_revenue || 0), 0)
-    return { month: name.slice(0, 3), revenue: rev, expenses: monthlyExpenses[i] || 0 }
+    return { month: name.slice(0, 3), revenue: rev, expenses: 0 } // expenses filled after expTotal
   })
 
   // Department breakdown (completed months)
@@ -199,14 +176,15 @@ export default function DashboardPage() {
       })
     })
   })
-  // Add bank transaction categories for non-cash expense categories
+  // Add bank transaction categories (matching PnL source mappings)
   const bankCatMap = {
     payroll: /^payroll/,
+    foodcost: /^cogs_/,
     marketing: /^mkt/,
     rent: /^rent/,
     utilities: /^util/,
     taxes: /^tax/,
-    opex_other: /^(bank_fee|opex_)/,
+    opex_other: /^(bank_fee|opex_|capex_)/,
   }
   bankTx.forEach(tx => {
     if (!tx.is_debit || !tx.category) return
@@ -222,7 +200,30 @@ export default function DashboardPage() {
   const expData = OPEX_CATEGORIES.map(cat => ({
     name: cat.label, value: expCatTotals[cat.key], color: cat.color
   })).filter(d => d.value > 0)
-  const expTotal = expData.reduce((s, d) => s + d.value, 0)
+  const totalExpenses = expData.reduce((s, d) => s + d.value, 0)
+
+  // Fill monthly expenses (distribute proportionally by month based on bank tx)
+  const monthlyExpMap = {}
+  completedReports.forEach(r => {
+    const m = new Date(r.report_date).getMonth()
+    if (!monthlyExpMap[m]) monthlyExpMap[m] = 0
+    const w = r.data?.withdrawals || {}
+    const sum = (arr) => (arr || []).reduce((s, row) => s + (Number(row.amount) || 0), 0)
+    monthlyExpMap[m] += sum(w.suppliers_kitchen) + sum(w.suppliers_bar) + sum(w.tobacco) + sum(w.payroll) + sum(w.other)
+  })
+  bankTx.forEach(tx => {
+    if (!tx.is_debit || !tx.category || tx.category === 'uncategorized' || tx.category === 'internal') return
+    const m = new Date(tx.transaction_date).getMonth()
+    if (!monthsWithBank.has(m)) return
+    // Skip categories already in daily reports (cogs = food cost cash, household = other cash)
+    if (/^cogs_|^household$/.test(tx.category)) return
+    if (!monthlyExpMap[m]) monthlyExpMap[m] = 0
+    monthlyExpMap[m] += Math.abs(Number(tx.amount) || 0)
+  })
+  monthlyData.forEach(md => {
+    const i = MONTHS_RU.findIndex(n => n.startsWith(md.month))
+    if (i >= 0) md.expenses = monthlyExpMap[i] || 0
+  })
 
   // Operating margin (revenue - all expenses)
   const opMargin = totalRevenue > 0 ? (totalRevenue - totalExpenses) / totalRevenue : 0
