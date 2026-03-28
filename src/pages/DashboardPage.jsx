@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fmt, fmtK, fmtPct, MONTHS_RU } from '@/lib/utils'
-import { DollarSign, TrendingDown, ShoppingCart, Percent, AlertTriangle, FileText, Trophy, CalendarDays } from 'lucide-react'
+import { DollarSign, TrendingDown, ShoppingCart, CirclePercent, AlertTriangle, FileText, Trophy, CalendarDays } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts'
 
 const fmtM = (v) => {
@@ -337,7 +337,7 @@ export default function DashboardPage() {
         <div className={`card-hover bg-gradient-to-br ${marginColor === 'green' ? 'from-green-500/20 to-green-600/5 border-green-500/20' : marginColor === 'yellow' ? 'from-yellow-500/20 to-yellow-600/5 border-yellow-500/20' : 'from-red-500/20 to-red-600/5 border-red-500/20'}`}>
           <div className="flex items-start justify-between mb-3">
             <div className="stat-label">Операционная маржа</div>
-            <Percent className="w-4 h-4 text-slate-500" />
+            <CirclePercent className="w-4 h-4 text-slate-500" />
           </div>
           <div className={`stat-value ${marginColor === 'green' ? 'text-green-400' : marginColor === 'yellow' ? 'text-yellow-400' : 'text-red-400'}`}>
             {totalRevenue > 0 ? fmtPct(opMargin) : '—'}
