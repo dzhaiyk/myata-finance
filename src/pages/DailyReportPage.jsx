@@ -835,11 +835,16 @@ export default function DailyReportPage() {
             <CheckCircle2 className="w-5 h-5 text-green-400" />
             <span className="text-sm text-green-400 font-medium">Отчёт отправлен. Только просмотр.</span>
           </div>
-          {canEdit && (
-            <button onClick={reopenReport} className="btn-secondary text-xs flex items-center gap-1.5">
-              <Pencil className="w-3.5 h-3.5" /> Вернуть в черновик
+          <div className="flex items-center gap-2">
+            <button onClick={generatePDF} className="btn-secondary text-xs flex items-center gap-1.5">
+              <Download className="w-3.5 h-3.5" /> PDF
             </button>
-          )}
+            {canEdit && (
+              <button onClick={reopenReport} className="btn-secondary text-xs flex items-center gap-1.5">
+                <Pencil className="w-3.5 h-3.5" /> Вернуть в черновик
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -1078,9 +1083,6 @@ export default function DailyReportPage() {
           </button>
           <button onClick={submitReport} disabled={saving} className="btn-primary flex items-center justify-center gap-2 flex-1">
             <Send className="w-4 h-4" /> Отправить отчёт
-          </button>
-          <button onClick={generatePDF} className="btn-secondary flex items-center justify-center gap-2">
-            <Download className="w-4 h-4" /> PDF
           </button>
         </div>
       )}
