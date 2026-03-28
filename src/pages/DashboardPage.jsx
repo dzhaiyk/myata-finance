@@ -107,16 +107,37 @@ export default function DashboardPage() {
 
   // === KPIs from completed months ===
   const totalRevenue = completedReports.reduce((s, r) => s + (r.total_revenue || 0), 0)
-  const totalWithdrawals = completedReports.reduce((s, r) => s + (r.total_withdrawals || 0), 0)
   const discrepancies = reports.filter(r => Math.abs(r.cash_discrepancy || 0) > 500)
+
+  // Compute real expenses per month (cash from daily reports + bank debit transactions)
+  const monthlyExpenses = {}
+  // Cash expenses from daily reports
+  completedReports.forEach(r => {
+    const m = new Date(r.report_date).getMonth()
+    if (!monthlyExpenses[m]) monthlyExpenses[m] = 0
+    const w = r.data?.withdrawals || {}
+    const sum = (arr) => (arr || []).reduce((s, row) => s + (Number(row.amount) || 0), 0)
+    monthlyExpenses[m] += sum(w.suppliers_kitchen) + sum(w.suppliers_bar) + sum(w.tobacco) + sum(w.payroll) + sum(w.other)
+  })
+  // Bank debit transactions (excluding internal transfers)
+  bankTx.forEach(tx => {
+    if (!tx.is_debit || !tx.category || tx.category === 'uncategorized' || tx.category === 'internal') return
+    const m = new Date(tx.transaction_date).getMonth()
+    if (!monthsWithBank.has(m)) return
+    // Skip categories already counted from daily reports (cogs_kitchen, cogs_bar, cogs_hookah, household)
+    if (/^cogs_|^household$/.test(tx.category)) return
+    if (!monthlyExpenses[m]) monthlyExpenses[m] = 0
+    monthlyExpenses[m] += Math.abs(Number(tx.amount) || 0)
+  })
+
+  const totalExpenses = Object.values(monthlyExpenses).reduce((s, v) => s + v, 0)
 
   // Monthly breakdown — always 12 months, only completed months have data
   const monthlyData = MONTHS_RU.map((name, i) => {
     if (!monthsWithBank.has(i)) return { month: name.slice(0, 3), revenue: 0, expenses: 0 }
     const monthReports = completedReports.filter(r => new Date(r.report_date).getMonth() === i)
     const rev = monthReports.reduce((s, r) => s + (r.total_revenue || 0), 0)
-    const exp = monthReports.reduce((s, r) => s + (r.total_withdrawals || 0), 0)
-    return { month: name.slice(0, 3), revenue: rev, expenses: exp }
+    return { month: name.slice(0, 3), revenue: rev, expenses: monthlyExpenses[i] || 0 }
   })
 
   // Department breakdown (completed months)
@@ -194,8 +215,8 @@ export default function DashboardPage() {
   })).filter(d => d.value > 0)
   const expTotal = expData.reduce((s, d) => s + d.value, 0)
 
-  // Operating margin
-  const opMargin = totalRevenue > 0 ? (totalRevenue - totalWithdrawals) / totalRevenue : 0
+  // Operating margin (revenue - all expenses)
+  const opMargin = totalRevenue > 0 ? (totalRevenue - totalExpenses) / totalRevenue : 0
   const marginColor = opMargin >= 0.30 ? 'green' : opMargin >= 0.15 ? 'yellow' : 'red'
 
   // Completed months label
@@ -288,8 +309,8 @@ export default function DashboardPage() {
             <div className="stat-label">Расходы</div>
             <TrendingDown className="w-4 h-4 text-red-500" />
           </div>
-          <div className="stat-value text-red-400">{(totalWithdrawals / 1e6).toFixed(1)}М ₸</div>
-          <div className="text-xs text-slate-500 mt-2">из кассы</div>
+          <div className="stat-value text-red-400">{(totalExpenses / 1e6).toFixed(1)}М ₸</div>
+          <div className="text-xs text-slate-500 mt-2">касса + банк</div>
         </div>
 
         <div className={`card-hover bg-gradient-to-br ${fcColor === 'green' ? 'from-green-500/20 to-green-600/5 border-green-500/20' : fcColor === 'yellow' ? 'from-yellow-500/20 to-yellow-600/5 border-yellow-500/20' : 'from-red-500/20 to-red-600/5 border-red-500/20'}`}>
@@ -311,7 +332,7 @@ export default function DashboardPage() {
           <div className={`stat-value ${marginColor === 'green' ? 'text-green-400' : marginColor === 'yellow' ? 'text-yellow-400' : 'text-red-400'}`}>
             {totalRevenue > 0 ? fmtPct(opMargin) : '—'}
           </div>
-          <div className="text-xs text-slate-500 mt-2">{totalRevenue > 0 ? fmtK(totalRevenue - totalWithdrawals) + ' ₸ прибыль' : 'Нет данных'}</div>
+          <div className="text-xs text-slate-500 mt-2">{totalRevenue > 0 ? fmtK(totalRevenue - totalExpenses) + ' ₸ прибыль' : 'Нет данных'}</div>
         </div>
       </div>
 
