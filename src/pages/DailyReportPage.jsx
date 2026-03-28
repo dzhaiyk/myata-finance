@@ -387,6 +387,32 @@ export default function DailyReportPage() {
         } catch (_) {}
       }
 
+      // Sync terminal account balances
+      try {
+        // Delete old terminal transactions for this date
+        for (const ta of terminalAccounts) {
+          await supabase.from('account_transactions')
+            .delete()
+            .eq('account_id', ta.id)
+            .eq('reference_type', 'daily_report')
+            .eq('transaction_date', date)
+        }
+        // Create new transactions for each terminal with amount > 0
+        const terminalInserts = terminalAccounts
+          .filter(ta => num(terminals[ta.id]) > 0)
+          .map(ta => ({
+            account_id: ta.id,
+            transaction_date: date,
+            type: 'income',
+            amount: num(terminals[ta.id]),
+            description: `Выручка по терминалу за ${date}`,
+            reference_type: 'daily_report',
+          }))
+        if (terminalInserts.length > 0) {
+          await supabase.from('account_transactions').insert(terminalInserts)
+        }
+      } catch (_) {}
+
       // Telegram notifications
       try {
         await sendTelegramNotification(formatDailyReportNotification({
