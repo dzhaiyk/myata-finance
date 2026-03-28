@@ -55,10 +55,10 @@ export default function DashboardPage() {
     const deps = r.data?.departments || []
     if (Array.isArray(deps)) {
       deps.forEach((d, i) => {
-        if (i === 0) deptTotals.kitchen += (d.amount || 0)
-        if (i === 1) deptTotals.bar += (d.amount || 0)
-        if (i === 2) deptTotals.hookah += (d.amount || 0)
-        if (i === 3) deptTotals.other += (d.amount || 0)
+        if (i === 0) deptTotals.kitchen += (Number(d.amount) || 0)
+        if (i === 1) deptTotals.bar += (Number(d.amount) || 0)
+        if (i === 2) deptTotals.hookah += (Number(d.amount) || 0)
+        if (i === 3) deptTotals.other += (Number(d.amount) || 0)
       })
     }
   })
