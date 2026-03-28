@@ -144,7 +144,8 @@ export default function PnLPage() {
   const [allExpanded, setAllExpanded] = useState(false)
   const [collapsed, setCollapsed] = useState(() => {
     const c = {}
-    PNL_STRUCTURE.filter(l => l.level <= 1 && l.calc === 'sum_children').forEach(l => { c[l.key] = true })
+    // Level 0 (ДОХОДЫ, РАСХОДЫ) — развёрнуты; Level 1 (подкатегории) — свёрнуты
+    PNL_STRUCTURE.filter(l => l.level === 1 && l.calc === 'sum_children').forEach(l => { c[l.key] = true })
     return c
   })
   const [showAddAdj, setShowAddAdj] = useState(false)
