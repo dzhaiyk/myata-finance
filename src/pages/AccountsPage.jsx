@@ -58,13 +58,13 @@ export default function AccountsPage() {
     return initial + txTotal
   }
 
-  // Parent balance = sum of children balances; leaf = own balance
+  // Parent balance = own balance + sum of children balances
   const calcBalance = (accountId) => {
-    const children = accounts.filter(a => a.parent_account_id === accountId)
-    if (children.length > 0) {
-      return children.reduce((sum, child) => sum + calcOwnBalance(child.id), 0)
-    }
-    return calcOwnBalance(accountId)
+    const own = calcOwnBalance(accountId)
+    const childrenSum = accounts
+      .filter(a => a.parent_account_id === accountId)
+      .reduce((sum, child) => sum + calcOwnBalance(child.id), 0)
+    return own + childrenSum
   }
 
   // Save account
