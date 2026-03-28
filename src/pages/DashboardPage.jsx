@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fmt, fmtK, fmtPct, MONTHS_RU } from '@/lib/utils'
-import { TrendingUp, DollarSign, ShoppingCart, Users, AlertTriangle, ArrowUpRight, ArrowDownRight, FileText } from 'lucide-react'
+import { TrendingUp, DollarSign, ShoppingCart, AlertTriangle, FileText, Trophy, CalendarDays } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
 export default function DashboardPage() {
   const [year, setYear] = useState(2026)
   const [reports, setReports] = useState([])
+  const [allReports, setAllReports] = useState([])
   const [pnl, setPnl] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -19,12 +20,14 @@ export default function DashboardPage() {
     const startDate = `${year}-01-01`
     const endDate = `${year}-12-31`
 
-    const [reportsRes, pnlRes] = await Promise.all([
+    const [reportsRes, pnlRes, allReportsRes] = await Promise.all([
       supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).order('report_date'),
       supabase.from('pnl_data').select('*').eq('year', year),
+      supabase.from('daily_reports').select('id, report_date, total_revenue, status').eq('status', 'submitted').order('report_date'),
     ])
 
     setReports(reportsRes.data || [])
+    setAllReports(allReportsRes.data || [])
     setPnl(pnlRes.data || [])
     setLoading(false)
   }
@@ -85,6 +88,56 @@ export default function DashboardPage() {
     { label: 'Food Cost', value: fcPct > 0 ? fmtPct(fcPct) : '—', icon: ShoppingCart, color: 'yellow', sub: pnlCogs > 0 ? fmtK(pnlCogs) + ' ₸' : 'Нет данных P&L' },
     { label: 'Расхождения', value: discrepancies.length, icon: AlertTriangle, color: discrepancies.length > 0 ? 'red' : 'green', sub: discrepancies.length > 0 ? '⚠️ Проверьте!' : '✅ Всё чисто' },
   ]
+
+  // === RECORDS (all time) ===
+  const WEEKDAYS_RU = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
+  const WEEKDAYS_SHORT = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
+
+  // Best single day
+  const bestDay = allReports.reduce((best, r) => (!best || (r.total_revenue || 0) > best.total_revenue) ? r : best, null)
+
+  // Best week (Mon-Sun, sliding window by ISO week)
+  const weekMap = {}
+  allReports.forEach(r => {
+    const d = new Date(r.report_date + 'T12:00:00')
+    const jan4 = new Date(d.getFullYear(), 0, 4)
+    const week = Math.ceil(((d - jan4) / 86400000 + jan4.getDay() + 1) / 7)
+    const key = `${d.getFullYear()}-W${String(week).padStart(2, '0')}`
+    if (!weekMap[key]) weekMap[key] = { sum: 0, count: 0, dates: [] }
+    weekMap[key].sum += r.total_revenue || 0
+    weekMap[key].count++
+    weekMap[key].dates.push(r.report_date)
+  })
+  const bestWeek = Object.entries(weekMap).reduce((best, [key, w]) => {
+    const avg = w.count > 0 ? w.sum / w.count : 0
+    return (!best || avg > best.avg) ? { key, avg, sum: w.sum, count: w.count, from: w.dates[0], to: w.dates[w.dates.length - 1] } : best
+  }, null)
+
+  // Best month
+  const monthMap = {}
+  allReports.forEach(r => {
+    const key = r.report_date.slice(0, 7) // YYYY-MM
+    if (!monthMap[key]) monthMap[key] = { sum: 0, count: 0 }
+    monthMap[key].sum += r.total_revenue || 0
+    monthMap[key].count++
+  })
+  const bestMonth = Object.entries(monthMap).reduce((best, [key, m]) => {
+    const avg = m.count > 0 ? m.sum / m.count : 0
+    return (!best || avg > best.avg) ? { key, avg, sum: m.sum, count: m.count } : best
+  }, null)
+
+  const fmtMonthLabel = (key) => {
+    const [y, m] = key.split('-')
+    return `${MONTHS_RU[parseInt(m) - 1]} ${y}`
+  }
+
+  // Weekday averages (all time)
+  const weekdayStats = [1, 2, 3, 4, 5, 6, 0].map(dow => { // Mon-Sun
+    const matching = allReports.filter(r => new Date(r.report_date + 'T12:00:00').getDay() === dow)
+    const sum = matching.reduce((s, r) => s + (r.total_revenue || 0), 0)
+    return { day: WEEKDAYS_RU[dow], short: WEEKDAYS_SHORT[dow], avg: matching.length > 0 ? Math.round(sum / matching.length) : 0, count: matching.length }
+  })
+  const maxWeekdayAvg = Math.max(...weekdayStats.map(w => w.avg), 1)
 
   if (loading) return <div className="text-center text-slate-500 py-20">Загрузка данных...</div>
 
@@ -166,6 +219,73 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Records */}
+      {allReports.length > 0 && (
+        <div className="card">
+          <div className="flex items-center gap-2 mb-4">
+            <Trophy className="w-4 h-4 text-yellow-400" />
+            <h3 className="text-sm font-semibold text-slate-300">Рекорды</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {bestDay && (
+              <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Лучшая смена</div>
+                <div className="text-lg font-mono font-bold text-yellow-400">{fmt(bestDay.total_revenue)} ₸</div>
+                <div className="text-xs text-slate-500 mt-1">
+                  {new Date(bestDay.report_date + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric', weekday: 'short' })}
+                </div>
+              </div>
+            )}
+            {bestWeek && (
+              <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Лучшая средняя за неделю</div>
+                <div className="text-lg font-mono font-bold text-green-400">{fmt(Math.round(bestWeek.avg))} ₸/день</div>
+                <div className="text-xs text-slate-500 mt-1">
+                  {new Date(bestWeek.from + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} – {new Date(bestWeek.to + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  <span className="text-slate-600 ml-1">({bestWeek.count} смен)</span>
+                </div>
+              </div>
+            )}
+            {bestMonth && (
+              <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Лучшая средняя за месяц</div>
+                <div className="text-lg font-mono font-bold text-blue-400">{fmt(Math.round(bestMonth.avg))} ₸/день</div>
+                <div className="text-xs text-slate-500 mt-1">
+                  {fmtMonthLabel(bestMonth.key)}
+                  <span className="text-slate-600 ml-1">({bestMonth.count} смен, итого {fmtK(bestMonth.sum)} ₸)</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Weekday averages */}
+      {allReports.length > 0 && (
+        <div className="card">
+          <div className="flex items-center gap-2 mb-4">
+            <CalendarDays className="w-4 h-4 text-brand-400" />
+            <h3 className="text-sm font-semibold text-slate-300">Средняя выручка по дням недели</h3>
+            <span className="text-[10px] text-slate-600 ml-auto">за всё время ({allReports.length} смен)</span>
+          </div>
+          <div className="grid grid-cols-7 gap-2">
+            {weekdayStats.map(w => (
+              <div key={w.day} className="text-center">
+                <div className="text-[10px] text-slate-500 mb-2">{w.short}</div>
+                <div className="relative h-24 flex items-end justify-center mb-2">
+                  <div
+                    className="w-full max-w-[40px] rounded-t-lg bg-brand-500/30 border border-brand-500/20 transition-all"
+                    style={{ height: `${Math.max((w.avg / maxWeekdayAvg) * 100, 4)}%` }}
+                  />
+                </div>
+                <div className="text-xs font-mono font-semibold text-slate-300">{fmtK(w.avg)}</div>
+                <div className="text-[9px] text-slate-600">{w.count} смен</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
