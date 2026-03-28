@@ -284,6 +284,16 @@ export default function DailyReportPage() {
     return acc
   }, {})
 
+  // Aggregate terminal totals by payment type for discrepancy check
+  const terminalTotalsByPaymentType = {}
+  Object.entries(terminalsByParent).forEach(([parentId, group]) => {
+    const parent = allAccounts.find(a => a.id === Number(parentId))
+    const matchingPt = revenue.find(r => parent?.bank_name && r.type.toLowerCase().includes(parent.bank_name.toLowerCase()))
+    const ptKey = matchingPt?.type || parentId
+    if (!terminalTotalsByPaymentType[ptKey]) terminalTotalsByPaymentType[ptKey] = 0
+    terminalTotalsByPaymentType[ptKey] += group.total
+  })
+
   const cashSales = num(revenue.find(r => r.type === 'Наличные')?.amount)
   const cashExpected = num(cashStart) + cashSales - totalWithdrawals
   const discrepancy = num(cashEnd) - cashExpected
@@ -875,10 +885,18 @@ export default function DailyReportPage() {
             <h3 className="text-sm font-display font-bold text-orange-300 mb-3">📱 Терминалы</h3>
             {Object.entries(terminalsByParent).map(([parentId, group]) => {
               const parent = allAccounts.find(a => a.id === Number(parentId))
-              // Find matching payment type by parent's bank_name
               const matchingPaymentType = revenue.find(r => parent?.bank_name && r.type.toLowerCase().includes(parent.bank_name.toLowerCase()))
+              const ptKey = matchingPaymentType?.type || parentId
+              // Check if this is the last parent for this payment type — show discrepancy only once
+              const parentsForPt = Object.entries(terminalsByParent).filter(([pid]) => {
+                const p = allAccounts.find(a => a.id === Number(pid))
+                const mpt = revenue.find(r => p?.bank_name && r.type.toLowerCase().includes(p.bank_name.toLowerCase()))
+                return (mpt?.type || pid) === ptKey
+              })
+              const isLastForPt = parentsForPt[parentsForPt.length - 1]?.[0] === parentId
               const paymentAmount = num(matchingPaymentType?.amount)
-              const terminalDiscrepancy = paymentAmount > 0 || group.total > 0 ? group.total - paymentAmount : null
+              const totalForPt = terminalTotalsByPaymentType[ptKey] || 0
+              const terminalDiscrepancy = paymentAmount > 0 || totalForPt > 0 ? totalForPt - paymentAmount : null
               return (
                 <div key={parentId} className="mb-4 last:mb-0">
                   <div className="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-1.5">
@@ -893,10 +911,10 @@ export default function DailyReportPage() {
                     ))}
                   </div>
                   <div className="flex items-center justify-between pt-2 mt-2 border-t border-orange-500/20">
-                    <span className="text-sm font-bold">Итого</span>
+                    <span className="text-sm font-bold">Итого {parent?.name || ''}</span>
                     <span className="text-sm font-mono font-bold">{fmt(group.total)} ₸</span>
                   </div>
-                  {terminalDiscrepancy !== null && (
+                  {isLastForPt && terminalDiscrepancy !== null && (
                     <div className={cn('flex items-center justify-between mt-1 text-xs',
                       terminalDiscrepancy === 0 ? 'text-green-400' : 'text-red-400')}>
                       <span>{terminalDiscrepancy === 0 ? '✅ Сходится с «' : '⚠️ Расхождение с «'}{matchingPaymentType?.type || '?'}»</span>
