@@ -133,7 +133,7 @@ const PNL_STRUCTURE = [
 ]
 
 export default function PnLPage() {
-  const { hasPermission } = useAuthStore()
+  const { hasPermission, profile } = useAuthStore()
   const [year, setYear] = useState(CURRENT_YEAR)
   const [month, setMonth] = useState(CURRENT_MONTH)
   const [viewMode, setViewMode] = useState('month')
@@ -321,18 +321,23 @@ export default function PnLPage() {
   }
 
   const saveEdits = async () => {
-    // Delete all existing adjustments for this period
-    const endMonth = viewMode === 'ytd' ? 12 : month
-    for (let m = (viewMode === 'ytd' ? 1 : month); m <= endMonth; m++) {
-      await supabase.from('pnl_data').delete().eq('year', year).eq('month', m)
-    }
-    // Insert new adjustments for non-zero values
+    const userName = profile?.full_name || 'Unknown'
+    // Compute diff: what changed vs existing adjustments
+    const existingByKey = {}
+    adjustments.forEach(a => {
+      if (a.category) existingByKey[a.category] = (existingByKey[a.category] || 0) + Number(a.amount)
+    })
+    // Insert only the differences as new records (append-only audit log)
     const inserts = Object.entries(adjEdits)
-      .filter(([_, v]) => Number(v) !== 0 && v !== '' && v !== '0')
       .map(([key, v]) => {
+        const newTotal = Number(v) || 0
+        const existing = existingByKey[key] || 0
+        const diff = newTotal - existing
+        if (diff === 0) return null
         const line = PNL_STRUCTURE.find(l => l.key === key)
-        return { year, month, category: key, type: line?.section === 'revenue' ? 'income' : 'expense', amount: Number(v), description: 'Ручная корректировка' }
+        return { year, month, category: key, type: line?.section === 'revenue' ? 'income' : 'expense', amount: diff, description: 'Ручная корректировка', created_by: userName }
       })
+      .filter(Boolean)
     if (inserts.length > 0) {
       await supabase.from('pnl_data').insert(inserts)
     }
@@ -511,19 +516,26 @@ export default function PnLPage() {
         })}
       </div>
 
-      {/* Active adjustments summary (when not editing) */}
+      {/* Adjustment audit log */}
       {!editMode && adjustments.length > 0 && (
         <div className="card border-purple-500/20 bg-purple-500/5">
-          <div className="text-xs font-semibold text-purple-400 mb-2">Ручные корректировки ({adjustments.length})</div>
-          <div className="space-y-1">
-            {adjustments.map(a => {
+          <div className="text-xs font-semibold text-purple-400 mb-3">Лог корректировок ({adjustments.length})</div>
+          <div className="space-y-1.5">
+            {[...adjustments].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)).map(a => {
               const catLine = PNL_STRUCTURE.find(l => l.key === a.category)
+              const dt = a.created_at ? new Date(a.created_at) : null
               return (
-                <div key={a.id} className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">{catLine?.label || a.category}</span>
-                  <span className={cn('font-mono', Number(a.amount) >= 0 ? 'text-green-400' : 'text-red-400')}>
-                    {Number(a.amount) > 0 ? '+' : ''}{fmt(a.amount)} ₸
-                  </span>
+                <div key={a.id} className="flex items-center justify-between text-xs bg-slate-900/50 rounded-lg px-3 py-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={cn('font-mono font-bold shrink-0', Number(a.amount) >= 0 ? 'text-green-400' : 'text-red-400')}>
+                      {Number(a.amount) > 0 ? '+' : ''}{fmt(a.amount)}
+                    </span>
+                    <span className="text-slate-400 truncate">{catLine?.label || a.category}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 text-slate-600">
+                    {a.created_by && <span>{a.created_by}</span>}
+                    {dt && <span>{dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })} {dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>}
+                  </div>
                 </div>
               )
             })}
