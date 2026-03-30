@@ -151,7 +151,7 @@ export default function PnLPage() {
     return c
   })
   const [showAddAdj, setShowAddAdj] = useState(false)
-  const [adjForm, setAdjForm] = useState({ type: 'income', amount: '', description: '' })
+  const [adjForm, setAdjForm] = useState({ type: 'income', category: '', amount: '', description: '' })
 
   useEffect(() => { loadData() }, [year, month, viewMode])
 
@@ -261,10 +261,35 @@ export default function PnLPage() {
     v.op_profit = v.revenue - v.opex
     v.net_profit = v.revenue - v.expenses
 
-    // Adjustments
-    const adjIn = adjustments.filter(a => a.type === 'income').reduce((s, a) => s + Number(a.amount), 0)
-    const adjOut = adjustments.filter(a => a.type === 'expense').reduce((s, a) => s + Number(a.amount), 0)
-    v.net_profit += adjIn - adjOut
+    // Adjustments — add to specific category or fallback to net_profit
+    adjustments.forEach(a => {
+      const amt = Number(a.amount) || 0
+      if (a.category && v[a.category] !== undefined) {
+        v[a.category] += amt
+      } else {
+        // Legacy adjustments without category
+        if (a.type === 'income') v.net_profit += amt
+        else v.net_profit -= amt
+      }
+    })
+    // Recalculate revenue and groups after adjustments
+    v.revenue = v.rev_kitchen + v.rev_bar + v.rev_hookah + v.rev_other
+    groups.forEach(gKey => {
+      const gIdx = PNL_STRUCTURE.findIndex(l => l.key === gKey)
+      if (gIdx < 0) return
+      const gLevel = PNL_STRUCTURE[gIdx].level
+      let sum = 0
+      for (let i = gIdx + 1; i < PNL_STRUCTURE.length; i++) {
+        const line = PNL_STRUCTURE[i]
+        if (line.level <= gLevel) break
+        if (line.level === gLevel + 1 && !line.calc) sum += v[line.key] || 0
+      }
+      v[gKey] = sum
+    })
+    v.opex = v.payroll + v.foodcost + v.marketing + v.rent + v.utilities + v.opex_other + v.taxes
+    v.expenses = v.capex + v.opex
+    v.op_profit = v.revenue - v.opex
+    v.net_profit = v.revenue - v.expenses
 
     // Ratios
     v.margin_pct = v.revenue > 0 ? v.op_profit / v.revenue : 0
@@ -285,10 +310,20 @@ export default function PnLPage() {
   }
   const toggleSection = (key) => setCollapsed(p => ({ ...p, [key]: !p[key] }))
 
+  // PnL categories for manual adjustments
+  const adjCategories = PNL_STRUCTURE.filter(l => !l.calc && l.section !== 'ratio' && l.section !== 'result')
+  const adjCategoryGroups = [
+    { label: 'Доходы', items: adjCategories.filter(l => l.section === 'revenue') },
+    { label: 'Расходы', items: adjCategories.filter(l => l.section === 'expenses') },
+  ]
+
   const saveAdj = async () => {
     if (!adjForm.amount || !adjForm.description) return alert('Заполните сумму и описание')
-    await supabase.from('pnl_data').insert({ year, month, type: adjForm.type, amount: Number(adjForm.amount), description: adjForm.description })
-    setShowAddAdj(false); setAdjForm({ type: 'income', amount: '', description: '' }); loadData()
+    if (!adjForm.category) return alert('Выберите категорию')
+    const line = PNL_STRUCTURE.find(l => l.key === adjForm.category)
+    const type = line?.section === 'revenue' ? 'income' : 'expense'
+    await supabase.from('pnl_data').insert({ year, month, type, category: adjForm.category, amount: Number(adjForm.amount), description: adjForm.description })
+    setShowAddAdj(false); setAdjForm({ type: 'income', category: '', amount: '', description: '' }); loadData()
   }
   const deleteAdj = async (id) => { await supabase.from('pnl_data').delete().eq('id', id); loadData() }
 
@@ -444,12 +479,17 @@ export default function PnLPage() {
         </div>
         {showAddAdj && (
           <div className="bg-slate-900 rounded-xl p-4 mb-4 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              <select value={adjForm.type} onChange={e => setAdjForm(f => ({...f, type: e.target.value}))} className="input text-sm">
-                <option value="income">Доход</option><option value="expense">Расход</option>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              <select value={adjForm.category} onChange={e => setAdjForm(f => ({...f, category: e.target.value}))} className="input text-sm">
+                <option value="">Выберите категорию</option>
+                {adjCategoryGroups.map(g => (
+                  <optgroup key={g.label} label={g.label}>
+                    {g.items.map(l => <option key={l.key} value={l.key}>{l.label}</option>)}
+                  </optgroup>
+                ))}
               </select>
               <input type="text" inputMode="numeric" value={adjForm.amount} onChange={e => setAdjForm(f => ({...f, amount: e.target.value.replace(/[^0-9]/g, '')}))} className="input text-sm font-mono" placeholder="Сумма" />
-              <input value={adjForm.description} onChange={e => setAdjForm(f => ({...f, description: e.target.value}))} className="input text-sm" placeholder="Бонус от поставщика" />
+              <input value={adjForm.description} onChange={e => setAdjForm(f => ({...f, description: e.target.value}))} className="input text-sm lg:col-span-2" placeholder="Описание (напр. Бонус от поставщика)" />
               <div className="flex gap-2">
                 <button onClick={saveAdj} className="btn-primary text-sm flex-1">Сохранить</button>
                 <button onClick={() => setShowAddAdj(false)} className="btn-secondary text-sm">✕</button>
@@ -458,10 +498,13 @@ export default function PnLPage() {
           </div>
         )}
         {adjustments.length > 0 ? (
-          <div className="space-y-1">{adjustments.map(a => (
+          <div className="space-y-1">{adjustments.map(a => {
+            const catLine = PNL_STRUCTURE.find(l => l.key === a.category)
+            return (
             <div key={a.id} className="flex items-center justify-between bg-slate-900 rounded-lg px-3 py-2">
               <div className="flex items-center gap-3 text-sm">
                 <span className={cn('badge text-[10px]', a.type === 'income' ? 'badge-green' : 'badge-red')}>{a.type === 'income' ? 'Доход' : 'Расход'}</span>
+                {catLine && <span className="text-slate-500">{catLine.label}</span>}
                 <span>{a.description}</span>
               </div>
               <div className="flex items-center gap-3">
@@ -469,7 +512,7 @@ export default function PnLPage() {
                 <button onClick={() => deleteAdj(a.id)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
               </div>
             </div>
-          ))}</div>
+          )})}</div>
         ) : <div className="text-xs text-slate-600 text-center py-2">Нет корректировок</div>}
       </div>
 
