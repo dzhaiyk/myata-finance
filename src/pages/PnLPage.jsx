@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, MONTHS_RU } from '@/lib/utils'
-import { ChevronDown, ChevronRight, Plus, Trash2, Info, FileText, Upload, ChevronsUpDown } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Trash2, Info, FileText, Upload, ChevronsUpDown, Pencil, Save } from 'lucide-react'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const CURRENT_MONTH = new Date().getMonth() + 1
@@ -150,8 +150,8 @@ export default function PnLPage() {
     PNL_STRUCTURE.filter(l => l.level === 2 && l.calc === 'sum_children').forEach(l => { c[l.key] = true })
     return c
   })
-  const [showAddAdj, setShowAddAdj] = useState(false)
-  const [adjForm, setAdjForm] = useState({ type: 'income', category: '', amount: '', description: '' })
+  const [editMode, setEditMode] = useState(false)
+  const [adjEdits, setAdjEdits] = useState({}) // { [pnl_key]: string amount }
 
   useEffect(() => { loadData() }, [year, month, viewMode])
 
@@ -310,22 +310,37 @@ export default function PnLPage() {
   }
   const toggleSection = (key) => setCollapsed(p => ({ ...p, [key]: !p[key] }))
 
-  // PnL categories for manual adjustments
-  const adjCategories = PNL_STRUCTURE.filter(l => !l.calc && l.section !== 'ratio' && l.section !== 'result')
-  const adjCategoryGroups = [
-    { label: 'Доходы', items: adjCategories.filter(l => l.section === 'revenue') },
-    { label: 'Расходы', items: adjCategories.filter(l => l.section === 'expenses') },
-  ]
-
-  const saveAdj = async () => {
-    if (!adjForm.amount || !adjForm.description) return alert('Заполните сумму и описание')
-    if (!adjForm.category) return alert('Выберите категорию')
-    const line = PNL_STRUCTURE.find(l => l.key === adjForm.category)
-    const type = line?.section === 'revenue' ? 'income' : 'expense'
-    await supabase.from('pnl_data').insert({ year, month, type, category: adjForm.category, amount: Number(adjForm.amount), description: adjForm.description })
-    setShowAddAdj(false); setAdjForm({ type: 'income', category: '', amount: '', description: '' }); loadData()
+  const startEdit = () => {
+    // Pre-fill adjEdits from existing adjustments
+    const edits = {}
+    adjustments.forEach(a => {
+      if (a.category) edits[a.category] = String(Number(a.amount) || 0)
+    })
+    setAdjEdits(edits)
+    setEditMode(true)
   }
-  const deleteAdj = async (id) => { await supabase.from('pnl_data').delete().eq('id', id); loadData() }
+
+  const saveEdits = async () => {
+    // Delete all existing adjustments for this period
+    const endMonth = viewMode === 'ytd' ? 12 : month
+    for (let m = (viewMode === 'ytd' ? 1 : month); m <= endMonth; m++) {
+      await supabase.from('pnl_data').delete().eq('year', year).eq('month', m)
+    }
+    // Insert new adjustments for non-zero values
+    const inserts = Object.entries(adjEdits)
+      .filter(([_, v]) => Number(v) !== 0 && v !== '' && v !== '0')
+      .map(([key, v]) => {
+        const line = PNL_STRUCTURE.find(l => l.key === key)
+        return { year, month, category: key, type: line?.section === 'revenue' ? 'income' : 'expense', amount: Number(v), description: 'Ручная корректировка' }
+      })
+    if (inserts.length > 0) {
+      await supabase.from('pnl_data').insert(inserts)
+    }
+    setEditMode(false)
+    setAdjEdits({})
+    loadData()
+  }
+  const cancelEdit = () => { setEditMode(false); setAdjEdits({}) }
 
   const pct = (val, key) => {
     // Food cost subcategories: % from corresponding department revenue
@@ -386,6 +401,18 @@ export default function PnLPage() {
           <button onClick={toggleAll} className="btn-secondary text-xs flex items-center gap-1.5" title={allExpanded ? 'Свернуть всё' : 'Развернуть всё'}>
             <ChevronsUpDown className="w-4 h-4" />{allExpanded ? 'Свернуть' : 'Развернуть'}
           </button>
+          {!editMode ? (
+            <button onClick={startEdit} className="btn-secondary text-xs flex items-center gap-1.5">
+              <Pencil className="w-3.5 h-3.5" /> Редактировать
+            </button>
+          ) : (
+            <div className="flex gap-1.5">
+              <button onClick={saveEdits} className="btn-primary text-xs flex items-center gap-1.5">
+                <Save className="w-3.5 h-3.5" /> Сохранить
+              </button>
+              <button onClick={cancelEdit} className="btn-secondary text-xs">Отмена</button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -459,11 +486,24 @@ export default function PnLPage() {
 
           // Leaf line
           const leafPad = line.level <= 2 ? 'pl-10' : 'pl-14'
+          const adjVal = adjEdits[line.key] || ''
+          const hasAdj = adjVal !== '' && Number(adjVal) !== 0
           return (
             <div key={line.key} className={cn('flex items-center justify-between px-4 py-2', leafPad)}>
               <span className="text-sm text-slate-400">{line.label}</span>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <span className="font-mono text-sm text-slate-300">{fmt(val)} ₸</span>
+                {editMode && (
+                  <input type="text" inputMode="numeric" value={adjVal}
+                    onChange={e => setAdjEdits(prev => ({ ...prev, [line.key]: e.target.value.replace(/[^0-9-]/g, '') }))}
+                    className="input text-xs font-mono w-24 text-right py-1 px-2"
+                    placeholder="±0" />
+                )}
+                {!editMode && hasAdj && (
+                  <span className={cn('font-mono text-xs', Number(adjVal) > 0 ? 'text-green-400' : 'text-red-400')}>
+                    {Number(adjVal) > 0 ? '+' : ''}{fmt(Number(adjVal))}
+                  </span>
+                )}
                 <span className="text-[10px] text-slate-500 w-12 text-right">{val > 0 ? pct(val, line.key) : '—'}</span>
               </div>
             </div>
@@ -471,50 +511,25 @@ export default function PnLPage() {
         })}
       </div>
 
-      {/* Manual Adjustments */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-sm font-semibold">Ручные корректировки</div>
-          <button onClick={() => setShowAddAdj(true)} className="btn-secondary text-xs flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Добавить</button>
-        </div>
-        {showAddAdj && (
-          <div className="bg-slate-900 rounded-xl p-4 mb-4 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              <select value={adjForm.category} onChange={e => setAdjForm(f => ({...f, category: e.target.value}))} className="input text-sm">
-                <option value="">Выберите категорию</option>
-                {adjCategoryGroups.map(g => (
-                  <optgroup key={g.label} label={g.label}>
-                    {g.items.map(l => <option key={l.key} value={l.key}>{l.label}</option>)}
-                  </optgroup>
-                ))}
-              </select>
-              <input type="text" inputMode="numeric" value={adjForm.amount} onChange={e => setAdjForm(f => ({...f, amount: e.target.value.replace(/[^0-9]/g, '')}))} className="input text-sm font-mono" placeholder="Сумма" />
-              <input value={adjForm.description} onChange={e => setAdjForm(f => ({...f, description: e.target.value}))} className="input text-sm lg:col-span-2" placeholder="Описание (напр. Бонус от поставщика)" />
-              <div className="flex gap-2">
-                <button onClick={saveAdj} className="btn-primary text-sm flex-1">Сохранить</button>
-                <button onClick={() => setShowAddAdj(false)} className="btn-secondary text-sm">✕</button>
-              </div>
-            </div>
+      {/* Active adjustments summary (when not editing) */}
+      {!editMode && adjustments.length > 0 && (
+        <div className="card border-purple-500/20 bg-purple-500/5">
+          <div className="text-xs font-semibold text-purple-400 mb-2">Ручные корректировки ({adjustments.length})</div>
+          <div className="space-y-1">
+            {adjustments.map(a => {
+              const catLine = PNL_STRUCTURE.find(l => l.key === a.category)
+              return (
+                <div key={a.id} className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400">{catLine?.label || a.category}</span>
+                  <span className={cn('font-mono', Number(a.amount) >= 0 ? 'text-green-400' : 'text-red-400')}>
+                    {Number(a.amount) > 0 ? '+' : ''}{fmt(a.amount)} ₸
+                  </span>
+                </div>
+              )
+            })}
           </div>
-        )}
-        {adjustments.length > 0 ? (
-          <div className="space-y-1">{adjustments.map(a => {
-            const catLine = PNL_STRUCTURE.find(l => l.key === a.category)
-            return (
-            <div key={a.id} className="flex items-center justify-between bg-slate-900 rounded-lg px-3 py-2">
-              <div className="flex items-center gap-3 text-sm">
-                <span className={cn('badge text-[10px]', a.type === 'income' ? 'badge-green' : 'badge-red')}>{a.type === 'income' ? 'Доход' : 'Расход'}</span>
-                {catLine && <span className="text-slate-500">{catLine.label}</span>}
-                <span>{a.description}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="font-mono text-sm">{fmt(a.amount)} ₸</span>
-                <button onClick={() => deleteAdj(a.id)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
-              </div>
-            </div>
-          )})}</div>
-        ) : <div className="text-xs text-slate-600 text-center py-2">Нет корректировок</div>}
-      </div>
+        </div>
+      )}
 
       {/* Data Sources */}
       <div className="card border-blue-500/20 bg-blue-500/5">
