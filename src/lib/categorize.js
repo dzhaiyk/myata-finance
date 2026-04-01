@@ -18,7 +18,7 @@ export const CATEGORIES = {
   payroll_mgmt: { label: 'ФОТ Менеджмент', group: 'payroll', pnl: 'ФОТ Менеджмент' },
   payroll_kitchen: { label: 'ФОТ Кухня', group: 'payroll', pnl: 'ФОТ Кухня' },
   payroll_bar: { label: 'ФОТ Бар', group: 'payroll', pnl: 'ФОТ Бар' },
-  payroll_hookah: { label: 'ФОТ Кальян', group: 'payroll', pnl: 'ФОТ Дымный коктейль' },
+  payroll_hookah: { label: 'ФОТ Кальян', group: 'payroll', pnl: 'ФОТ Кальян' },
   payroll_hall: { label: 'ФОТ Зал', group: 'payroll', pnl: 'ФОТ Зал' },
 
   // Marketing
@@ -62,7 +62,7 @@ export const CATEGORIES = {
   tax_payroll: { label: 'Налоги по зарплате', group: 'taxes', pnl: 'Налоги по зарплате' },
   tax_insurance: { label: 'Страхование сотрудников', group: 'taxes', pnl: 'Страхование сотрудников' },
   tax_alcohol: { label: 'Лицензия на алкоголь', group: 'taxes', pnl: 'Лицензия на алкоголь' },
-  tax_hookah: { label: 'Лицензия на кальян', group: 'taxes', pnl: 'Лицензия на дымный коктейль' },
+  tax_hookah: { label: 'Лицензия на кальян', group: 'taxes', pnl: 'Лицензия на кальян' },
   tax_other: { label: 'Налоги прочее', group: 'taxes', pnl: 'Налоги прочее' },
 
   // CapEx

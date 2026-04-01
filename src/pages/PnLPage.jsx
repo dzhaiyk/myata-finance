@@ -59,7 +59,7 @@ const PNL_STRUCTURE = [
   { key: 'payroll_mgmt', label: 'ФОТ Менеджмент', level: 3, section: 'expenses', source: 'bank:payroll_mgmt' },
   { key: 'payroll_kitchen', label: 'ФОТ Кухня', level: 3, section: 'expenses', source: 'bank:payroll_kitchen' },
   { key: 'payroll_bar', label: 'ФОТ Бар', level: 3, section: 'expenses', source: 'bank:payroll_bar' },
-  { key: 'payroll_hookah', label: 'ФОТ Дымный коктейль', level: 3, section: 'expenses', source: 'bank:payroll_hookah' },
+  { key: 'payroll_hookah', label: 'ФОТ Кальян', level: 3, section: 'expenses', source: 'bank:payroll_hookah' },
   { key: 'payroll_hall', label: 'ФОТ Зал', level: 3, section: 'expenses', source: 'bank:payroll_hall' },
   { key: 'payroll_transport', label: 'Развозка', level: 3, section: 'expenses', source: 'bank:payroll_transport' },
   { key: 'payroll_cash', label: 'ФОТ из кассы (авансы)', level: 3, section: 'expenses', source: 'daily:payroll' },
@@ -117,7 +117,7 @@ const PNL_STRUCTURE = [
   { key: 'tax_payroll', label: 'Налоги по зарплате', level: 3, section: 'expenses', source: 'bank:tax_payroll' },
   { key: 'tax_insurance', label: 'Страхование сотрудников', level: 3, section: 'expenses', source: 'bank:tax_insurance' },
   { key: 'tax_alcohol', label: 'Лицензия на алкоголь', level: 3, section: 'expenses', source: 'bank:tax_alcohol' },
-  { key: 'tax_hookah', label: 'Лицензия на дымный коктейль', level: 3, section: 'expenses', source: 'bank:tax_hookah' },
+  { key: 'tax_hookah', label: 'Лицензия на кальян', level: 3, section: 'expenses', source: 'bank:tax_hookah' },
   { key: 'tax_other', label: 'Налоги прочее', level: 3, section: 'expenses', source: 'bank:tax_other' },
 
   // === RESULTS ===
@@ -422,16 +422,23 @@ export default function PnLPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <div className="card-hover text-center"><div className="stat-label">Выручка</div><div className="stat-value text-lg text-green-400">{fmt(values.revenue)} ₸</div></div>
-        <div className="card-hover text-center"><div className="stat-label">Food Cost</div>
-          <div className={cn('stat-value text-lg', values.fc_pct > 0.32 ? 'text-red-400' : 'text-yellow-400')}>{fmtPct(values.fc_pct)}</div></div>
-        <div className="card-hover text-center"><div className="stat-label">ФОТ</div><div className="stat-value text-lg text-blue-400">{pct(values.payroll)}</div></div>
-        <div className="card-hover text-center"><div className="stat-label">EBITDA</div>
-          <div className={cn('stat-value text-lg', values.op_profit >= 0 ? 'text-brand-400' : 'text-red-400')}>{fmt(values.op_profit)} ₸</div></div>
-        <div className="card-hover text-center"><div className="stat-label">Чистая прибыль</div>
-          <div className={cn('stat-value text-lg', values.net_profit >= 0 ? 'text-brand-400' : 'text-red-400')}>{fmt(values.net_profit)} ₸</div></div>
-      </div>
+      {(() => {
+        const fmtM = (v) => (v / 1e6).toFixed(1) + 'М ₸'
+        const marginPct = values.revenue > 0 ? (values.op_profit / values.revenue * 100).toFixed(1) : 0
+        const marginColor = marginPct >= 30 ? 'text-green-400' : marginPct >= 15 ? 'text-yellow-400' : 'text-red-400'
+        return (
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="card-hover text-center"><div className="stat-label">Выручка</div><div className="stat-value text-lg text-green-400">{fmtM(values.revenue)}</div></div>
+            <div className="card-hover text-center"><div className="stat-label">Food Cost</div>
+              <div className={cn('stat-value text-lg', values.fc_pct > 0.32 ? 'text-red-400' : 'text-yellow-400')}>{fmtPct(values.fc_pct)}</div></div>
+            <div className="card-hover text-center"><div className="stat-label">ФОТ</div><div className="stat-value text-lg text-blue-400">{pct(values.payroll)}</div></div>
+            <div className="card-hover text-center"><div className="stat-label">Маржа опер. прибыли</div>
+              <div className={cn('stat-value text-lg', marginColor)}>{marginPct}%</div></div>
+            <div className="card-hover text-center"><div className="stat-label">Чистая прибыль</div>
+              <div className={cn('stat-value text-lg', values.net_profit >= 0 ? 'text-brand-400' : 'text-red-400')}>{fmtM(values.net_profit)}</div></div>
+          </div>
+        )
+      })()}
 
       {/* P&L Table */}
       <div className="card p-0 divide-y divide-slate-800">
