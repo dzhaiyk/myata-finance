@@ -317,35 +317,25 @@ export default function PnLPage() {
   const toggleSection = (key) => setCollapsed(p => ({ ...p, [key]: !p[key] }))
 
   const startEdit = () => {
-    // Pre-fill adjEdits: sum all existing adjustments per category
+    // Pre-fill adjEdits from existing adjustments (one per category)
     const edits = {}
     adjustments.forEach(a => {
-      if (a.category) edits[a.category] = (edits[a.category] || 0) + (Number(a.amount) || 0)
+      if (a.category) edits[a.category] = String(Number(a.amount) || 0)
     })
-    // Convert to strings for input fields
-    Object.keys(edits).forEach(k => { edits[k] = String(edits[k]) })
     setAdjEdits(edits)
     setEditMode(true)
   }
 
   const saveEdits = async () => {
     const userName = profile?.full_name || 'Unknown'
-    // Compute diff: what changed vs existing adjustments
-    const existingByKey = {}
-    adjustments.forEach(a => {
-      if (a.category) existingByKey[a.category] = (existingByKey[a.category] || 0) + Number(a.amount)
-    })
-    // Insert only the differences as new records (append-only audit log)
+    // Delete existing adjustments for this month, then insert fresh values
+    await supabase.from('pnl_data').delete().eq('year', year).eq('month', month)
     const inserts = Object.entries(adjEdits)
+      .filter(([_, v]) => v !== '' && Number(v) !== 0)
       .map(([key, v]) => {
-        const newTotal = Number(v) || 0
-        const existing = existingByKey[key] || 0
-        const diff = newTotal - existing
-        if (diff === 0) return null
         const line = PNL_STRUCTURE.find(l => l.key === key)
-        return { year, month, category: key, type: line?.section === 'revenue' ? 'income' : 'expense', amount: diff, description: 'Ручная корректировка', created_by: userName }
+        return { year, month, category: key, type: line?.section === 'revenue' ? 'income' : 'expense', amount: Number(v), description: 'Ручная корректировка', created_by: userName }
       })
-      .filter(Boolean)
     if (inserts.length > 0) {
       await supabase.from('pnl_data').insert(inserts)
     }
