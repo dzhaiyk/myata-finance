@@ -198,13 +198,17 @@ export default function PnLPage() {
     v.revenue = revK + revB + revH + revO
 
     // Cash expenses from daily reports
-    let cashPayroll = 0, cashKitchen = 0, cashBar = 0, cashHookah = 0, cashOther = 0
+    let cashPayroll = 0, cashKitchen = 0, cashBar = 0, cashHookah = 0, cashOther = 0, cashHookahCapex = 0
     dailyReports.forEach(r => {
       const w = r.data?.withdrawals || {}
       ;(w.payroll || []).forEach(row => cashPayroll += Number(row.amount) || 0)
       ;(w.suppliers_kitchen || []).forEach(row => cashKitchen += Number(row.amount) || 0)
       ;(w.suppliers_bar || []).forEach(row => cashBar += Number(row.amount) || 0)
-      ;(w.tobacco || []).forEach(row => cashHookah += Number(row.amount) || 0)
+      ;(w.tobacco || []).forEach(row => {
+        const amt = Number(row.amount) || 0
+        if (row.name === 'Аппараты') cashHookahCapex += amt
+        else cashHookah += amt
+      })
       ;(w.other || []).forEach(row => cashOther += Number(row.amount) || 0)
     })
     // payroll_cash removed — ФОТ вносится вручную
@@ -239,6 +243,9 @@ export default function PnLPage() {
         else v[line.key] = bk(cat)
       }
     })
+
+    // Add hookah equipment (Аппараты) to CapEx прочее
+    v.capex_other = (v.capex_other || 0) + cashHookahCapex
 
     // Calculate group sums (each group = sum of its direct children)
     const groups = ['capex', 'payroll', 'foodcost', 'marketing', 'rent', 'utilities', 'opex_other', 'taxes']
