@@ -467,6 +467,7 @@ export default function PnLPage() {
       totals.fc_bar_pct = totals.rev_bar > 0 ? totals.fc_bar / totals.rev_bar : 0
       totals.fc_hookah_pct = totals.rev_hookah > 0 ? totals.fc_hookah / totals.rev_hookah : 0
       columns.push({ label: 'Итого', values: totals, isTotal: true })
+      columns.push({ label: '%', values: totals, isPct: true })
       return columns
     }
 
@@ -499,6 +500,7 @@ export default function PnLPage() {
       totals.fc_bar_pct = totals.rev_bar > 0 ? totals.fc_bar / totals.rev_bar : 0
       totals.fc_hookah_pct = totals.rev_hookah > 0 ? totals.fc_hookah / totals.rev_hookah : 0
       columns.push({ label: 'Итого', values: totals, isTotal: true })
+      columns.push({ label: '%', values: totals, isPct: true })
       return columns
     }
   }, [viewMode, year, dailyReports, bankTx, adjustments])
@@ -742,7 +744,7 @@ export default function PnLPage() {
               <tr>
                 <th className="table-header text-left sticky left-0 bg-slate-900 z-10 min-w-[200px]">Статья</th>
                 {multiPeriodData.map(col => (
-                  <th key={col.label} className={cn('table-header text-right min-w-[90px]', col.isTotal && 'bg-slate-800/50 font-bold')}>
+                  <th key={col.label} className={cn('table-header text-right', col.isPct ? 'min-w-[55px]' : 'min-w-[90px]', (col.isTotal || col.isPct) && 'bg-slate-800/50 font-bold')}>
                     {col.label}
                   </th>
                 ))}
@@ -777,15 +779,25 @@ export default function PnLPage() {
                     {multiPeriodData.map(col => {
                       const val = col.values[line.key] || 0
                       let display = ''
-                      if (isRatio) display = val ? (val * 100).toFixed(1) + '%' : '\u2014'
-                      else display = val ? fmtK(val) : '\u2014'
+                      if (col.isPct) {
+                        // Show % of revenue
+                        const rev = col.values.revenue || 0
+                        if (isRatio) display = val ? (val * 100).toFixed(1) + '%' : '\u2014'
+                        else if (line.key === 'revenue') display = '100%'
+                        else if (rev > 0 && val) display = (val / rev * 100).toFixed(1) + '%'
+                        else display = '\u2014'
+                      } else if (isRatio) {
+                        display = val ? (val * 100).toFixed(1) + '%' : '\u2014'
+                      } else {
+                        display = val ? fmtK(val) : '\u2014'
+                      }
 
                       let color = 'text-slate-300'
                       if (line.key === 'revenue' || line.key === 'op_profit' || line.key === 'net_profit') color = val >= 0 ? 'text-green-400' : 'text-red-400'
                       else if (line.section === 'expenses' && line.level === 0) color = 'text-red-400'
 
                       return (
-                        <td key={col.label} className={cn('table-cell text-right font-mono text-xs', color, col.isTotal && 'bg-slate-800/50 font-bold')}
+                        <td key={col.label} className={cn('table-cell text-right font-mono text-xs', color, (col.isTotal || col.isPct) && 'bg-slate-800/50 font-bold')}
                           title={val ? fmt(val) : ''}>
                           {display}
                         </td>
