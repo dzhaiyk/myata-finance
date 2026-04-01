@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
-import { Plus, Edit3, Trash2, ArrowRightLeft, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Save, RefreshCw, Eye, Power, X } from 'lucide-react'
+import { Plus, Edit3, Trash2, ArrowRightLeft, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Save, RefreshCw, Eye, Power, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
 const TYPES = { cash: 'Касса', bank: 'Банк. счёт', deposit: 'Депозит', terminal: 'Терминал' }
 const TYPE_ICONS = { cash: '💵', bank: '🏦', deposit: '💰', terminal: '📱' }
@@ -17,6 +17,7 @@ export default function AccountsPage() {
   const [transactions, setTransactions] = useState([])
   const [balances, setBalances] = useState([])
   const [loading, setLoading] = useState(true)
+  const [cashLastEnd, setCashLastEnd] = useState(null)
   const [tab, setTab] = useState('overview') // overview | transactions | reconcile | settings
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [showTransfer, setShowTransfer] = useState(false)
@@ -32,14 +33,17 @@ export default function AccountsPage() {
 
   const load = async () => {
     setLoading(true)
-    const [accRes, txRes, balRes] = await Promise.all([
+    const [accRes, txRes, balRes, lastReportRes] = await Promise.all([
       supabase.from('accounts').select('*').order('sort_order, id'),
-      supabase.from('account_transactions').select('*').order('transaction_date', { ascending: false }).limit(100),
+      supabase.from('account_transactions').select('*').order('transaction_date', { ascending: false }),
       supabase.from('account_balances').select('*').order('balance_date', { ascending: false }).limit(50),
+      supabase.from('daily_reports').select('data').eq('status', 'submitted').order('report_date', { ascending: false }).limit(1).single(),
     ])
     setAccounts(accRes.data || [])
     setTransactions(txRes.data || [])
     setBalances(balRes.data || [])
+    const ce = lastReportRes.data?.data?.cash_end ?? lastReportRes.data?.data?.cash_actual
+    setCashLastEnd(ce != null ? Number(ce) : null)
     setLoading(false)
   }
 
@@ -59,7 +63,10 @@ export default function AccountsPage() {
   }
 
   // Parent balance = own balance + sum of children balances
+  // Cash account = last submitted report's cash_end
   const calcBalance = (accountId) => {
+    const acct = accounts.find(a => a.id === accountId)
+    if (acct?.type === 'cash' && cashLastEnd != null) return cashLastEnd
     const own = calcOwnBalance(accountId)
     const childrenSum = accounts
       .filter(a => a.parent_account_id === accountId)
@@ -212,6 +219,32 @@ export default function AccountsPage() {
 
   const totalBalance = accounts.filter(a => a.is_active && !a.parent_account_id).reduce((s, a) => s + calcBalance(a.id), 0)
   const activeAccounts = sortedAccounts.filter(a => a.is_active)
+
+  // Transaction sorting
+  const [txSortCol, setTxSortCol] = useState('transaction_date')
+  const [txSortDir, setTxSortDir] = useState('desc')
+  const toggleTxSort = (col) => {
+    if (txSortCol === col) setTxSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setTxSortCol(col); setTxSortDir(col === 'amount' ? 'desc' : 'asc') }
+  }
+  const TxSortIcon = ({ col }) => {
+    if (txSortCol !== col) return <ArrowUpDown className="w-3 h-3 text-slate-600 inline ml-1" />
+    return txSortDir === 'asc' ? <ArrowUp className="w-3 h-3 text-brand-400 inline ml-1" /> : <ArrowDown className="w-3 h-3 text-brand-400 inline ml-1" />
+  }
+  const sortedTx = [...transactions].sort((a, b) => {
+    const dir = txSortDir === 'asc' ? 1 : -1
+    if (txSortCol === 'transaction_date') return dir * (new Date(a.transaction_date) - new Date(b.transaction_date))
+    if (txSortCol === 'account') {
+      const aName = accounts.find(x => x.id === a.account_id)?.name || ''
+      const bName = accounts.find(x => x.id === b.account_id)?.name || ''
+      return dir * aName.localeCompare(bName, 'ru')
+    }
+    if (txSortCol === 'description') return dir * (a.counterparty || a.description || '').localeCompare(b.counterparty || b.description || '', 'ru')
+    if (txSortCol === 'type') return dir * (a.type || '').localeCompare(b.type || '')
+    if (txSortCol === 'amount') return dir * ((Number(a.amount) || 0) - (Number(b.amount) || 0))
+    if (txSortCol === 'reference_type') return dir * (a.reference_type || '').localeCompare(b.reference_type || '')
+    return 0
+  })
 
   if (loading) return <div className="text-center text-slate-500 py-20">Загрузка...</div>
 
@@ -493,16 +526,16 @@ export default function AccountsPage() {
         <div className="card overflow-x-auto p-0">
           <table className="w-full text-sm min-w-[700px]">
             <thead><tr>
-              <th className="table-header text-left">Дата</th>
-              <th className="table-header text-left">Счёт</th>
-              <th className="table-header text-left">Контрагент / Описание</th>
-              <th className="table-header text-center">Тип</th>
-              <th className="table-header text-right">Сумма</th>
-              <th className="table-header text-center">Источник</th>
+              <th className="table-header text-left cursor-pointer select-none hover:text-brand-400" onClick={() => toggleTxSort('transaction_date')}>Дата<TxSortIcon col="transaction_date" /></th>
+              <th className="table-header text-left cursor-pointer select-none hover:text-brand-400" onClick={() => toggleTxSort('account')}>Счёт<TxSortIcon col="account" /></th>
+              <th className="table-header text-left cursor-pointer select-none hover:text-brand-400" onClick={() => toggleTxSort('description')}>Контрагент / Описание<TxSortIcon col="description" /></th>
+              <th className="table-header text-center cursor-pointer select-none hover:text-brand-400" onClick={() => toggleTxSort('type')}>Тип<TxSortIcon col="type" /></th>
+              <th className="table-header text-right cursor-pointer select-none hover:text-brand-400" onClick={() => toggleTxSort('amount')}>Сумма<TxSortIcon col="amount" /></th>
+              <th className="table-header text-center cursor-pointer select-none hover:text-brand-400" onClick={() => toggleTxSort('reference_type')}>Источник<TxSortIcon col="reference_type" /></th>
               <th className="table-header w-10"></th>
             </tr></thead>
             <tbody>
-              {transactions.map(tx => {
+              {sortedTx.map(tx => {
                 const acct = accounts.find(a => a.id === tx.account_id)
                 const isIn = tx.type === 'income' || tx.type === 'transfer_in'
                 const typeLabels = { income: 'Приход', expense: 'Расход', transfer_in: 'Вход перевод', transfer_out: 'Исх перевод' }
@@ -525,7 +558,7 @@ export default function AccountsPage() {
                   </tr>
                 )
               })}
-              {transactions.length === 0 && <tr><td colSpan="7" className="table-cell text-center text-slate-500 py-8">Нет операций</td></tr>}
+              {sortedTx.length === 0 && <tr><td colSpan="7" className="table-cell text-center text-slate-500 py-8">Нет операций</td></tr>}
             </tbody>
           </table>
         </div>
