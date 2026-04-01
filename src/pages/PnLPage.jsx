@@ -317,11 +317,13 @@ export default function PnLPage() {
   const toggleSection = (key) => setCollapsed(p => ({ ...p, [key]: !p[key] }))
 
   const startEdit = () => {
-    // Pre-fill adjEdits from existing adjustments
+    // Pre-fill adjEdits: sum all existing adjustments per category
     const edits = {}
     adjustments.forEach(a => {
-      if (a.category) edits[a.category] = String(Number(a.amount) || 0)
+      if (a.category) edits[a.category] = (edits[a.category] || 0) + (Number(a.amount) || 0)
     })
+    // Convert to strings for input fields
+    Object.keys(edits).forEach(k => { edits[k] = String(edits[k]) })
     setAdjEdits(edits)
     setEditMode(true)
   }
