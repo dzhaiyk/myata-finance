@@ -108,29 +108,41 @@ function computePnL(dailyReports, bankTxs, adjustments) {
   v.capex = v.capex_repair + v.capex_furniture + v.capex_other
 
   // OpEx subcategories (bank only, except household)
-  v.payroll = ['payroll_mgmt', 'payroll_kitchen', 'payroll_bar', 'payroll_hookah', 'payroll_hall', 'payroll_transport', 'payroll_other'].reduce((s, k) => s + bk(k), 0)
-  v.marketing = ['mkt_smm', 'mkt_target', 'mkt_2gis', 'mkt_yandex', 'mkt_google', 'mkt_other'].reduce((s, k) => s + bk(k), 0)
-  v.rent = ['rent_premises', 'rent_warehouse', 'rent_property_tax'].reduce((s, k) => s + bk(k), 0)
-  v.utilities = ['util_electric', 'util_water', 'util_heating', 'util_bi', 'util_internet', 'util_waste', 'util_other'].reduce((s, k) => s + bk(k), 0)
-  v.opex_other_val = cashOther + ['bank_fee', 'opex_security', 'opex_software', 'opex_menu', 'opex_pest', 'opex_grease', 'opex_repair', 'opex_uniform', 'opex_music', 'opex_royalty', 'opex_misc'].reduce((s, k) => s + bk(k), 0)
-  v.taxes = ['tax_retail', 'tax_payroll', 'tax_insurance', 'tax_alcohol', 'tax_hookah', 'tax_other'].reduce((s, k) => s + bk(k), 0)
+  const payrollKeys = ['payroll_mgmt', 'payroll_kitchen', 'payroll_bar', 'payroll_hookah', 'payroll_hall', 'payroll_transport', 'payroll_other']
+  const marketingKeys = ['mkt_smm', 'mkt_target', 'mkt_2gis', 'mkt_yandex', 'mkt_google', 'mkt_other']
+  const rentKeys = ['rent_premises', 'rent_warehouse', 'rent_property_tax']
+  const utilKeys = ['util_electric', 'util_water', 'util_heating', 'util_bi', 'util_internet', 'util_waste', 'util_other']
+  const opexOtherKeys = ['opex_household', 'bank_fee', 'opex_security', 'opex_software', 'opex_menu', 'opex_pest', 'opex_grease', 'opex_repair', 'opex_uniform', 'opex_music', 'opex_royalty', 'opex_misc']
+  const taxKeys = ['tax_retail', 'tax_payroll', 'tax_insurance', 'tax_alcohol', 'tax_hookah', 'tax_other']
 
-  v.opex = v.payroll + v.foodcost + v.marketing + v.rent + v.utilities + v.opex_other_val + v.taxes
-  v.expenses = v.capex + v.opex
+  // Set individual keys from bank
+  payrollKeys.forEach(k => { v[k] = bk(k) })
+  marketingKeys.forEach(k => { v[k] = bk(k) })
+  rentKeys.forEach(k => { v[k] = bk(k) })
+  utilKeys.forEach(k => { v[k] = bk(k) })
+  opexOtherKeys.forEach(k => { v[k] = bk(k) })
+  v.opex_household = cashOther + bk('household')
+  taxKeys.forEach(k => { v[k] = bk(k) })
 
-  // Apply manual adjustments
+  // Apply manual adjustments to individual keys
   adjustments.forEach(a => {
     const amt = Number(a.amount) || 0
     const key = a.category
     if (key && v[key] !== undefined) v[key] += amt
   })
 
-  // Recalc after adjustments
-  v.foodcost = v.fc_kitchen + v.fc_bar + v.fc_hookah
-  v.opex = v.payroll + v.foodcost + v.marketing + v.rent + v.utilities + v.opex_other_val + v.taxes
-  v.capex = v.capex_repair + v.capex_furniture + v.capex_other
-  v.expenses = v.capex + v.opex
+  // Recalc ALL group sums from children after adjustments
   v.revenue = v.rev_kitchen + v.rev_bar + v.rev_hookah + v.rev_other
+  v.foodcost = v.fc_kitchen + v.fc_bar + v.fc_hookah
+  v.capex = v.capex_repair + v.capex_furniture + v.capex_other
+  v.payroll = payrollKeys.reduce((s, k) => s + (v[k] || 0), 0)
+  v.marketing = marketingKeys.reduce((s, k) => s + (v[k] || 0), 0)
+  v.rent = rentKeys.reduce((s, k) => s + (v[k] || 0), 0)
+  v.utilities = utilKeys.reduce((s, k) => s + (v[k] || 0), 0)
+  v.opex_other_val = opexOtherKeys.reduce((s, k) => s + (v[k] || 0), 0)
+  v.taxes = taxKeys.reduce((s, k) => s + (v[k] || 0), 0)
+  v.opex = v.payroll + v.foodcost + v.marketing + v.rent + v.utilities + v.opex_other_val + v.taxes
+  v.expenses = v.capex + v.opex
   v.op_profit = v.revenue - v.opex
   v.net_profit = v.revenue - v.expenses
 
@@ -367,7 +379,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {deptData.length > 0 && <PieWithLegend title="Выручка по отделам" data={deptData} total={deptTotal} />}
         {fcData.length > 0 && <PieWithLegend title="Food Cost по отделам" data={fcData} total={fcTotal} />}
-        {expData.length > 0 && <PieWithLegend title="Расходы по категориям" data={expData} total={pnl.expenses} />}
+        {expData.length > 0 && <PieWithLegend title="Расходы по категориям (% от выручки)" data={expData} total={pnl.revenue} />}
       </div>
 
       {/* Records */}
