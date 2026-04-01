@@ -99,8 +99,8 @@ export default function AccountsPage() {
     const { from_id, to_id, amount, date, description } = transferForm
     if (!from_id || !to_id || !amount) return alert('Заполните все поля')
     if (from_id === to_id) return alert('Счета должны быть разными')
-    const amt = Number(amount)
-    if (amt <= 0) return alert('Сумма должна быть > 0')
+    const amt = Number(String(amount).replace(',', '.'))
+    if (!amt || amt <= 0) return alert('Сумма должна быть > 0')
 
     // Create paired transactions
     const { data: txOut } = await supabase.from('account_transactions').insert({
@@ -134,7 +134,7 @@ export default function AccountsPage() {
     if (!account_id || !amount) return alert('Заполните счёт и сумму')
     await supabase.from('account_transactions').insert({
       account_id: Number(account_id), transaction_date: date, type,
-      amount: Number(amount), counterparty, description, reference_type: 'manual',
+      amount: Number(String(amount).replace(',', '.')), counterparty, description, reference_type: 'manual',
     })
     setShowManualTx(false)
     setManualTxForm({ account_id: '', type: 'income', amount: '', date: today(), counterparty: '', description: '' })
@@ -149,13 +149,13 @@ export default function AccountsPage() {
       const expected = calcBalance(Number(accountId))
       await supabase.from('account_balances').upsert({
         account_id: Number(accountId), balance_date: reconcileDate,
-        expected_balance: expected, actual_balance: Number(actual),
+        expected_balance: expected, actual_balance: Number(String(actual).replace(',', '.')),
         verified_by: profile?.id,
       }, { onConflict: 'account_id,balance_date' })
     }
     // Update current_balance on accounts
     for (const [accountId, actual] of entries) {
-      await supabase.from('accounts').update({ current_balance: Number(actual) }).eq('id', Number(accountId))
+      await supabase.from('accounts').update({ current_balance: Number(String(actual).replace(',', '.')) }).eq('id', Number(accountId))
     }
     alert('✅ Сверка сохранена')
     setReconcileInputs({})
@@ -299,7 +299,7 @@ export default function AccountsPage() {
                 {activeAccounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
               </select></div>
             <div><label className="label">Сумма</label>
-              <input type="text" inputMode="numeric" value={transferForm.amount} onChange={e => setTransferForm(f => ({...f, amount: e.target.value.replace(/[^0-9]/g, '')}))} className="input text-sm w-full font-mono" placeholder="0" /></div>
+              <input type="text" inputMode="decimal" value={transferForm.amount} onChange={e => setTransferForm(f => ({...f, amount: e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',')}))} className="input text-sm w-full font-mono" placeholder="0" /></div>
             <div><label className="label">Дата</label>
               <input type="date" value={transferForm.date} onChange={e => setTransferForm(f => ({...f, date: e.target.value}))} className="input text-sm w-full" /></div>
             <div><label className="label">Описание</label>
@@ -328,7 +328,7 @@ export default function AccountsPage() {
                 <option value="expense">Расход</option>
               </select></div>
             <div><label className="label">Сумма</label>
-              <input type="text" inputMode="numeric" value={manualTxForm.amount} onChange={e => setManualTxForm(f => ({...f, amount: e.target.value.replace(/[^0-9]/g, '')}))} className="input text-sm w-full font-mono" placeholder="0" /></div>
+              <input type="text" inputMode="decimal" value={manualTxForm.amount} onChange={e => setManualTxForm(f => ({...f, amount: e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',')}))} className="input text-sm w-full font-mono" placeholder="0" /></div>
             <div><label className="label">Дата</label>
               <input type="date" value={manualTxForm.date} onChange={e => setManualTxForm(f => ({...f, date: e.target.value}))} className="input text-sm w-full" /></div>
             <div><label className="label">Контрагент</label>
@@ -449,7 +449,7 @@ export default function AccountsPage() {
                 const expected = calcBalance(acct.id)
                 const existingBal = balances.find(b => b.account_id === acct.id && b.balance_date === reconcileDate)
                 const actual = reconcileInputs[acct.id] !== undefined ? reconcileInputs[acct.id] : (existingBal?.actual_balance ?? '')
-                const disc = actual !== '' ? Number(actual) - expected : null
+                const disc = actual !== '' ? Number(String(actual).replace(',', '.')) - expected : null
                 return (
                   <div key={acct.id} className={cn('bg-slate-900 rounded-xl p-4', acct.parent_account_id && 'ml-6 border-l-2 border-slate-800', disc !== null && Math.abs(disc) > 100 && 'ring-1 ring-red-500/30')}>
                     <div className="flex items-center justify-between mb-2">
@@ -466,8 +466,8 @@ export default function AccountsPage() {
                       </div>
                       <div>
                         <div className="text-[10px] text-slate-500 uppercase mb-1">Фактический</div>
-                        <input type="text" inputMode="numeric" value={actual}
-                          onChange={e => setReconcileInputs(prev => ({...prev, [acct.id]: e.target.value.replace(/[^0-9.-]/g, '')}))}
+                        <input type="text" inputMode="decimal" value={actual}
+                          onChange={e => setReconcileInputs(prev => ({...prev, [acct.id]: e.target.value.replace(/[^0-9.,-]/g, '').replace('.', ',')}))}
                           className="input text-sm font-mono w-full" placeholder="Введите остаток" />
                       </div>
                       <div>
