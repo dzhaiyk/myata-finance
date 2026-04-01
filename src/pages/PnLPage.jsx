@@ -122,7 +122,7 @@ const PNL_STRUCTURE = [
 
   // === RESULTS ===
   { key: 'op_profit', label: 'Операционная прибыль (Доходы - OpEx)', level: 0, section: 'result', calc: 'revenue_minus_opex' },
-  { key: 'net_profit', label: 'Чистая прибыль', level: 0, section: 'result', calc: 'revenue_minus_all' },
+  { key: 'net_profit', label: 'Прибыль', level: 0, section: 'result', calc: 'revenue_minus_all' },
 
   // === RATIOS ===
   { key: 'margin_pct', label: 'Маржа (от опер. прибыли)', level: 0, section: 'ratio', calc: 'ratio' },
@@ -432,9 +432,9 @@ export default function PnLPage() {
             <div className="card-hover text-center"><div className="stat-label">Food Cost</div>
               <div className={cn('stat-value text-lg', values.fc_pct > 0.32 ? 'text-red-400' : 'text-yellow-400')}>{fmtPct(values.fc_pct)}</div></div>
             <div className="card-hover text-center"><div className="stat-label">ФОТ</div><div className="stat-value text-lg text-blue-400">{pct(values.payroll)}</div></div>
-            <div className="card-hover text-center"><div className="stat-label">Маржа опер. прибыли</div>
+            <div className="card-hover text-center"><div className="stat-label">Маржа</div>
               <div className={cn('stat-value text-lg', marginColor)}>{marginPct}%</div></div>
-            <div className="card-hover text-center"><div className="stat-label">Чистая прибыль</div>
+            <div className="card-hover text-center"><div className="stat-label">Прибыль</div>
               <div className={cn('stat-value text-lg', values.net_profit >= 0 ? 'text-brand-400' : 'text-red-400')}>{fmtM(values.net_profit)}</div></div>
           </div>
         )
