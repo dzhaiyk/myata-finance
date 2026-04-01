@@ -62,7 +62,6 @@ const PNL_STRUCTURE = [
   { key: 'payroll_hookah', label: 'ФОТ Кальян', level: 3, section: 'expenses', source: 'bank:payroll_hookah' },
   { key: 'payroll_hall', label: 'ФОТ Зал', level: 3, section: 'expenses', source: 'bank:payroll_hall' },
   { key: 'payroll_transport', label: 'Развозка', level: 3, section: 'expenses', source: 'bank:payroll_transport' },
-  { key: 'payroll_cash', label: 'ФОТ из кассы (авансы)', level: 3, section: 'expenses', source: 'daily:payroll' },
   { key: 'payroll_other', label: 'ФОТ Прочее', level: 3, section: 'expenses', source: 'bank:payroll_other' },
 
   // Food Cost
@@ -208,7 +207,7 @@ export default function PnLPage() {
       ;(w.tobacco || []).forEach(row => cashHookah += Number(row.amount) || 0)
       ;(w.other || []).forEach(row => cashOther += Number(row.amount) || 0)
     })
-    v.payroll_cash = cashPayroll
+    // payroll_cash removed — ФОТ вносится вручную
 
     // Bank expenses by category — period-aware aggregation
     const bankByCat = {}
