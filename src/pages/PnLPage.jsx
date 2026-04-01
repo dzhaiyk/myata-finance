@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
-import { cn, fmt, MONTHS_RU } from '@/lib/utils'
+import { cn, fmt, fmtK, MONTHS_RU } from '@/lib/utils'
 import { ChevronDown, ChevronRight, Plus, Trash2, Info, FileText, Upload, ChevronsUpDown, Pencil, Save } from 'lucide-react'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -156,21 +156,41 @@ export default function PnLPage() {
 
   const loadData = async () => {
     setLoading(true)
-    const startDate = viewMode === 'ytd' ? `${year}-01-01` : `${year}-${String(month).padStart(2, '0')}-01`
-    const endMonth = viewMode === 'ytd' ? 12 : month
-    const endDate = `${year}-${String(endMonth).padStart(2, '0')}-${new Date(year, endMonth, 0).getDate()}`
-
-    const [drRes, btRes, adjRes] = await Promise.all([
-      supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted'),
-      // Fetch bank tx where: transaction_date in range OR period overlaps with range
-      supabase.from('bank_transactions').select('*').or(
-        `and(transaction_date.gte.${startDate},transaction_date.lte.${endDate}),and(period_from.lte.${endDate},period_to.gte.${startDate})`
-      ),
-      supabase.from('pnl_data').select('*').eq('year', year).gte('month', viewMode === 'ytd' ? 1 : month).lte('month', endMonth),
-    ])
-    setDailyReports(drRes.data || [])
-    setBankTx(btRes.data || [])
-    setAdjustments(adjRes.data || [])
+    if (viewMode === 'year') {
+      const startDate = `${year}-01-01`
+      const endDate = `${year}-12-31`
+      const [drRes, btRes, adjRes] = await Promise.all([
+        supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted'),
+        supabase.from('bank_transactions').select('*').or(`and(transaction_date.gte.${startDate},transaction_date.lte.${endDate}),and(period_from.lte.${endDate},period_to.gte.${startDate})`),
+        supabase.from('pnl_data').select('*').eq('year', year),
+      ])
+      setDailyReports(drRes.data || [])
+      setBankTx(btRes.data || [])
+      setAdjustments(adjRes.data || [])
+    } else if (viewMode === 'overall') {
+      const [drRes, btRes, adjRes] = await Promise.all([
+        supabase.from('daily_reports').select('*').eq('status', 'submitted'),
+        supabase.from('bank_transactions').select('*'),
+        supabase.from('pnl_data').select('*'),
+      ])
+      setDailyReports(drRes.data || [])
+      setBankTx(btRes.data || [])
+      setAdjustments(adjRes.data || [])
+    } else {
+      const startDate = viewMode === 'ytd' ? `${year}-01-01` : `${year}-${String(month).padStart(2, '0')}-01`
+      const endMonth = viewMode === 'ytd' ? 12 : month
+      const endDate = `${year}-${String(endMonth).padStart(2, '0')}-${new Date(year, endMonth, 0).getDate()}`
+      const [drRes, btRes, adjRes] = await Promise.all([
+        supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted'),
+        supabase.from('bank_transactions').select('*').or(
+          `and(transaction_date.gte.${startDate},transaction_date.lte.${endDate}),and(period_from.lte.${endDate},period_to.gte.${startDate})`
+        ),
+        supabase.from('pnl_data').select('*').eq('year', year).gte('month', viewMode === 'ytd' ? 1 : month).lte('month', endMonth),
+      ])
+      setDailyReports(drRes.data || [])
+      setBankTx(btRes.data || [])
+      setAdjustments(adjRes.data || [])
+    }
     setLoading(false)
   }
 
@@ -307,6 +327,182 @@ export default function PnLPage() {
     return v
   }, [dailyReports, bankTx, adjustments, year, month, viewMode])
 
+  // Compute PnL values for a single month (used by year/overall modes)
+  const computeMonthValues = (targetYear, targetMonth, allDailyReports, allBankTx, allAdjustments) => {
+    const v = {}
+
+    // Filter data for this specific month
+    const monthReports = allDailyReports.filter(r => {
+      const d = new Date(r.report_date)
+      return d.getFullYear() === targetYear && d.getMonth() + 1 === targetMonth
+    })
+
+    // Check for historical data and manual adjustments
+    const historicalData = allAdjustments.filter(a =>
+      a.year === targetYear && a.month === targetMonth && a.type === 'historical'
+    )
+    const manualAdj = allAdjustments.filter(a =>
+      a.year === targetYear && a.month === targetMonth && a.type !== 'historical'
+    )
+
+    if (historicalData.length > 0 && monthReports.length === 0) {
+      // Use historical data — set each category directly
+      historicalData.forEach(h => {
+        if (h.category) v[h.category] = (v[h.category] || 0) + Number(h.amount)
+      })
+    } else {
+      // Use live data (daily reports + bank transactions)
+      let revK = 0, revB = 0, revH = 0, revO = 0
+      monthReports.forEach(r => {
+        const depts = (r.data?.departments) || []
+        depts.forEach(d => {
+          const a = Number(d.amount) || 0
+          if (d.name === 'Кухня') revK += a
+          else if (d.name === 'Бар') revB += a
+          else if (d.name === 'Кальян') revH += a
+          else revO += a
+        })
+      })
+      v.rev_kitchen = revK; v.rev_bar = revB; v.rev_hookah = revH; v.rev_other = revO
+      v.revenue = revK + revB + revH + revO
+
+      // Cash expenses from daily reports
+      let cashKitchen = 0, cashBar = 0, cashHookah = 0, cashOther = 0, cashHookahCapex = 0
+      monthReports.forEach(r => {
+        const w = r.data?.withdrawals || {}
+        ;(w.suppliers_kitchen || []).forEach(row => cashKitchen += Number(row.amount) || 0)
+        ;(w.suppliers_bar || []).forEach(row => cashBar += Number(row.amount) || 0)
+        ;(w.tobacco || []).forEach(row => {
+          const amt = Number(row.amount) || 0
+          if (row.name === 'Аппараты') cashHookahCapex += amt
+          else cashHookah += amt
+        })
+        ;(w.other || []).forEach(row => cashOther += Number(row.amount) || 0)
+      })
+
+      // Bank expenses by category — period-aware
+      const bankByCat = {}
+      allBankTx.forEach(tx => {
+        if (!tx.category || tx.category === 'uncategorized' || tx.category === 'internal') return
+        const txAmount = getTxAmountForMonth(tx, targetYear, targetMonth)
+        if (txAmount !== 0) {
+          bankByCat[tx.category] = (bankByCat[tx.category] || 0) + txAmount
+        }
+      })
+      const bk = (cat) => bankByCat[cat] || 0
+
+      // Assign bank values to PNL keys
+      PNL_STRUCTURE.forEach(line => {
+        if (!line.source) return
+        if (line.source.startsWith('bank:')) {
+          const cat = line.source.replace('bank:', '')
+          v[line.key] = bk(cat)
+        } else if (line.source.startsWith('both:')) {
+          const cat = line.source.replace('both:', '')
+          if (line.key === 'fc_kitchen') v[line.key] = cashKitchen + bk(cat)
+          else if (line.key === 'fc_bar') v[line.key] = cashBar + bk(cat)
+          else if (line.key === 'fc_hookah') v[line.key] = cashHookah + bk(cat)
+          else if (line.key === 'opex_household') v[line.key] = cashOther + bk(cat)
+          else v[line.key] = bk(cat)
+        }
+      })
+
+      // Add hookah equipment to CapEx прочее
+      v.capex_other = (v.capex_other || 0) + cashHookahCapex
+    }
+
+    // Apply manual adjustments on top
+    manualAdj.forEach(a => {
+      if (a.category) v[a.category] = (v[a.category] || 0) + Number(a.amount)
+    })
+
+    // Calculate group sums
+    const groups = ['capex', 'payroll', 'foodcost', 'marketing', 'rent', 'utilities', 'opex_other', 'taxes']
+    groups.forEach(gKey => {
+      const gIdx = PNL_STRUCTURE.findIndex(l => l.key === gKey)
+      if (gIdx < 0) return
+      const gLevel = PNL_STRUCTURE[gIdx].level
+      let sum = 0
+      for (let i = gIdx + 1; i < PNL_STRUCTURE.length; i++) {
+        const line = PNL_STRUCTURE[i]
+        if (line.level <= gLevel) break
+        if (line.level === gLevel + 1 && !line.calc) sum += v[line.key] || 0
+      }
+      v[gKey] = sum
+    })
+
+    v.revenue = (v.rev_kitchen || 0) + (v.rev_bar || 0) + (v.rev_hookah || 0) + (v.rev_other || 0)
+    v.opex = (v.payroll || 0) + (v.foodcost || 0) + (v.marketing || 0) + (v.rent || 0) + (v.utilities || 0) + (v.opex_other || 0) + (v.taxes || 0)
+    v.expenses = (v.capex || 0) + v.opex
+    v.op_profit = v.revenue - v.opex
+    v.net_profit = v.revenue - v.expenses
+
+    // Ratios
+    v.margin_pct = v.revenue > 0 ? v.op_profit / v.revenue : 0
+    v.fc_pct = v.revenue > 0 ? (v.foodcost || 0) / v.revenue : 0
+    v.fc_kitchen_pct = (v.rev_kitchen || 0) > 0 ? ((v.fc_kitchen || 0) / v.rev_kitchen) : 0
+    v.fc_bar_pct = (v.rev_bar || 0) > 0 ? ((v.fc_bar || 0) / v.rev_bar) : 0
+    v.fc_hookah_pct = (v.rev_hookah || 0) > 0 ? ((v.fc_hookah || 0) / v.rev_hookah) : 0
+
+    return v
+  }
+
+  // Multi-period data for year/overall modes
+  const multiPeriodData = useMemo(() => {
+    if (viewMode !== 'year' && viewMode !== 'overall') return null
+
+    if (viewMode === 'year') {
+      const columns = Array.from({ length: 12 }, (_, i) => ({
+        label: MONTHS_RU[i].slice(0, 3),
+        values: computeMonthValues(year, i + 1, dailyReports, bankTx, adjustments)
+      }))
+      // Add totals column
+      const totals = {}
+      PNL_STRUCTURE.forEach(line => {
+        totals[line.key] = columns.reduce((s, col) => s + (col.values[line.key] || 0), 0)
+      })
+      totals.margin_pct = totals.revenue > 0 ? totals.op_profit / totals.revenue : 0
+      totals.fc_pct = totals.revenue > 0 ? totals.foodcost / totals.revenue : 0
+      totals.fc_kitchen_pct = totals.rev_kitchen > 0 ? totals.fc_kitchen / totals.rev_kitchen : 0
+      totals.fc_bar_pct = totals.rev_bar > 0 ? totals.fc_bar / totals.rev_bar : 0
+      totals.fc_hookah_pct = totals.rev_hookah > 0 ? totals.fc_hookah / totals.rev_hookah : 0
+      columns.push({ label: 'Итого', values: totals, isTotal: true })
+      return columns
+    }
+
+    if (viewMode === 'overall') {
+      const years = [2022, 2023, 2024, 2025, 2026]
+      const columns = years.map(y => {
+        const yearValues = {}
+        for (let m = 1; m <= 12; m++) {
+          const mv = computeMonthValues(y, m, dailyReports, bankTx, adjustments)
+          PNL_STRUCTURE.forEach(line => {
+            yearValues[line.key] = (yearValues[line.key] || 0) + (mv[line.key] || 0)
+          })
+        }
+        // Recalculate ratios for the year
+        yearValues.margin_pct = yearValues.revenue > 0 ? yearValues.op_profit / yearValues.revenue : 0
+        yearValues.fc_pct = yearValues.revenue > 0 ? yearValues.foodcost / yearValues.revenue : 0
+        yearValues.fc_kitchen_pct = yearValues.rev_kitchen > 0 ? yearValues.fc_kitchen / yearValues.rev_kitchen : 0
+        yearValues.fc_bar_pct = yearValues.rev_bar > 0 ? yearValues.fc_bar / yearValues.rev_bar : 0
+        yearValues.fc_hookah_pct = yearValues.rev_hookah > 0 ? yearValues.fc_hookah / yearValues.rev_hookah : 0
+        return { label: String(y), values: yearValues }
+      })
+      // Totals
+      const totals = {}
+      PNL_STRUCTURE.forEach(line => {
+        totals[line.key] = columns.reduce((s, col) => s + (col.values[line.key] || 0), 0)
+      })
+      totals.margin_pct = totals.revenue > 0 ? totals.op_profit / totals.revenue : 0
+      totals.fc_pct = totals.revenue > 0 ? totals.foodcost / totals.revenue : 0
+      totals.fc_kitchen_pct = totals.rev_kitchen > 0 ? totals.fc_kitchen / totals.rev_kitchen : 0
+      totals.fc_bar_pct = totals.rev_bar > 0 ? totals.fc_bar / totals.rev_bar : 0
+      totals.fc_hookah_pct = totals.rev_hookah > 0 ? totals.fc_hookah / totals.rev_hookah : 0
+      columns.push({ label: 'Итого', values: totals, isTotal: true })
+      return columns
+    }
+  }, [viewMode, year, dailyReports, bankTx, adjustments])
+
   const toggleAll = () => {
     const newState = !allExpanded
     setAllExpanded(newState)
@@ -359,7 +555,7 @@ export default function PnLPage() {
 
   if (loading) return <div className="text-center text-slate-500 py-20">Загрузка...</div>
 
-  const periodLabel = viewMode === 'ytd' ? `${year} YTD` : `${MONTHS_RU[month - 1]} ${year}`
+  const periodLabel = viewMode === 'overall' ? 'Все годы' : viewMode === 'year' ? `${year} год` : viewMode === 'ytd' ? `${year} YTD` : `${MONTHS_RU[month - 1]} ${year}`
 
   // Count period-allocated bank transactions for info display
   const periodAllocatedCount = bankTx.filter(tx => tx.period_from && tx.period_to).length
@@ -391,54 +587,70 @@ export default function PnLPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <select value={month} onChange={e => setMonth(Number(e.target.value))} className="input text-sm">
-            {MONTHS_RU.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-          </select>
-          <select value={year} onChange={e => setYear(Number(e.target.value))} className="input text-sm">
-            {[2023, 2024, 2025, 2026].map(y => <option key={y}>{y}</option>)}
-          </select>
+          {viewMode !== 'overall' && (
+            <>
+              {(viewMode === 'month' || viewMode === 'ytd') && (
+                <select value={month} onChange={e => setMonth(Number(e.target.value))} className="input text-sm">
+                  {MONTHS_RU.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                </select>
+              )}
+              <select value={year} onChange={e => setYear(Number(e.target.value))} className="input text-sm">
+                {[2022, 2023, 2024, 2025, 2026].map(y => <option key={y}>{y}</option>)}
+              </select>
+            </>
+          )}
           <div className="flex bg-slate-900 rounded-lg p-0.5">
-            <button onClick={() => setViewMode('month')} className={cn('px-3 py-1.5 rounded-md text-xs font-medium', viewMode === 'month' ? 'bg-slate-700 text-white' : 'text-slate-500')}>Месяц</button>
-            <button onClick={() => setViewMode('ytd')} className={cn('px-3 py-1.5 rounded-md text-xs font-medium', viewMode === 'ytd' ? 'bg-slate-700 text-white' : 'text-slate-500')}>YTD</button>
+            {['month', 'ytd', 'year', 'overall'].map(mode => (
+              <button key={mode} onClick={() => setViewMode(mode)}
+                className={cn('px-3 py-1.5 rounded-md text-xs font-medium', viewMode === mode ? 'bg-slate-700 text-white' : 'text-slate-500')}>
+                {{ month: 'Месяц', ytd: 'YTD', year: 'Год', overall: 'Обзор' }[mode]}
+              </button>
+            ))}
           </div>
           <button onClick={toggleAll} className="btn-secondary text-xs flex items-center gap-1.5" title={allExpanded ? 'Свернуть всё' : 'Развернуть всё'}>
             <ChevronsUpDown className="w-4 h-4" />{allExpanded ? 'Свернуть' : 'Развернуть'}
           </button>
-          {!editMode ? (
-            <button onClick={startEdit} className="btn-secondary text-xs flex items-center gap-1.5">
-              <Pencil className="w-3.5 h-3.5" /> Редактировать
-            </button>
-          ) : (
-            <div className="flex gap-1.5">
-              <button onClick={saveEdits} className="btn-primary text-xs flex items-center gap-1.5">
-                <Save className="w-3.5 h-3.5" /> Сохранить
+          {viewMode === 'month' && (
+            !editMode ? (
+              <button onClick={startEdit} className="btn-secondary text-xs flex items-center gap-1.5">
+                <Pencil className="w-3.5 h-3.5" /> Редактировать
               </button>
-              <button onClick={cancelEdit} className="btn-secondary text-xs">Отмена</button>
-            </div>
+            ) : (
+              <div className="flex gap-1.5">
+                <button onClick={saveEdits} className="btn-primary text-xs flex items-center gap-1.5">
+                  <Save className="w-3.5 h-3.5" /> Сохранить
+                </button>
+                <button onClick={cancelEdit} className="btn-secondary text-xs">Отмена</button>
+              </div>
+            )
           )}
         </div>
       </div>
 
       {/* KPI Cards */}
       {(() => {
+        const kpiValues = (viewMode === 'year' || viewMode === 'overall')
+          ? (multiPeriodData?.find(c => c.isTotal)?.values || {})
+          : values
         const fmtM = (v) => (v / 1e6).toFixed(1) + 'М ₸'
-        const marginPct = values.revenue > 0 ? (values.op_profit / values.revenue * 100).toFixed(1) : 0
+        const marginPct = kpiValues.revenue > 0 ? (kpiValues.op_profit / kpiValues.revenue * 100).toFixed(1) : 0
         const marginColor = marginPct >= 30 ? 'text-green-400' : marginPct >= 15 ? 'text-yellow-400' : 'text-red-400'
         return (
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            <div className="card-hover text-center"><div className="stat-label">Выручка</div><div className="stat-value text-lg text-green-400">{fmtM(values.revenue)}</div></div>
+            <div className="card-hover text-center"><div className="stat-label">Выручка</div><div className="stat-value text-lg text-green-400">{fmtM(kpiValues.revenue || 0)}</div></div>
             <div className="card-hover text-center"><div className="stat-label">Food Cost</div>
-              <div className={cn('stat-value text-lg', values.fc_pct > 0.32 ? 'text-red-400' : 'text-yellow-400')}>{fmtPct(values.fc_pct)}</div></div>
-            <div className="card-hover text-center"><div className="stat-label">ФОТ</div><div className="stat-value text-lg text-blue-400">{pct(values.payroll)}</div></div>
+              <div className={cn('stat-value text-lg', (kpiValues.fc_pct || 0) > 0.32 ? 'text-red-400' : 'text-yellow-400')}>{fmtPct(kpiValues.fc_pct || 0)}</div></div>
+            <div className="card-hover text-center"><div className="stat-label">ФОТ</div><div className="stat-value text-lg text-blue-400">{kpiValues.revenue > 0 ? (((kpiValues.payroll || 0) / kpiValues.revenue) * 100).toFixed(1) + '%' : '—'}</div></div>
             <div className="card-hover text-center"><div className="stat-label">Маржа</div>
               <div className={cn('stat-value text-lg', marginColor)}>{marginPct}%</div></div>
             <div className="card-hover text-center"><div className="stat-label">Прибыль</div>
-              <div className={cn('stat-value text-lg', values.net_profit >= 0 ? 'text-brand-400' : 'text-red-400')}>{fmtM(values.net_profit)}</div></div>
+              <div className={cn('stat-value text-lg', (kpiValues.net_profit || 0) >= 0 ? 'text-brand-400' : 'text-red-400')}>{fmtM(kpiValues.net_profit || 0)}</div></div>
           </div>
         )
       })()}
 
-      {/* P&L Table */}
+      {/* P&L Vertical Table (month/ytd) */}
+      {(viewMode === 'month' || viewMode === 'ytd') && (
       <div className="card p-0 divide-y divide-slate-800">
         {PNL_STRUCTURE.map((line, idx) => {
           if (!isVisible(line, idx)) return null
@@ -520,9 +732,75 @@ export default function PnLPage() {
           )
         })}
       </div>
+      )}
+
+      {/* P&L Horizontal Table (year/overall) */}
+      {(viewMode === 'year' || viewMode === 'overall') && multiPeriodData && (
+        <div className="card p-0 overflow-x-auto">
+          <table className="w-full text-sm" style={{ minWidth: viewMode === 'year' ? 1400 : 900 }}>
+            <thead>
+              <tr>
+                <th className="table-header text-left sticky left-0 bg-slate-900 z-10 min-w-[200px]">Статья</th>
+                {multiPeriodData.map(col => (
+                  <th key={col.label} className={cn('table-header text-right min-w-[90px]', col.isTotal && 'bg-slate-800/50 font-bold')}>
+                    {col.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {PNL_STRUCTURE.map((line, idx) => {
+                if (!isVisible(line, idx)) return null
+                const isGroup = line.calc === 'sum_children'
+                const isResult = line.section === 'result'
+                const isRatio = line.section === 'ratio'
+                const isCollapsedRow = collapsed[line.key]
+
+                const padClass = line.level === 0 ? '' : line.level === 1 ? 'pl-4' : line.level === 2 ? 'pl-8' : 'pl-12'
+
+                let rowClass = ''
+                if (line.level === 0) rowClass = 'bg-slate-900/50 font-bold'
+                if (isResult) rowClass = (multiPeriodData[0]?.values[line.key] || 0) >= 0 ? 'bg-green-500/5' : 'bg-red-500/5'
+
+                return (
+                  <tr key={line.key} className={cn('hover:bg-slate-800/30', rowClass)}>
+                    <td className={cn('table-cell sticky left-0 bg-slate-900 z-10', padClass)}>
+                      {isGroup ? (
+                        <button onClick={() => toggleSection(line.key)} className="flex items-center gap-1 w-full">
+                          {isCollapsedRow ? <ChevronRight className="w-3 h-3 text-slate-500" /> : <ChevronDown className="w-3 h-3 text-slate-500" />}
+                          <span className={cn('text-sm', isGroup && 'font-bold')}>{line.label}</span>
+                        </button>
+                      ) : (
+                        <span className={cn('text-sm', isResult ? 'font-bold' : 'text-slate-400')}>{line.label}</span>
+                      )}
+                    </td>
+                    {multiPeriodData.map(col => {
+                      const val = col.values[line.key] || 0
+                      let display = ''
+                      if (isRatio) display = val ? (val * 100).toFixed(1) + '%' : '\u2014'
+                      else display = val ? fmtK(val) : '\u2014'
+
+                      let color = 'text-slate-300'
+                      if (line.key === 'revenue' || line.key === 'op_profit' || line.key === 'net_profit') color = val >= 0 ? 'text-green-400' : 'text-red-400'
+                      else if (line.section === 'expenses' && line.level === 0) color = 'text-red-400'
+
+                      return (
+                        <td key={col.label} className={cn('table-cell text-right font-mono text-xs', color, col.isTotal && 'bg-slate-800/50 font-bold')}
+                          title={val ? fmt(val) : ''}>
+                          {display}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Adjustment audit log */}
-      {!editMode && adjustments.length > 0 && (
+      {!editMode && (viewMode === 'month' || viewMode === 'ytd') && adjustments.length > 0 && (
         <div className="card border-purple-500/20 bg-purple-500/5">
           <div className="text-xs font-semibold text-purple-400 mb-3">Лог корректировок ({adjustments.length})</div>
           <div className="space-y-1.5">
