@@ -8,8 +8,8 @@ import { Save, Send, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Plu
 import jsPDF from 'jspdf'
 
 const MoneyInput = ({ value, onChange, className = '', disabled = false }) => (
-  <input type="text" inputMode="numeric" value={value} disabled={disabled}
-    onChange={e => onChange(e.target.value.replace(/[^0-9]/g, ''))}
+  <input type="text" inputMode="decimal" value={value} disabled={disabled}
+    onChange={e => onChange(e.target.value.replace(/[^0-9.,]/g, '').replace('.', ','))}
     className={`input text-right font-mono text-sm tabular-nums w-full ${className} ${disabled ? 'opacity-50' : ''}`}
     placeholder="0" />
 )
@@ -269,7 +269,7 @@ export default function DailyReportPage() {
   }
 
   // Calculations
-  const num = (v) => Number(v) || 0
+  const num = (v) => Number(String(v).replace(',', '.')) || 0
   const sectionTotal = (key) => (withdrawals[key] || []).reduce((s, r) => s + num(r.amount), 0)
   const totalWithdrawals = SECTIONS.reduce((s, sec) => s + sectionTotal(sec.key), 0)
   const totalRevenue = revenue.reduce((s, r) => s + num(r.amount), 0)
