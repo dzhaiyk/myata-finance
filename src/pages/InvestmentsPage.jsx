@@ -231,16 +231,16 @@ export default function InvestmentsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="card">
               <p className="stat-label">Всего вложено</p>
-              <p className="stat-value text-green-400">{fmt(totalInvested)} ₸</p>
+              <p className="stat-value text-green-400">{(totalInvested / 1e6).toFixed(1)}М ₸</p>
             </div>
             <div className="card">
               <p className="stat-label">Всего выведено</p>
-              <p className="stat-value text-blue-400">{fmt(totalWithdrawn)} ₸</p>
+              <p className="stat-value text-blue-400">{(totalWithdrawn / 1e6).toFixed(1)}М ₸</p>
             </div>
             <div className="card">
-              <p className="stat-label">Чистая прибыль</p>
+              <p className="stat-label">Прибыль</p>
               <p className={cn('stat-value', totalProfit >= 0 ? 'text-green-400' : 'text-red-400')}>
-                {fmt(totalProfit)} ₸
+                {(totalProfit / 1e6).toFixed(1)}М ₸
               </p>
             </div>
             <div className="card">
