@@ -8,19 +8,8 @@ const fmtM = (v) => {
   if (!v || v === 0) return ''
   if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(1) + 'М'
   if (Math.abs(v) >= 1e3) return (v / 1e3).toFixed(0) + 'К'
-  return String(v)
+  return String(Math.round(v))
 }
-
-// OpEx categories from PnL structure (keys match PnL level-2 groups under opex)
-const OPEX_CATEGORIES = [
-  { key: 'payroll', label: 'ФОТ', color: '#818cf8', dailyFields: ['payroll'] },
-  { key: 'foodcost', label: 'Food Cost', color: '#f59e0b', dailyFields: ['suppliers_kitchen', 'suppliers_bar', 'tobacco'] },
-  { key: 'marketing', label: 'Маркетинг', color: '#ec4899', dailyFields: [] },
-  { key: 'rent', label: 'Аренда', color: '#8b5cf6', dailyFields: [] },
-  { key: 'utilities', label: 'Коммунальные', color: '#06b6d4', dailyFields: [] },
-  { key: 'opex_other', label: 'OpEx прочее', color: '#f472b6', dailyFields: ['other'] },
-  { key: 'taxes', label: 'Налоги', color: '#ef4444', dailyFields: [] },
-]
 
 const PieWithLegend = ({ title, data, total }) => (
   <div className="card">
@@ -62,175 +51,183 @@ const PieWithLegend = ({ title, data, total }) => (
   </div>
 )
 
+// Compute PnL values for a set of daily reports + bank transactions + adjustments
+// Same logic as PnLPage.jsx values computation
+function computePnL(dailyReports, bankTxs, adjustments) {
+  const v = {}
+
+  // Revenue
+  let revK = 0, revB = 0, revH = 0, revO = 0
+  dailyReports.forEach(r => {
+    const depts = r.data?.departments || []
+    depts.forEach(d => {
+      const a = Number(d.amount) || 0
+      if (d.name === 'Кухня') revK += a
+      else if (d.name === 'Бар') revB += a
+      else if (d.name === 'Кальян') revH += a
+      else revO += a
+    })
+  })
+  v.rev_kitchen = revK; v.rev_bar = revB; v.rev_hookah = revH; v.rev_other = revO
+  v.revenue = revK + revB + revH + revO
+
+  // Cash expenses
+  let cashKitchen = 0, cashBar = 0, cashHookah = 0, cashOther = 0, cashHookahCapex = 0
+  dailyReports.forEach(r => {
+    const w = r.data?.withdrawals || {}
+    const sum = (arr) => (arr || []).reduce((s, row) => s + (Number(row.amount) || 0), 0)
+    cashKitchen += sum(w.suppliers_kitchen)
+    cashBar += sum(w.suppliers_bar)
+    ;(w.tobacco || []).forEach(row => {
+      const amt = Number(row.amount) || 0
+      if (row.name === 'Аппараты') cashHookahCapex += amt
+      else cashHookah += amt
+    })
+    cashOther += sum(w.other)
+  })
+
+  // Bank expenses by category
+  const bankByCat = {}
+  bankTxs.forEach(tx => {
+    if (!tx.category || tx.category === 'uncategorized' || tx.category === 'internal') return
+    if (!tx.is_debit) return
+    bankByCat[tx.category] = (bankByCat[tx.category] || 0) + Math.abs(Number(tx.amount) || 0)
+  })
+  const bk = (cat) => bankByCat[cat] || 0
+
+  // Food cost (cash + bank)
+  v.fc_kitchen = cashKitchen + bk('cogs_kitchen')
+  v.fc_bar = cashBar + bk('cogs_bar')
+  v.fc_hookah = cashHookah + bk('cogs_hookah')
+  v.foodcost = v.fc_kitchen + v.fc_bar + v.fc_hookah
+
+  // CapEx
+  v.capex_repair = bk('capex_repair')
+  v.capex_furniture = bk('capex_furniture')
+  v.capex_other = bk('capex_other') + cashHookahCapex
+  v.capex = v.capex_repair + v.capex_furniture + v.capex_other
+
+  // OpEx subcategories (bank only, except household)
+  v.payroll = ['payroll_mgmt', 'payroll_kitchen', 'payroll_bar', 'payroll_hookah', 'payroll_hall', 'payroll_transport', 'payroll_other'].reduce((s, k) => s + bk(k), 0)
+  v.marketing = ['mkt_smm', 'mkt_target', 'mkt_2gis', 'mkt_yandex', 'mkt_google', 'mkt_other'].reduce((s, k) => s + bk(k), 0)
+  v.rent = ['rent_premises', 'rent_warehouse', 'rent_property_tax'].reduce((s, k) => s + bk(k), 0)
+  v.utilities = ['util_electric', 'util_water', 'util_heating', 'util_bi', 'util_internet', 'util_waste', 'util_other'].reduce((s, k) => s + bk(k), 0)
+  v.opex_other_val = cashOther + ['bank_fee', 'opex_security', 'opex_software', 'opex_menu', 'opex_pest', 'opex_grease', 'opex_repair', 'opex_uniform', 'opex_music', 'opex_royalty', 'opex_misc'].reduce((s, k) => s + bk(k), 0)
+  v.taxes = ['tax_retail', 'tax_payroll', 'tax_insurance', 'tax_alcohol', 'tax_hookah', 'tax_other'].reduce((s, k) => s + bk(k), 0)
+
+  v.opex = v.payroll + v.foodcost + v.marketing + v.rent + v.utilities + v.opex_other_val + v.taxes
+  v.expenses = v.capex + v.opex
+
+  // Apply manual adjustments
+  adjustments.forEach(a => {
+    const amt = Number(a.amount) || 0
+    const key = a.category
+    if (key && v[key] !== undefined) v[key] += amt
+  })
+
+  // Recalc after adjustments
+  v.foodcost = v.fc_kitchen + v.fc_bar + v.fc_hookah
+  v.opex = v.payroll + v.foodcost + v.marketing + v.rent + v.utilities + v.opex_other_val + v.taxes
+  v.capex = v.capex_repair + v.capex_furniture + v.capex_other
+  v.expenses = v.capex + v.opex
+  v.revenue = v.rev_kitchen + v.rev_bar + v.rev_hookah + v.rev_other
+  v.op_profit = v.revenue - v.opex
+  v.net_profit = v.revenue - v.expenses
+
+  return v
+}
+
 export default function DashboardPage() {
   const [year, setYear] = useState(2026)
   const [reports, setReports] = useState([])
   const [allReports, setAllReports] = useState([])
   const [bankTx, setBankTx] = useState([])
+  const [adjustments, setAdjustments] = useState([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    loadData()
-  }, [year])
+  useEffect(() => { loadData() }, [year])
 
   const loadData = async () => {
     setLoading(true)
     const startDate = `${year}-01-01`
     const endDate = `${year}-12-31`
 
-    const [reportsRes, allReportsRes, bankRes] = await Promise.all([
+    const [reportsRes, allReportsRes, bankRes, adjRes] = await Promise.all([
       supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted').order('report_date'),
       supabase.from('daily_reports').select('id, report_date, total_revenue, status').eq('status', 'submitted').order('report_date'),
       supabase.from('bank_transactions').select('transaction_date, amount, is_debit, category').gte('transaction_date', startDate).lte('transaction_date', endDate),
+      supabase.from('pnl_data').select('*').eq('year', year),
     ])
 
     setReports(reportsRes.data || [])
     setAllReports(allReportsRes.data || [])
     setBankTx(bankRes.data || [])
+    setAdjustments(adjRes.data || [])
     setLoading(false)
   }
 
-  // Determine which months are "completed": past month + has bank import data
+  // Completed months: past month + has bank import data
   const now = new Date()
-  const currentMonth = now.getFullYear() === year ? now.getMonth() : 12 // 0-based; if viewing past year, all months are past
+  const currentMonth = now.getFullYear() === year ? now.getMonth() : 12
   const monthsWithBank = new Set()
   bankTx.forEach(tx => {
     const m = new Date(tx.transaction_date).getMonth()
-    if (m < currentMonth) monthsWithBank.add(m) // only past months
+    if (m < currentMonth) monthsWithBank.add(m)
   })
 
-  // Use only completed months (past + has bank data) for KPIs
-  const completedReports = reports.filter(r => {
-    const m = new Date(r.report_date).getMonth()
-    return monthsWithBank.has(m)
-  })
+  const completedReports = reports.filter(r => monthsWithBank.has(new Date(r.report_date).getMonth()))
+  const completedBankTx = bankTx.filter(tx => monthsWithBank.has(new Date(tx.transaction_date).getMonth()))
+  const completedAdj = adjustments.filter(a => monthsWithBank.has(a.month - 1))
 
-  // === KPIs from completed months ===
-  const totalRevenue = completedReports.reduce((s, r) => s + (r.total_revenue || 0), 0)
-  const discrepancies = reports.filter(r => Math.abs(r.cash_discrepancy || 0) > 500)
+  // Compute PnL using same logic as PnLPage
+  const pnl = computePnL(completedReports, completedBankTx, completedAdj)
 
-  // Monthly breakdown — always 12 months, only completed months have data
+  // Monthly breakdown
   const monthlyData = MONTHS_RU.map((name, i) => {
     if (!monthsWithBank.has(i)) return { month: name.slice(0, 3), revenue: 0, expenses: 0 }
-    const monthReports = completedReports.filter(r => new Date(r.report_date).getMonth() === i)
-    const rev = monthReports.reduce((s, r) => s + (r.total_revenue || 0), 0)
-    return { month: name.slice(0, 3), revenue: rev, expenses: 0 } // expenses filled after totalExpenses
+    const mReports = completedReports.filter(r => new Date(r.report_date).getMonth() === i)
+    const mBank = completedBankTx.filter(tx => new Date(tx.transaction_date).getMonth() === i)
+    const mAdj = adjustments.filter(a => a.month === i + 1)
+    const mPnl = computePnL(mReports, mBank, mAdj)
+    return { month: name.slice(0, 3), revenue: mPnl.revenue, expenses: mPnl.expenses }
   })
 
-  // Department breakdown (completed months)
-  const deptTotals = { kitchen: 0, bar: 0, hookah: 0, other: 0 }
-  completedReports.forEach(r => {
-    const deps = r.data?.departments || []
-    if (Array.isArray(deps)) {
-      deps.forEach((d, i) => {
-        if (i === 0) deptTotals.kitchen += (Number(d.amount) || 0)
-        if (i === 1) deptTotals.bar += (Number(d.amount) || 0)
-        if (i === 2) deptTotals.hookah += (Number(d.amount) || 0)
-        if (i === 3) deptTotals.other += (Number(d.amount) || 0)
-      })
-    }
-  })
+  // Department revenue
   const deptData = [
-    { name: 'Кухня', value: deptTotals.kitchen, color: '#22c55e' },
-    { name: 'Бар', value: deptTotals.bar, color: '#3b82f6' },
-    { name: 'Кальян', value: deptTotals.hookah, color: '#f59e0b' },
+    { name: 'Кухня', value: pnl.rev_kitchen, color: '#22c55e' },
+    { name: 'Бар', value: pnl.rev_bar, color: '#3b82f6' },
+    { name: 'Кальян', value: pnl.rev_hookah, color: '#f59e0b' },
   ].filter(d => d.value > 0)
   const deptTotal = deptData.reduce((s, d) => s + d.value, 0)
 
-  // Food cost by department (completed months: cash from daily reports + bank)
-  const fcTotals = { kitchen: 0, bar: 0, hookah: 0 }
-  completedReports.forEach(r => {
-    const w = r.data?.withdrawals || {}
-    const sum = (arr) => (arr || []).reduce((s, row) => s + (Number(row.amount) || 0), 0)
-    fcTotals.kitchen += sum(w.suppliers_kitchen)
-    fcTotals.bar += sum(w.suppliers_bar)
-    fcTotals.hookah += sum(w.tobacco)
-  })
-  // Add bank food cost transactions
-  const fcBankMap = { cogs_kitchen: 'kitchen', cogs_bar: 'bar', cogs_hookah: 'hookah' }
-  bankTx.forEach(tx => {
-    if (!tx.is_debit || !tx.category) return
-    const m = new Date(tx.transaction_date).getMonth()
-    if (!monthsWithBank.has(m)) return
-    const dept = fcBankMap[tx.category]
-    if (dept) fcTotals[dept] += Math.abs(Number(tx.amount) || 0)
-  })
+  // Food cost by department
   const fcData = [
-    { name: 'Кухня', value: fcTotals.kitchen, color: '#22c55e' },
-    { name: 'Бар', value: fcTotals.bar, color: '#3b82f6' },
-    { name: 'Кальян', value: fcTotals.hookah, color: '#f59e0b' },
+    { name: 'Кухня', value: pnl.fc_kitchen, color: '#22c55e' },
+    { name: 'Бар', value: pnl.fc_bar, color: '#3b82f6' },
+    { name: 'Кальян', value: pnl.fc_hookah, color: '#f59e0b' },
   ].filter(d => d.value > 0)
   const fcTotal = fcData.reduce((s, d) => s + d.value, 0)
-  const fcPct = totalRevenue > 0 ? fcTotal / totalRevenue : 0
+  const fcPct = pnl.revenue > 0 ? fcTotal / pnl.revenue : 0
   const fcColor = fcPct < 0.35 ? 'green' : fcPct < 0.45 ? 'yellow' : 'red'
 
-  // Expense categories from PnL structure (completed months, from daily reports)
-  const expCatTotals = {}
-  OPEX_CATEGORIES.forEach(cat => { expCatTotals[cat.key] = 0 })
-  completedReports.forEach(r => {
-    const w = r.data?.withdrawals || {}
-    const sum = (arr) => (arr || []).reduce((s, row) => s + (Number(row.amount) || 0), 0)
-    OPEX_CATEGORIES.forEach(cat => {
-      cat.dailyFields.forEach(field => {
-        expCatTotals[cat.key] += sum(w[field])
-      })
-    })
-  })
-  // Add bank transaction categories (matching PnL source mappings)
-  const bankCatMap = {
-    payroll: /^payroll/,
-    foodcost: /^cogs_/,
-    marketing: /^mkt/,
-    rent: /^rent/,
-    utilities: /^util/,
-    taxes: /^tax/,
-    opex_other: /^(bank_fee|opex_|capex_)/,
-  }
-  bankTx.forEach(tx => {
-    if (!tx.is_debit || !tx.category) return
-    const m = new Date(tx.transaction_date).getMonth()
-    if (!monthsWithBank.has(m)) return
-    for (const [catKey, regex] of Object.entries(bankCatMap)) {
-      if (regex.test(tx.category)) {
-        expCatTotals[catKey] += Math.abs(Number(tx.amount) || 0)
-        break
-      }
-    }
-  })
-  const expData = OPEX_CATEGORIES.map(cat => ({
-    name: cat.label, value: expCatTotals[cat.key], color: cat.color
-  })).filter(d => d.value > 0)
-  const totalExpenses = expData.reduce((s, d) => s + d.value, 0)
+  // Expense categories
+  const expData = [
+    { name: 'ФОТ', value: pnl.payroll, color: '#818cf8' },
+    { name: 'Food Cost', value: pnl.foodcost, color: '#f59e0b' },
+    { name: 'Маркетинг', value: pnl.marketing, color: '#ec4899' },
+    { name: 'Аренда', value: pnl.rent, color: '#8b5cf6' },
+    { name: 'Коммунальные', value: pnl.utilities, color: '#06b6d4' },
+    { name: 'OpEx прочее', value: pnl.opex_other_val, color: '#f472b6' },
+    { name: 'Налоги', value: pnl.taxes, color: '#ef4444' },
+    { name: 'CapEx', value: pnl.capex, color: '#fb923c' },
+  ].filter(d => d.value > 0)
 
-  // Fill monthly expenses (distribute proportionally by month based on bank tx)
-  const monthlyExpMap = {}
-  completedReports.forEach(r => {
-    const m = new Date(r.report_date).getMonth()
-    if (!monthlyExpMap[m]) monthlyExpMap[m] = 0
-    const w = r.data?.withdrawals || {}
-    const sum = (arr) => (arr || []).reduce((s, row) => s + (Number(row.amount) || 0), 0)
-    monthlyExpMap[m] += sum(w.suppliers_kitchen) + sum(w.suppliers_bar) + sum(w.tobacco) + sum(w.payroll) + sum(w.other)
-  })
-  bankTx.forEach(tx => {
-    if (!tx.is_debit || !tx.category || tx.category === 'uncategorized' || tx.category === 'internal') return
-    const m = new Date(tx.transaction_date).getMonth()
-    if (!monthsWithBank.has(m)) return
-    // Skip categories already in daily reports (cogs = food cost cash, household = other cash)
-    if (/^cogs_|^household$/.test(tx.category)) return
-    if (!monthlyExpMap[m]) monthlyExpMap[m] = 0
-    monthlyExpMap[m] += Math.abs(Number(tx.amount) || 0)
-  })
-  monthlyData.forEach(md => {
-    const i = MONTHS_RU.findIndex(n => n.startsWith(md.month))
-    if (i >= 0) md.expenses = monthlyExpMap[i] || 0
-  })
-
-  // Operating margin (revenue - all expenses)
-  const opMargin = totalRevenue > 0 ? (totalRevenue - totalExpenses) / totalRevenue : 0
+  // Margin
+  const opMargin = pnl.revenue > 0 ? pnl.op_profit / pnl.revenue : 0
   const marginColor = opMargin >= 0.30 ? 'green' : opMargin >= 0.15 ? 'yellow' : 'red'
 
-  // Completed months label
   const completedMonthNames = [...monthsWithBank].sort((a, b) => a - b).map(m => MONTHS_RU[m].slice(0, 3))
+  const discrepancies = reports.filter(r => Math.abs(r.cash_discrepancy || 0) > 500)
 
   // === RECORDS (all time) ===
   const WEEKDAYS_RU = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
@@ -280,7 +277,7 @@ export default function DashboardPage() {
   const maxWeekdayAvg = Math.max(...weekdayStats.map(w => w.avg), 1)
 
   // Median
-  const dailyRevenues = reports.map(r => r.total_revenue || 0).filter(v => v > 0).sort((a, b) => a - b)
+  const dailyRevenues = completedReports.map(r => r.total_revenue || 0).filter(v => v > 0).sort((a, b) => a - b)
   const median = dailyRevenues.length > 0
     ? dailyRevenues.length % 2 === 1
       ? dailyRevenues[Math.floor(dailyRevenues.length / 2)]
@@ -295,7 +292,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-display font-bold tracking-tight">Dashboard</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Мята Platinum 4YOU — {completedMonthNames.length > 0 ? `Данные: ${completedMonthNames.join(', ')}` : 'Финансовый обзор'}
+            Мята Platinum 4YOU — {completedMonthNames.length > 0 ? `Данные: ${completedMonthNames.join(', ')}` : 'Нет закрытых месяцев'}
           </p>
         </div>
         <select value={year} onChange={e => setYear(Number(e.target.value))} className="input text-sm">
@@ -310,7 +307,7 @@ export default function DashboardPage() {
             <div className="stat-label">Доходы</div>
             <DollarSign className="w-4 h-4 text-green-500" />
           </div>
-          <div className="stat-value text-green-400">{(totalRevenue / 1e6).toFixed(1)}М ₸</div>
+          <div className="stat-value text-green-400">{(pnl.revenue / 1e6).toFixed(1)}М ₸</div>
           <div className="text-xs text-slate-500 mt-2">{completedReports.length} отчётов</div>
         </div>
 
@@ -319,8 +316,8 @@ export default function DashboardPage() {
             <div className="stat-label">Расходы</div>
             <TrendingDown className="w-4 h-4 text-red-500" />
           </div>
-          <div className="stat-value text-red-400">{(totalExpenses / 1e6).toFixed(1)}М ₸</div>
-          <div className="text-xs text-slate-500 mt-2">касса + банк</div>
+          <div className="stat-value text-red-400">{(pnl.expenses / 1e6).toFixed(1)}М ₸</div>
+          <div className="text-xs text-slate-500 mt-2">OpEx + CapEx</div>
         </div>
 
         <div className={`card-hover bg-gradient-to-br ${fcColor === 'green' ? 'from-green-500/20 to-green-600/5 border-green-500/20' : fcColor === 'yellow' ? 'from-yellow-500/20 to-yellow-600/5 border-yellow-500/20' : 'from-red-500/20 to-red-600/5 border-red-500/20'}`}>
@@ -336,17 +333,17 @@ export default function DashboardPage() {
 
         <div className={`card-hover bg-gradient-to-br ${marginColor === 'green' ? 'from-green-500/20 to-green-600/5 border-green-500/20' : marginColor === 'yellow' ? 'from-yellow-500/20 to-yellow-600/5 border-yellow-500/20' : 'from-red-500/20 to-red-600/5 border-red-500/20'}`}>
           <div className="flex items-start justify-between mb-3">
-            <div className="stat-label">Операционная маржа</div>
+            <div className="stat-label">Маржа</div>
             <CirclePercent className="w-4 h-4 text-slate-500" />
           </div>
           <div className={`stat-value ${marginColor === 'green' ? 'text-green-400' : marginColor === 'yellow' ? 'text-yellow-400' : 'text-red-400'}`}>
-            {totalRevenue > 0 ? fmtPct(opMargin) : '—'}
+            {pnl.revenue > 0 ? fmtPct(opMargin) : '—'}
           </div>
-          <div className="text-xs text-slate-500 mt-2">{totalRevenue > 0 ? fmtK(totalRevenue - totalExpenses) + ' ₸ прибыль' : 'Нет данных'}</div>
+          <div className="text-xs text-slate-500 mt-2">{pnl.revenue > 0 ? fmtK(pnl.op_profit) + ' ₸ прибыль' : 'Нет данных'}</div>
         </div>
       </div>
 
-      {/* Monthly bar chart — full width, extra top margin for labels */}
+      {/* Monthly bar chart */}
       <div className="card">
         <h3 className="text-sm font-semibold text-slate-300 mb-4">Доходы vs Расходы (помесячно)</h3>
         <ResponsiveContainer width="100%" height={320}>
@@ -366,11 +363,11 @@ export default function DashboardPage() {
         </ResponsiveContainer>
       </div>
 
-      {/* Three pie charts row — legend below chart */}
+      {/* Three pie charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {deptData.length > 0 && <PieWithLegend title="Выручка по отделам" data={deptData} total={deptTotal} />}
         {fcData.length > 0 && <PieWithLegend title="Food Cost по отделам" data={fcData} total={fcTotal} />}
-        {expData.length > 0 && <PieWithLegend title="Расходы по категориям" data={expData} total={totalExpenses} />}
+        {expData.length > 0 && <PieWithLegend title="Расходы по категориям" data={expData} total={pnl.expenses} />}
       </div>
 
       {/* Records */}
@@ -432,10 +429,8 @@ export default function DashboardPage() {
                 <div key={w.day} className="text-center">
                   <div className="text-[10px] text-slate-500 mb-2">{w.short}</div>
                   <div className="relative h-24 flex items-end justify-center mb-2">
-                    <div
-                      className={`w-full max-w-[40px] rounded-t-lg border transition-all ${barColor}`}
-                      style={{ height: `${Math.max((w.avg / maxWeekdayAvg) * 100, 4)}%` }}
-                    />
+                    <div className={`w-full max-w-[40px] rounded-t-lg border transition-all ${barColor}`}
+                      style={{ height: `${Math.max((w.avg / maxWeekdayAvg) * 100, 4)}%` }} />
                     <div className="absolute left-0 right-0 border-t border-dashed border-yellow-500/60 pointer-events-none"
                       style={{ bottom: `${medianPct}%` }} />
                   </div>
@@ -449,15 +444,15 @@ export default function DashboardPage() {
       )}
 
       {/* Empty state */}
-      {reports.length === 0 && (
+      {completedMonthNames.length === 0 && (
         <div className="card text-center py-16">
           <FileText className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-          <div className="text-lg font-semibold text-slate-400">Нет данных за {year}</div>
-          <div className="text-sm text-slate-600 mt-1">Начните вводить ежедневные отчёты или импортируйте банковскую выписку</div>
+          <div className="text-lg font-semibold text-slate-400">Нет закрытых месяцев за {year}</div>
+          <div className="text-sm text-slate-600 mt-1">Импортируйте банковскую выписку чтобы закрыть месяц</div>
         </div>
       )}
 
-      {/* Cash discrepancy alerts — at the very bottom */}
+      {/* Cash discrepancy alerts */}
       {discrepancies.length > 0 && (
         <div className="card border-red-500/20 bg-red-500/5">
           <div className="text-sm font-semibold text-red-400 mb-3">⚠️ Расхождения кассы ({discrepancies.length})</div>
