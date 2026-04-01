@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
 import { parseBankStatement } from '@/lib/categorize'
-import { Upload, Trash2, Settings, Plus, X, Save, Calendar, Pencil, Check } from 'lucide-react'
+import { Upload, Trash2, Settings, Plus, X, Save, Calendar, Pencil, Check, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
 const MONTHS_SHORT = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек']
 
@@ -536,10 +536,25 @@ export default function BankImportPage() {
     setEditingRule(null); load()
   }
 
+  const [sortCol, setSortCol] = useState('transaction_date')
+  const [sortDir, setSortDir] = useState('desc')
+  const toggleSort = (col) => {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir(col === 'amount' ? 'desc' : 'asc') }
+  }
+  const SortIcon = ({ col }) => {
+    if (sortCol !== col) return <ArrowUpDown className="w-3 h-3 text-slate-600 inline ml-1" />
+    return sortDir === 'asc' ? <ArrowUp className="w-3 h-3 text-brand-400 inline ml-1" /> : <ArrowDown className="w-3 h-3 text-brand-400 inline ml-1" />
+  }
   const sorted = [...transactions].sort((a, b) => {
-    if (a.category === 'uncategorized' && b.category !== 'uncategorized') return -1
-    if (a.category !== 'uncategorized' && b.category === 'uncategorized') return 1
-    return new Date(b.transaction_date) - new Date(a.transaction_date)
+    const dir = sortDir === 'asc' ? 1 : -1
+    if (sortCol === 'transaction_date') return dir * (new Date(a.transaction_date) - new Date(b.transaction_date))
+    if (sortCol === 'beneficiary') return dir * (a.beneficiary || '').localeCompare(b.beneficiary || '', 'ru')
+    if (sortCol === 'purpose') return dir * (a.purpose || '').localeCompare(b.purpose || '', 'ru')
+    if (sortCol === 'amount') return dir * ((Number(a.amount) || 0) - (Number(b.amount) || 0))
+    if (sortCol === 'category') return dir * (a.category || '').localeCompare(b.category || '', 'ru')
+    if (sortCol === 'is_debit') return dir * (Number(a.is_debit) - Number(b.is_debit))
+    return 0
   })
   const uncatCount = transactions.filter(t => t.category === 'uncategorized').length
   const toggleSelect = (id) => setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
@@ -854,10 +869,13 @@ export default function BankImportPage() {
         <table className="w-full text-sm min-w-[900px]">
           <thead><tr>
             <th className="table-header w-8"><input type="checkbox" onChange={e => { if (e.target.checked) setSelectedIds(new Set(sorted.map(t => t.id))); else setSelectedIds(new Set()) }} /></th>
-            <th className="table-header text-left">Дата</th><th className="table-header text-left">Бенефициар</th>
-            <th className="table-header text-left">Назначение</th><th className="table-header text-right">Сумма</th>
+            <th className="table-header text-left cursor-pointer select-none hover:text-brand-400" onClick={() => toggleSort('transaction_date')}>Дата<SortIcon col="transaction_date" /></th>
+            <th className="table-header text-left cursor-pointer select-none hover:text-brand-400" onClick={() => toggleSort('beneficiary')}>Бенефициар<SortIcon col="beneficiary" /></th>
+            <th className="table-header text-left cursor-pointer select-none hover:text-brand-400" onClick={() => toggleSort('purpose')}>Назначение<SortIcon col="purpose" /></th>
+            <th className="table-header text-right cursor-pointer select-none hover:text-brand-400" onClick={() => toggleSort('amount')}>Сумма<SortIcon col="amount" /></th>
             <th className="table-header text-center">Период</th>
-            <th className="table-header text-center">Категория</th><th className="table-header w-16"></th>
+            <th className="table-header text-center cursor-pointer select-none hover:text-brand-400" onClick={() => toggleSort('category')}>Категория<SortIcon col="category" /></th>
+            <th className="table-header w-16"></th>
           </tr></thead>
           <tbody>
             {sorted.map(tx => (
