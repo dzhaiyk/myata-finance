@@ -1,6 +1,6 @@
 export const fmt = (n) => {
   if (n == null || isNaN(n)) return '—'
-  return new Intl.NumberFormat('ru-RU').format(Math.round(n))
+  return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n))
 }
 
 export const fmtK = (n) => {
