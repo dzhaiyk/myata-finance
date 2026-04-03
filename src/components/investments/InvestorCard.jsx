@@ -13,7 +13,21 @@ export default function InvestorCard({ investor, transactions, allInvestors, can
       .reduce((s, t) => s + (Number(t.amount) || 0), 0)
     const profit = withdrawn - invested
     const roi = invested > 0 ? withdrawn / invested : 0
-    return { invested, withdrawn, profit, roi }
+
+    // Avg monthly dividend for current and previous year
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const calcAvgDiv = (year) => {
+      const divs = txs.filter(t => t.type === 'dividend' && new Date(t.transaction_date).getFullYear() === year)
+      if (!divs.length) return null
+      const sum = divs.reduce((s, t) => s + (Number(t.amount) || 0), 0)
+      const months = new Set(divs.map(t => new Date(t.transaction_date).getMonth()))
+      return Math.round(sum / months.size)
+    }
+    const avgDivCurrent = calcAvgDiv(currentYear)
+    const avgDivPrev = calcAvgDiv(currentYear - 1)
+
+    return { invested, withdrawn, profit, roi, avgDivCurrent, avgDivPrev, currentYear }
   }, [transactions, investor.id])
 
   const successor = investor.successor_id
@@ -89,6 +103,19 @@ export default function InvestorCard({ investor, transactions, allInvestors, can
           </p>
         </div>
       </div>
+
+      {(stats.avgDivCurrent || stats.avgDivPrev) && (
+        <div className="flex items-center gap-4 pt-2 border-t border-slate-800">
+          <div className="flex-1">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider">{stats.currentYear} ср./мес</p>
+            <p className="text-sm font-mono text-blue-400">{stats.avgDivCurrent ? `${fmt(stats.avgDivCurrent)} ₸` : '—'}</p>
+          </div>
+          <div className="flex-1">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider">{stats.currentYear - 1} ср./мес</p>
+            <p className="text-sm font-mono text-slate-400">{stats.avgDivPrev ? `${fmt(stats.avgDivPrev)} ₸` : '—'}</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

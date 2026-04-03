@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/lib/store'
-import { LayoutDashboard, FileText, TrendingUp, Wallet, Upload, Users, Shield, Settings, LogOut, Menu, X, Leaf, UserCheck, Calculator, Package, Landmark, HandCoins } from 'lucide-react'
+import { LayoutDashboard, FileText, TrendingUp, Wallet, Upload, Users, Shield, Settings, LogOut, Menu, X, Leaf, UserCheck, Calculator, Package, Landmark, HandCoins, BarChart2 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 
@@ -11,6 +11,7 @@ const NAV = [
   { to: '/pnl', icon: TrendingUp, label: 'P&L', perm: 'pnl.view' },
   { to: '/cashflow', icon: Wallet, label: 'Cash Flow', perm: 'cashflow.view' },
   { to: '/investments', icon: HandCoins, label: 'Инвестиции', perm: 'investments.view' },
+  { to: '/analytics', icon: BarChart2, label: 'Аналитика', perm: 'dashboard.view' },
   { to: '/bank-import', icon: Upload, label: 'Импорт выписки', perm: 'bank_import.view' },
   { divider: true },
   { to: '/staff', icon: UserCheck, label: 'Персонал', perm: 'staff.view' },

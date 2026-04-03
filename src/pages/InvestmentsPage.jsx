@@ -31,6 +31,93 @@ const TX_TYPE_BADGES = {
 
 const MONTHS_SHORT = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
 
+const DIVIDEND_YEARS = [2022, 2023, 2024, 2025, 2026]
+
+function AvgMonthlyDividends({ investors, transactions }) {
+  const data = useMemo(() => {
+    const divTx = transactions.filter(t => t.type === 'dividend')
+    if (!divTx.length) return null
+
+    // Per investor per year: sum / distinct months
+    const rows = investors.map(inv => {
+      const invDivs = divTx.filter(t => t.investor_id === inv.id)
+      const yearData = {}
+      DIVIDEND_YEARS.forEach(y => {
+        const yearDivs = invDivs.filter(t => new Date(t.transaction_date).getFullYear() === y)
+        if (!yearDivs.length) { yearData[y] = null; return }
+        const sum = yearDivs.reduce((s, t) => s + (Number(t.amount) || 0), 0)
+        const months = new Set(yearDivs.map(t => new Date(t.transaction_date).getMonth()))
+        yearData[y] = Math.round(sum / months.size)
+      })
+      return { ...inv, yearData }
+    })
+
+    // Totals row
+    const totals = {}
+    DIVIDEND_YEARS.forEach(y => {
+      const yearDivs = divTx.filter(t => new Date(t.transaction_date).getFullYear() === y)
+      if (!yearDivs.length) { totals[y] = null; return }
+      const sum = yearDivs.reduce((s, t) => s + (Number(t.amount) || 0), 0)
+      const months = new Set(yearDivs.map(t => new Date(t.transaction_date).getMonth()))
+      totals[y] = Math.round(sum / months.size)
+    })
+
+    // Max per column for color scale
+    const maxPerYear = {}
+    DIVIDEND_YEARS.forEach(y => {
+      const vals = rows.map(r => r.yearData[y]).filter(Boolean)
+      maxPerYear[y] = vals.length ? Math.max(...vals) : 1
+    })
+
+    return { rows, totals, maxPerYear }
+  }, [investors, transactions])
+
+  if (!data) return null
+
+  const getColor = (val, max) => {
+    if (!val) return {}
+    const ratio = max > 0 ? val / max : 0
+    const g = Math.round(80 + ratio * 175)
+    return { color: `rgb(${Math.round(255 - ratio * 200)}, ${g}, ${Math.round(100 - ratio * 60)})` }
+  }
+
+  return (
+    <div className="card overflow-hidden">
+      <h2 className="text-lg font-display font-semibold text-white mb-4">Средние дивиденды в месяц по годам</h2>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr>
+              <th className="table-header">Инвестор</th>
+              {DIVIDEND_YEARS.map(y => <th key={y} className="table-header text-right">{y}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.map(r => (
+              <tr key={r.id} className={cn('hover:bg-slate-800/50', r.status === 'exited' && 'opacity-50')}>
+                <td className="table-cell font-medium text-white">{r.full_name}</td>
+                {DIVIDEND_YEARS.map(y => (
+                  <td key={y} className="table-cell text-right font-mono text-sm" style={getColor(r.yearData[y], data.maxPerYear[y])}>
+                    {r.yearData[y] ? `${fmt(r.yearData[y])} ₸/мес` : '—'}
+                  </td>
+                ))}
+              </tr>
+            ))}
+            <tr className="border-t-2 border-slate-700">
+              <td className="table-cell font-bold text-white">ИТОГО</td>
+              {DIVIDEND_YEARS.map(y => (
+                <td key={y} className="table-cell text-right font-mono text-sm font-bold text-slate-200">
+                  {data.totals[y] ? `${fmt(data.totals[y])} ₸/мес` : '—'}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 const PAGE_SIZE = 20
 
 export default function InvestmentsPage() {
@@ -298,6 +385,9 @@ export default function InvestmentsPage() {
 
           {/* Yearly Breakdown */}
           <YearlyBreakdownTable investors={investors} transactions={transactions} />
+
+          {/* Average Monthly Dividends by Year */}
+          <AvgMonthlyDividends investors={investors} transactions={transactions} />
         </div>
       )}
 

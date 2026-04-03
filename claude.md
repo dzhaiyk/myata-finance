@@ -34,7 +34,8 @@ src/
 │   ├── DashboardPage.jsx # KPI-карточки, графики выручки
 │   ├── DailyReportPage.jsx  # Ежедневные отчёты (самый большой файл ~860 строк)
 │   ├── PnLPage.jsx       # P&L с period allocation и ручными корректировками
-│   ├── CashFlowPage.jsx  # Cash Flow (заглушка, в разработке)
+│   ├── CashFlowPage.jsx  # Cash Flow (прямой метод, 3 секции CF)
+│   ├── AnalyticsPage.jsx # Аналитика: тренды, аномалии, сезонность
 │   ├── BankImportPage.jsx # Импорт банковских выписок Kaspi
 │   ├── AccountsPage.jsx  # Счета: остатки, переводы, сверка
 │   ├── StaffPage.jsx     # Сотрудники и должности
@@ -86,7 +87,9 @@ supabase/
 
 ### Группы прав (24 ключа)
 
-daily_report (view/create/edit/delete/submit/reopen), pnl (view/edit), cashflow (view), dashboard (view), bank_import (view/upload/categorize), staff (view/edit), suppliers (view/edit), payroll (view/edit), users (view/edit), roles (view/edit), settings (view/edit), telegram (send)
+daily_report (view/create/edit/delete/submit/reopen), pnl (view/edit), cashflow (view/edit), dashboard (view/kpi), bank_import (view/upload/categorize), staff (view/manage), suppliers (view/manage), payroll (view/manage), investments (view/edit/manage), users (view/manage), roles (view/manage), settings (view/edit), telegram (manage)
+
+Аналитика использует `dashboard.view` для доступа.
 
 ## Бизнес-логика
 
@@ -109,6 +112,27 @@ daily_report (view/create/edit/delete/submit/reopen), pnl (view/edit), cashflow 
 - Парсинг через categorize.js (regex-правила по полям: purpose → beneficiary → КНП)
 - Дедупликация через SHA-256 хеш (tx_hash)
 - Ручная перекатегоризация
+
+### Cash Flow (CashFlowPage)
+- Прямой метод: фактическое движение денежных средств
+- 3 секции: Операционная деятельность (наличная выручка, кассовые расходы, банковские OpEx), Инвестиционная (CapEx), Финансовая (дивиденды, взносы учредителей)
+- Источники: daily_reports (наличные), bank_transactions (безнал, period allocation), investor_transactions (дивиденды/взносы), pnl_data (исторические данные)
+- Режимы: Месяц / YTD / Год (горизонтальная таблица)
+- KPI карточки: Операционный CF, Инвестиционный CF, Финансовый CF, Чистое изменение
+
+### Аналитика (AnalyticsPage)
+- Тренды выручки (90 дней) с 7-дневным скользящим средним и линейной регрессией
+- Выручка по дням недели (всё время / 90 дней / 30 дней)
+- Food Cost % тренд помесячно с бенчмарками (30%, 35%, 40%)
+- ФОТ % тренд с бенчмарком 30%
+- Детекция аномалий расходов (mean + 1.5σ)
+- Расхождения кассы: месячный трекер + топ-10 худших дней
+- Сезонность выручки: хитмап по месяцам × годам
+- Права доступа: dashboard.view
+
+### Инвестиции (InvestmentsPage) — дополнения
+- Таблица «Средние дивиденды в месяц по годам» в Dashboard-табе
+- InvestorCard: средние дивиденды текущего и прошлого года
 
 ### Зарплаты (PayrollPage)
 - Периоды: 1–15 и 16–конец месяца
@@ -154,6 +178,7 @@ DM Sans (основной), Plus Jakarta Sans (заголовки), JetBrains Mo
 - Все вычисления выполняются на клиенте (нет серверной логики)
 - Пароли хранятся в plain text (известная проблема безопасности)
 - RLS открыт для всех — авторизация только на фронте
-- CashFlowPage — заглушка, требует реализации
+- CashFlowPage — реализован (прямой метод CF)
+- AnalyticsPage — аналитика с графиками и детекцией аномалий
 - profiles — legacy-таблица от Supabase Auth, не используется активно
 - daily_reports.manager_id — FK удалён (миграция 009), связь по имени

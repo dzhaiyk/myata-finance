@@ -16,6 +16,7 @@ import PayrollPage from '@/pages/PayrollPage'
 import SuppliersPage from '@/pages/SuppliersPage'
 import AccountsPage from '@/pages/AccountsPage'
 import InvestmentsPage from '@/pages/InvestmentsPage'
+import AnalyticsPage from '@/pages/AnalyticsPage'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuthStore()
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="suppliers" element={<SuppliersPage />} />
           <Route path="payroll" element={<PayrollPage />} />
           <Route path="investments" element={<InvestmentsPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="roles" element={<RolesPage />} />
           <Route path="settings" element={<SettingsPage />} />

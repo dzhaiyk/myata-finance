@@ -104,6 +104,8 @@ useEffect(() => {
   ├── /accounts       → AccountsPage
   ├── /pnl            → PnLPage
   ├── /cashflow       → CashFlowPage
+  ├── /investments    → InvestmentsPage
+  ├── /analytics      → AnalyticsPage (perm: dashboard.view)
   ├── /bank-import    → BankImportPage
   ├── /staff          → StaffPage
   ├── /suppliers      → SuppliersPage
@@ -300,6 +302,49 @@ PayrollPage
 Сохранение → payroll_details + payroll_periods (status: draft → paid)
 ```
 
+### 6.5 Cash Flow
+
+```
+CashFlowPage загружает 4 источника:
+    │
+    ├── daily_reports → наличная выручка (payments.cash), кассовые расходы
+    ├── bank_transactions → безналичные поступления и расходы (с period allocation)
+    ├── investor_transactions → дивиденды, взносы учредителей
+    └── pnl_data → исторические данные для ранних месяцев
+    │
+    ▼
+Агрегация прямым методом в 3 секции:
+    1. Операционная деятельность:
+       + Наличная выручка + Банковские поступления
+       − Кассовые расходы (закуп, авансы ЗП, хозтовары, инкассация)
+       − Банковские OpEx (ФОТ, закуп, аренда, ком.услуги, маркетинг, налоги)
+    2. Инвестиционная деятельность:
+       − CapEx (ремонт, мебель, аппараты кальян, прочее)
+    3. Финансовая деятельность:
+       − Дивиденды + Взносы учредителей + Внутренние переводы
+    = Чистое изменение денежных средств
+```
+
+### 6.6 Аналитика
+
+```
+AnalyticsPage загружает все данные за всё время:
+    │
+    ├── daily_reports → выручка, расхождения кассы
+    ├── pnl_data → исторические P&L данные
+    └── bank_transactions → расходы по категориям
+    │
+    ▼
+7 аналитических секций (все вычисления на клиенте через useMemo):
+    1. Тренды выручки (90 дней, 7-дн скользящее среднее, линейная регрессия)
+    2. Выручка по дням недели (3 периода сравнения)
+    3. Food Cost % тренд (помесячно, с бенчмарками)
+    4. ФОТ % тренд (помесячно, бенчмарк 30%)
+    5. Детекция аномалий расходов (mean + 1.5σ за 12 мес)
+    6. Расхождения кассы (месячный трекер + топ-10)
+    7. Сезонность выручки (хитмап месяцы × годы)
+```
+
 ---
 
 ## 7. UI-архитектура
@@ -374,7 +419,6 @@ PayrollPage
 | RLS отключён (USING true) | Любой может читать/писать все данные | Высокий |
 | Нет серверной валидации | Данные можно подделать из DevTools | Средний |
 | Telegram-токен на фронте | Утечка токена в исходниках | Средний |
-| CashFlowPage — заглушка | Функционал не работает | Низкий |
 | Нет тестов | Регрессии при изменениях | Средний |
 | Профиль staff → payroll связь по имени | Сломается при переименовании | Средний |
 
@@ -433,6 +477,22 @@ PnLPage
   ├── reads: daily_reports (выручка, кэш-расходы)
   ├── reads: bank_transactions (безнал)
   └── reads/writes: pnl_data (ручные корректировки)
+
+CashFlowPage
+  ├── reads: daily_reports (наличная выручка, кассовые расходы)
+  ├── reads: bank_transactions (безнал, period allocation)
+  ├── reads: investor_transactions (дивиденды, взносы)
+  └── reads: pnl_data (исторические данные)
+
+AnalyticsPage
+  ├── reads: daily_reports (выручка, расхождения кассы)
+  ├── reads: pnl_data (исторические P&L)
+  └── reads: bank_transactions (расходы по категориям)
+
+InvestmentsPage
+  ├── reads/writes: investors
+  ├── reads/writes: investor_transactions
+  └── uses: InvestorCard, YearlyBreakdownTable, AvgMonthlyDividends (inline)
 
 BankImportPage
   ├── uses: categorize.js (парсинг + авто-категоризация)
