@@ -600,7 +600,8 @@ export default function InvestmentsPage() {
       {/* Modals */}
       {showTxModal && (
         <TransactionModal
-          tx={editTx}
+          open={showTxModal}
+          editTx={editTx}
           investors={investors}
           onSave={saveTx}
           onClose={() => { setShowTxModal(false); setEditTx(null) }}
@@ -609,6 +610,7 @@ export default function InvestmentsPage() {
 
       {showBulkModal && (
         <BulkOperationModal
+          open={showBulkModal}
           mode={bulkMode}
           investors={investors.filter(inv => inv.status !== 'exited')}
           onSave={saveBulk}
@@ -618,6 +620,7 @@ export default function InvestmentsPage() {
 
       {showTransferModal && (
         <ShareTransferModal
+          open={showTransferModal}
           investors={investors}
           onSave={saveTransfer}
           onClose={() => setShowTransferModal(false)}

@@ -52,13 +52,15 @@ export default function TransactionModal({ open, onClose, onSave, investors, edi
   const handleSave = () => {
     const amount = Number(String(form.amount).replace(',', '.'))
     if (!form.investor_id || !amount) return
-    onSave({
+    const payload = {
       investor_id: form.investor_id,
       transaction_date: form.transaction_date,
       type: form.type,
       amount,
       notes: form.notes,
-    })
+    }
+    if (editTx?.id) payload.id = editTx.id
+    onSave(payload)
   }
 
   return (
