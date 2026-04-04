@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, fmtK, MONTHS_RU } from '@/lib/utils'
-import { ChevronDown, ChevronRight, ChevronsUpDown, Info, FileText, Upload, Wallet, TrendingUp, TrendingDown, ArrowDownUp } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronsUpDown, Info, FileText, Upload, Wallet } from 'lucide-react'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const CURRENT_MONTH = new Date().getMonth() + 1
@@ -25,9 +25,6 @@ function getTxAmountForMonth(tx, targetYear, targetMonth) {
 }
 
 // === CASH FLOW STRUCTURE ===
-// Operating: cash from operations (revenue cash, cash expenses, bank opex)
-// Investing: capex
-// Financing: dividends, investments, loans
 const CF_STRUCTURE = [
   // Operating Activities
   { key: 'cf_operating', label: 'ОПЕРАЦИОННАЯ ДЕЯТЕЛЬНОСТЬ', level: 0, calc: 'sum_children', section: 'operating' },
@@ -77,8 +74,7 @@ const UTIL_CATS = ['util_electric', 'util_water', 'util_heating', 'util_bi', 'ut
 const MKT_CATS = ['mkt_smm', 'mkt_target', 'mkt_2gis', 'mkt_yandex', 'mkt_google', 'mkt_other']
 const TAX_CATS = ['tax_retail', 'tax_payroll', 'tax_insurance', 'tax_alcohol', 'tax_hookah', 'tax_other']
 const OPEX_OTHER_CATS = ['household', 'bank_fee', 'opex_security', 'opex_software', 'opex_menu', 'opex_pest', 'opex_grease', 'opex_repair', 'opex_uniform', 'opex_music', 'opex_royalty', 'opex_misc']
-const DIVIDEND_CAT = 'dividend'
-const INVESTMENT_CAT = 'investment_in'
+const CAPEX_CATS = ['capex_repair', 'capex_furniture', 'capex_other']
 
 function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, investorTx) {
   const v = {}
@@ -125,28 +121,33 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
   v.cf_cash_withdrawal = -cashWithdrawal
   v.cf_cash_expenses = -(cashKitchen + cashBar + cashTobacco + cashPayroll + cashOther + cashWithdrawal)
 
-  // === BANK transactions by category (period-aware) ===
-  const bankByCat = {}
+  // === BANK transactions — split debits (expenses) and credits (income) ===
+  // Amounts in bank_transactions are always positive; is_debit flag indicates direction
+  const bankDebitByCat = {}  // expenses (is_debit = true)
+  let bankCreditTotal = 0     // income (is_debit = false, non-internal)
+
   bankTx.forEach(tx => {
     if (!tx.category || tx.category === 'uncategorized') return
     const txAmount = getTxAmountForMonth(tx, targetYear, targetMonth)
-    if (txAmount !== 0) {
-      bankByCat[tx.category] = (bankByCat[tx.category] || 0) + txAmount
+    if (txAmount === 0) return
+
+    if (tx.is_debit) {
+      // Expense — accumulate by category
+      if (tx.category !== 'internal') {
+        bankDebitByCat[tx.category] = (bankDebitByCat[tx.category] || 0) + txAmount
+      }
+    } else {
+      // Income — accumulate total (non-internal)
+      if (tx.category !== 'internal') {
+        bankCreditTotal += txAmount
+      }
     }
   })
 
-  // Bank income (credits, non-internal)
-  let bankIncome = 0
-  bankTx.forEach(tx => {
-    if (!tx.is_debit && tx.category !== 'internal') {
-      const txAmount = getTxAmountForMonth(tx, targetYear, targetMonth)
-      bankIncome += txAmount
-    }
-  })
-  v.cf_bank_income = bankIncome
+  v.cf_bank_income = bankCreditTotal
 
-  // Bank OpEx categories (debits)
-  const sumCats = (cats) => cats.reduce((s, c) => s + Math.abs(bankByCat[c] || 0), 0)
+  // Bank OpEx categories (only debits)
+  const sumCats = (cats) => cats.reduce((s, c) => s + (bankDebitByCat[c] || 0), 0)
 
   v.cf_bank_payroll = -sumCats(PAYROLL_CATS)
   v.cf_bank_cogs = -sumCats(COGS_CATS)
@@ -160,10 +161,10 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
   // Operating CF total
   v.cf_operating = v.cf_cash_revenue + v.cf_bank_income + v.cf_cash_expenses + v.cf_bank_opex
 
-  // === INVESTING: CapEx ===
-  v.cf_capex_repair = -Math.abs(bankByCat['capex_repair'] || 0)
-  v.cf_capex_furniture = -Math.abs(bankByCat['capex_furniture'] || 0)
-  v.cf_capex_other = -Math.abs(bankByCat['capex_other'] || 0)
+  // === INVESTING: CapEx (bank debits only) ===
+  v.cf_capex_repair = -(bankDebitByCat['capex_repair'] || 0)
+  v.cf_capex_furniture = -(bankDebitByCat['capex_furniture'] || 0)
+  v.cf_capex_other = -(bankDebitByCat['capex_other'] || 0)
 
   // Hookah equipment from daily reports (cash capex)
   let cashHookahCapex = 0
@@ -185,12 +186,13 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
   v.cf_dividends = -monthInvTx.filter(t => t.type === 'dividend').reduce((s, t) => s + (Number(t.amount) || 0), 0)
   v.cf_investments_in = monthInvTx.filter(t => t.type === 'investment').reduce((s, t) => s + (Number(t.amount) || 0), 0)
 
-  // Internal transfers (bank category = internal) — net zero theoretically
+  // Internal transfers (bank category = internal) — net of credits minus debits
   let internalIn = 0, internalOut = 0
   bankTx.forEach(tx => {
     if (tx.category === 'internal') {
       const txAmount = getTxAmountForMonth(tx, targetYear, targetMonth)
-      if (tx.is_debit) internalOut += Math.abs(txAmount)
+      if (txAmount === 0) return
+      if (tx.is_debit) internalOut += txAmount
       else internalIn += txAmount
     }
   })
@@ -203,18 +205,17 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
 
   // If historical data exists and no live data, override from pnl_data
   if (historicalData.length > 0 && monthReports.length === 0) {
-    // Use historical revenue/expenses to approximate CF
     let histRevenue = 0, histExpenses = 0
     historicalData.forEach(h => {
       if (h.category?.startsWith('rev_')) histRevenue += Number(h.amount) || 0
       else if (h.category && !h.category.startsWith('rev_')) histExpenses += Number(h.amount) || 0
     })
-    // For historical months, approximate: operating CF ≈ revenue - expenses
     if (histRevenue > 0) {
       v.cf_operating = histRevenue - histExpenses
       v.cf_cash_revenue = 0
       v.cf_bank_income = histRevenue
       v.cf_bank_opex = -histExpenses
+      v.cf_cash_expenses = 0
       v.cf_net_change = v.cf_operating + v.cf_investing + v.cf_financing
     }
   }
@@ -226,7 +227,7 @@ export default function CashFlowPage() {
   const { hasPermission } = useAuthStore()
   const [year, setYear] = useState(CURRENT_YEAR)
   const [month, setMonth] = useState(CURRENT_MONTH)
-  const [viewMode, setViewMode] = useState('month')
+  const [viewMode, setViewMode] = useState('year') // default to year
   const [dailyReports, setDailyReports] = useState([])
   const [bankTx, setBankTx] = useState([])
   const [pnlData, setPnlData] = useState([])
@@ -252,29 +253,44 @@ export default function CashFlowPage() {
 
   const loadData = async () => {
     setLoading(true)
-    const isYearMode = viewMode === 'year'
-    const startDate = isYearMode || viewMode === 'ytd' ? `${year}-01-01` : `${year}-${String(month).padStart(2, '0')}-01`
-    const endMonth = isYearMode || viewMode === 'ytd' ? 12 : month
-    const endDate = `${year}-${String(endMonth).padStart(2, '0')}-${new Date(year, endMonth, 0).getDate()}`
 
-    const [drRes, btRes, pnlRes, invRes] = await Promise.all([
-      supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted'),
-      supabase.from('bank_transactions').select('*').or(
-        `and(transaction_date.gte.${startDate},transaction_date.lte.${endDate}),and(period_from.lte.${endDate},period_to.gte.${startDate})`
-      ),
-      supabase.from('pnl_data').select('*').eq('year', year),
-      supabase.from('investor_transactions').select('*').gte('transaction_date', startDate).lte('transaction_date', endDate),
-    ])
-    setDailyReports(drRes.data || [])
-    setBankTx(btRes.data || [])
-    setPnlData(pnlRes.data || [])
-    setInvestorTx(invRes.data || [])
+    if (viewMode === 'overall') {
+      // Load everything
+      const [drRes, btRes, pnlRes, invRes] = await Promise.all([
+        supabase.from('daily_reports').select('*').eq('status', 'submitted'),
+        supabase.from('bank_transactions').select('*'),
+        supabase.from('pnl_data').select('*'),
+        supabase.from('investor_transactions').select('*'),
+      ])
+      setDailyReports(drRes.data || [])
+      setBankTx(btRes.data || [])
+      setPnlData(pnlRes.data || [])
+      setInvestorTx(invRes.data || [])
+    } else {
+      const isYearMode = viewMode === 'year'
+      const startDate = isYearMode || viewMode === 'ytd' ? `${year}-01-01` : `${year}-${String(month).padStart(2, '0')}-01`
+      const endMonth = isYearMode || viewMode === 'ytd' ? 12 : month
+      const endDate = `${year}-${String(endMonth).padStart(2, '0')}-${new Date(year, endMonth, 0).getDate()}`
+
+      const [drRes, btRes, pnlRes, invRes] = await Promise.all([
+        supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted'),
+        supabase.from('bank_transactions').select('*').or(
+          `and(transaction_date.gte.${startDate},transaction_date.lte.${endDate}),and(period_from.lte.${endDate},period_to.gte.${startDate})`
+        ),
+        supabase.from('pnl_data').select('*').eq('year', year),
+        supabase.from('investor_transactions').select('*').gte('transaction_date', startDate).lte('transaction_date', endDate),
+      ])
+      setDailyReports(drRes.data || [])
+      setBankTx(btRes.data || [])
+      setPnlData(pnlRes.data || [])
+      setInvestorTx(invRes.data || [])
+    }
     setLoading(false)
   }
 
-  // Single month values
+  // Single-period values (month / ytd)
   const values = useMemo(() => {
-    if (viewMode === 'year') return {}
+    if (viewMode === 'year' || viewMode === 'overall') return {}
     if (viewMode === 'ytd') {
       const totals = {}
       for (let m = 1; m <= month; m++) {
@@ -288,23 +304,44 @@ export default function CashFlowPage() {
     return computeMonthCF(year, month, dailyReports, bankTx, pnlData, investorTx)
   }, [dailyReports, bankTx, pnlData, investorTx, year, month, viewMode])
 
-  // Multi-period for year mode
+  // Multi-period for year / overall modes
   const multiPeriodData = useMemo(() => {
-    if (viewMode !== 'year') return null
-    const columns = Array.from({ length: 12 }, (_, i) => ({
-      label: MONTHS_RU[i].slice(0, 3),
-      values: computeMonthCF(year, i + 1, dailyReports, bankTx, pnlData, investorTx)
-    }))
+    if (viewMode !== 'year' && viewMode !== 'overall') return null
+
+    if (viewMode === 'year') {
+      const columns = Array.from({ length: 12 }, (_, i) => ({
+        label: MONTHS_RU[i].slice(0, 3),
+        values: computeMonthCF(year, i + 1, dailyReports, bankTx, pnlData, investorTx)
+      }))
+      const totals = {}
+      CF_STRUCTURE.forEach(line => {
+        totals[line.key] = columns.reduce((s, col) => s + (col.values[line.key] || 0), 0)
+      })
+      columns.push({ label: 'Итого', values: totals, isTotal: true })
+      const monthsWithData = columns.filter(c => !c.isTotal && (c.values.cf_cash_revenue || c.values.cf_bank_income)).length || 1
+      const avg = {}
+      CF_STRUCTURE.forEach(line => { avg[line.key] = Math.round(totals[line.key] / monthsWithData) })
+      columns.push({ label: 'Среднее', values: avg, isAvg: true })
+      return columns
+    }
+
+    // Overall: columns = years
+    const years = [2022, 2023, 2024, 2025, 2026]
+    const columns = years.map(y => {
+      const yearValues = {}
+      for (let m = 1; m <= 12; m++) {
+        const mv = computeMonthCF(y, m, dailyReports, bankTx, pnlData, investorTx)
+        CF_STRUCTURE.forEach(line => {
+          yearValues[line.key] = (yearValues[line.key] || 0) + (mv[line.key] || 0)
+        })
+      }
+      return { label: String(y), values: yearValues }
+    })
     const totals = {}
     CF_STRUCTURE.forEach(line => {
       totals[line.key] = columns.reduce((s, col) => s + (col.values[line.key] || 0), 0)
     })
     columns.push({ label: 'Итого', values: totals, isTotal: true })
-    // Average
-    const monthsWithData = columns.filter(c => !c.isTotal && (c.values.cf_cash_revenue || c.values.cf_bank_income)).length || 1
-    const avg = {}
-    CF_STRUCTURE.forEach(line => { avg[line.key] = Math.round(totals[line.key] / monthsWithData) })
-    columns.push({ label: 'Среднее', values: avg, isAvg: true })
     return columns
   }, [viewMode, year, dailyReports, bankTx, pnlData, investorTx])
 
@@ -331,12 +368,15 @@ export default function CashFlowPage() {
     return true
   }
 
-  const periodLabel = viewMode === 'year' ? `${year} год` : viewMode === 'ytd' ? `${year} YTD (до ${MONTHS_RU[month - 1]})` : `${MONTHS_RU[month - 1]} ${year}`
+  const periodLabel = viewMode === 'overall' ? 'Все годы'
+    : viewMode === 'year' ? `${year} год`
+    : viewMode === 'ytd' ? `${year} YTD (до ${MONTHS_RU[month - 1]})`
+    : `${MONTHS_RU[month - 1]} ${year}`
 
   if (loading) return <div className="text-center text-slate-500 py-20">Загрузка...</div>
 
   // KPI values
-  const kpiValues = viewMode === 'year'
+  const kpiValues = (viewMode === 'year' || viewMode === 'overall')
     ? (multiPeriodData?.find(c => c.isTotal)?.values || {})
     : values
 
@@ -359,6 +399,8 @@ export default function CashFlowPage() {
     return v > 0 ? 'text-green-400' : 'text-red-400'
   }
 
+  const isMultiPeriod = viewMode === 'year' || viewMode === 'overall'
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -370,19 +412,21 @@ export default function CashFlowPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {viewMode !== 'year' && (
+          {viewMode !== 'year' && viewMode !== 'overall' && (
             <select value={month} onChange={e => setMonth(Number(e.target.value))} className="input text-sm">
               {MONTHS_RU.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
             </select>
           )}
-          <select value={year} onChange={e => setYear(Number(e.target.value))} className="input text-sm">
-            {[2022, 2023, 2024, 2025, 2026].map(y => <option key={y}>{y}</option>)}
-          </select>
+          {viewMode !== 'overall' && (
+            <select value={year} onChange={e => setYear(Number(e.target.value))} className="input text-sm">
+              {[2022, 2023, 2024, 2025, 2026].map(y => <option key={y}>{y}</option>)}
+            </select>
+          )}
           <div className="flex bg-slate-900 rounded-lg p-0.5">
-            {['month', 'ytd', 'year'].map(mode => (
+            {['month', 'ytd', 'year', 'overall'].map(mode => (
               <button key={mode} onClick={() => setViewMode(mode)}
                 className={cn('px-3 py-1.5 rounded-md text-xs font-medium', viewMode === mode ? 'bg-slate-700 text-white' : 'text-slate-500')}>
-                {{ month: 'Месяц', ytd: 'YTD', year: 'Год' }[mode]}
+                {{ month: 'Месяц', ytd: 'YTD', year: 'Год', overall: 'Обзор' }[mode]}
               </button>
             ))}
           </div>
@@ -413,7 +457,7 @@ export default function CashFlowPage() {
       </div>
 
       {/* Vertical table (month / ytd) */}
-      {viewMode !== 'year' && (
+      {!isMultiPeriod && (
         <div className="card p-0 divide-y divide-slate-800">
           {CF_STRUCTURE.map((line, idx) => {
             if (!isVisible(line, idx)) return null
@@ -472,10 +516,10 @@ export default function CashFlowPage() {
         </div>
       )}
 
-      {/* Horizontal table (year mode) */}
-      {viewMode === 'year' && multiPeriodData && (
+      {/* Horizontal table (year / overall mode) */}
+      {isMultiPeriod && multiPeriodData && (
         <div className="card p-0 overflow-x-auto">
-          <table className="w-full text-sm" style={{ minWidth: 1400 }}>
+          <table className="w-full text-sm" style={{ minWidth: viewMode === 'year' ? 1400 : 900 }}>
             <thead>
               <tr>
                 <th className="table-header text-left sticky left-0 bg-slate-900 z-10 min-w-[220px]">Статья</th>
