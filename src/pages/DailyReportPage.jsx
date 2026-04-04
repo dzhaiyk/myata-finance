@@ -686,20 +686,20 @@ export default function DailyReportPage() {
   if (mode === 'journal') {
     return (
       <div className="space-y-6 animate-fade-in">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-display font-bold tracking-tight">Журнал отчётов</h1>
             <p className="text-sm text-slate-500 mt-0.5">Отчёты {journalPage * JOURNAL_PAGE_SIZE + 1}–{Math.min((journalPage + 1) * JOURNAL_PAGE_SIZE, journalTotal)} из {journalTotal}</p>
           </div>
-          <button onClick={newReport} className="btn-primary text-sm flex items-center gap-2">
+          <button onClick={newReport} className="btn-primary text-sm flex items-center gap-2 shrink-0">
             <Plus className="w-4 h-4" /> Новый отчёт
           </button>
         </div>
 
-        <div className="card flex items-center gap-3">
+        <div className="card flex flex-wrap items-center gap-3">
           <Calendar className="w-4 h-4 text-slate-500" />
           <span className="text-sm text-slate-400">Открыть за дату:</span>
-          <input type="date" id="journal-date-picker" className="input text-sm" />
+          <input type="date" id="journal-date-picker" className="input text-sm flex-1 min-w-[140px]" />
           <button className="btn-primary text-sm" onClick={async () => {
             const pickedDate = document.getElementById('journal-date-picker').value
             if (!pickedDate) return
@@ -737,16 +737,16 @@ export default function DailyReportPage() {
               const hasDisc = Math.abs(disc) > 500
               const isDraft = r.status === 'draft' || !r.status
               return (
-                <div key={r.id} className={cn('card w-full text-left flex items-center justify-between hover:border-brand-500/30 transition-all group',
+                <div key={r.id} className={cn('card w-full text-left flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 hover:border-brand-500/30 transition-all group',
                   hasDisc && !isDraft && 'border-red-500/20',
                   isDraft && 'border-yellow-500/20')}>
-                  <button onClick={() => openReport(r)} className="flex items-center gap-4 flex-1 min-w-0">
+                  <button onClick={() => openReport(r)} className="flex items-center gap-3 flex-1 min-w-0 w-full sm:w-auto">
                     <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0',
                       isDraft ? 'bg-yellow-500/15 text-yellow-400' : hasDisc ? 'bg-red-500/15 text-red-400' : 'bg-green-500/15 text-green-400')}>
                       {new Date(r.report_date + 'T12:00:00').getDate()}
                     </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium flex flex-wrap items-center gap-2">
                         {new Date(r.report_date + 'T12:00:00').toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
                         {isDraft ? (
                           <span className="badge badge-yellow text-[10px] flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> Черновик</span>
@@ -757,7 +757,7 @@ export default function DailyReportPage() {
                       <div className="text-xs text-slate-500">{r.manager_name || '—'}</div>
                     </div>
                   </button>
-                  <div className="flex items-center gap-6 shrink-0">
+                  <div className="flex items-center gap-3 sm:gap-6 w-full sm:w-auto justify-between sm:justify-end pl-[52px] sm:pl-0 shrink-0">
                     <div className="text-right">
                       <div className="text-sm font-mono font-semibold text-green-400">{fmt(r.total_revenue || 0)} ₸</div>
                       <div className="text-[10px] text-slate-500">выручка</div>
@@ -774,15 +774,17 @@ export default function DailyReportPage() {
                         <div className="text-[10px] text-red-500">расхождение</div>
                       </div>
                     )}
-                    {canEdit && (
-                      <button onClick={(e) => { e.stopPropagation(); deleteReport(r.id, r.report_date) }}
-                        className="p-2 text-slate-600 hover:text-red-400 transition-colors" title="Удалить отчёт">
-                        <Trash2 className="w-4 h-4" />
+                    <div className="flex items-center gap-1 shrink-0">
+                      {canEdit && (
+                        <button onClick={(e) => { e.stopPropagation(); deleteReport(r.id, r.report_date) }}
+                          className="p-2 text-slate-600 hover:text-red-400 transition-colors" title="Удалить отчёт">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button onClick={() => openReport(r)} className="p-2">
+                        <Eye className="w-4 h-4 text-slate-600 group-hover:text-brand-400" />
                       </button>
-                    )}
-                    <button onClick={() => openReport(r)} className="p-1">
-                      <Eye className="w-4 h-4 text-slate-600 group-hover:text-brand-400" />
-                    </button>
+                    </div>
                   </div>
                 </div>
               )
@@ -830,12 +832,12 @@ export default function DailyReportPage() {
 
       {/* Submitted banner */}
       {isSubmitted && (
-        <div className="card border-green-500/20 bg-green-500/5 flex items-center justify-between">
+        <div className="card border-green-500/20 bg-green-500/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <CheckCircle2 className="w-5 h-5 text-green-400" />
+            <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />
             <span className="text-sm text-green-400 font-medium">Отчёт отправлен. Только просмотр.</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button onClick={generatePDF} className="btn-secondary text-xs flex items-center gap-1.5">
               <Download className="w-3.5 h-3.5" /> PDF
             </button>
@@ -870,16 +872,28 @@ export default function DailyReportPage() {
         <div className="card border-green-500/20 bg-green-500/5">
           <h3 className="text-sm font-display font-bold text-green-300 mb-3">Доходы по типам оплат</h3>
           <div className="space-y-2">
-            <div className="grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
+            <div className="hidden sm:grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
               <div className="col-span-4">Тип оплаты</div><div className="col-span-4 text-right">Сумма (₸)</div>
               <div className="col-span-2 text-right">Чеков</div><div className="col-span-2 text-right">Ср. чек</div>
             </div>
             {revenue.map((r, i) => (
-              <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                <div className="col-span-4 text-sm text-slate-300 px-1">{r.type}</div>
-                <div className="col-span-4"><MoneyInput value={r.amount} onChange={v => setRevenue(prev => prev.map((x, j) => j === i ? { ...x, amount: v } : x))} disabled={isLocked} /></div>
-                <div className="col-span-2"><MoneyInput value={r.checks} onChange={v => setRevenue(prev => prev.map((x, j) => j === i ? { ...x, checks: v } : x))} disabled={isLocked} /></div>
-                <div className="col-span-2 text-right text-sm font-mono text-slate-400">{num(r.checks) > 0 ? fmt(num(r.amount) / num(r.checks)) : '—'}</div>
+              <div key={i}>
+                {/* Mobile: stacked */}
+                <div className="sm:hidden space-y-1 py-2 border-b border-slate-800/50 last:border-0">
+                  <div className="text-xs text-slate-400 px-1">{r.type}</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <MoneyInput value={r.amount} onChange={v => setRevenue(prev => prev.map((x, j) => j === i ? { ...x, amount: v } : x))} disabled={isLocked} />
+                    <MoneyInput value={r.checks} onChange={v => setRevenue(prev => prev.map((x, j) => j === i ? { ...x, checks: v } : x))} disabled={isLocked} />
+                    <div className="text-right text-sm font-mono text-slate-400 self-center">{num(r.checks) > 0 ? fmt(num(r.amount) / num(r.checks)) : '—'}</div>
+                  </div>
+                </div>
+                {/* Desktop: row */}
+                <div className="hidden sm:grid grid-cols-12 gap-2 items-center">
+                  <div className="col-span-4 text-sm text-slate-300 px-1">{r.type}</div>
+                  <div className="col-span-4"><MoneyInput value={r.amount} onChange={v => setRevenue(prev => prev.map((x, j) => j === i ? { ...x, amount: v } : x))} disabled={isLocked} /></div>
+                  <div className="col-span-2"><MoneyInput value={r.checks} onChange={v => setRevenue(prev => prev.map((x, j) => j === i ? { ...x, checks: v } : x))} disabled={isLocked} /></div>
+                  <div className="col-span-2 text-right text-sm font-mono text-slate-400">{num(r.checks) > 0 ? fmt(num(r.amount) / num(r.checks)) : '—'}</div>
+                </div>
               </div>
             ))}
             <div className="flex items-center justify-between pt-3 border-t border-green-500/20">
@@ -936,7 +950,7 @@ export default function DailyReportPage() {
                   <div className="space-y-2">
                     {group.accounts.map(ta => (
                       <div key={ta.id} className="flex items-center gap-3">
-                        <span className="text-sm text-slate-300 w-40 shrink-0">{ta.icon} {ta.name}</span>
+                        <span className="text-sm text-slate-300 w-28 sm:w-40 shrink-0 truncate">{ta.icon} {ta.name}</span>
                         <MoneyInput value={terminals[ta.id] || ''} onChange={v => setTerminals(prev => ({ ...prev, [ta.id]: v }))} disabled={isLocked} />
                       </div>
                     ))}
@@ -985,16 +999,21 @@ export default function DailyReportPage() {
                 <div className="mt-4 space-y-2">
                   {isCashW ? (
                     <>
-                      <div className="grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
+                      <div className="hidden sm:grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
                         <div className="col-span-4 text-right">Сумма (₸)</div>
                         <div className="col-span-7">Комментарий</div>
                         <div className="col-span-1" />
                       </div>
                       {(withdrawals[sec.key] || []).map((row, idx) => (
-                        <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                          <div className="col-span-4"><MoneyInput value={row.amount} onChange={v => updateWithdrawal(sec.key, idx, 'amount', v)} disabled={isLocked} /></div>
-                          <div className="col-span-7"><input value={row.comment || ''} onChange={e => updateWithdrawal(sec.key, idx, 'comment', e.target.value)} className="input text-sm w-full" placeholder="Причина изъятия" disabled={isLocked} /></div>
-                          <div className="col-span-1 flex justify-center">
+                        <div key={idx} className="flex flex-col sm:grid sm:grid-cols-12 gap-2 sm:items-center py-2 sm:py-0 border-b border-slate-800/30 sm:border-0 last:border-0">
+                          <div className="sm:col-span-4"><MoneyInput value={row.amount} onChange={v => updateWithdrawal(sec.key, idx, 'amount', v)} disabled={isLocked} /></div>
+                          <div className="sm:col-span-7 flex items-center gap-2">
+                            <input value={row.comment || ''} onChange={e => updateWithdrawal(sec.key, idx, 'comment', e.target.value)} className="input text-sm w-full" placeholder="Причина изъятия" disabled={isLocked} />
+                            <div className="sm:hidden shrink-0">
+                              {!isLocked && <button onClick={() => removeRow(sec.key, idx)} className="p-2 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>}
+                            </div>
+                          </div>
+                          <div className="col-span-1 hidden sm:flex justify-center">
                             {!isLocked && <button onClick={() => removeRow(sec.key, idx)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>}
                           </div>
                         </div>
@@ -1003,21 +1022,23 @@ export default function DailyReportPage() {
                     </>
                   ) : (
                     <>
-                      <div className="grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
+                      <div className="hidden sm:grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
                         <div className="col-span-5">{isPayroll ? 'Сотрудник' : 'Поставщик'}</div>
                         <div className="col-span-3 text-right">Сумма (₸)</div>
                         <div className="col-span-3">Комментарий</div><div className="col-span-1" />
                       </div>
                       {withdrawals[sec.key].map((row, idx) => (
-                        <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                          <div className="col-span-5">
+                        <div key={idx} className="flex flex-col sm:grid sm:grid-cols-12 gap-2 sm:items-center py-2 sm:py-0 border-b border-slate-800/30 sm:border-0 last:border-0">
+                          <div className="sm:col-span-5">
                             {isFixed ? <div className="text-sm text-slate-300 px-3 py-2">{row.name}</div>
                               : <NameInput value={row.name} onChange={v => updateWithdrawal(sec.key, idx, 'name', v)} suggestions={suggestions} placeholder={isPayroll ? 'Сотрудник' : 'Поставщик'} disabled={isLocked} />}
                           </div>
-                          <div className="col-span-3"><MoneyInput value={row.amount} onChange={v => updateWithdrawal(sec.key, idx, 'amount', v)} disabled={isLocked} /></div>
-                          <div className="col-span-3"><input value={row.comment || ''} onChange={e => updateWithdrawal(sec.key, idx, 'comment', e.target.value)} className="input text-sm w-full" placeholder="—" disabled={isLocked} /></div>
-                          <div className="col-span-1 flex justify-center">
-                            {!isFixed && !isLocked && <button onClick={() => removeRow(sec.key, idx)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>}
+                          <div className="flex items-center gap-2 sm:contents">
+                            <div className="flex-1 sm:col-span-3"><MoneyInput value={row.amount} onChange={v => updateWithdrawal(sec.key, idx, 'amount', v)} disabled={isLocked} /></div>
+                            <div className="flex-1 sm:col-span-3"><input value={row.comment || ''} onChange={e => updateWithdrawal(sec.key, idx, 'comment', e.target.value)} className="input text-sm w-full" placeholder="—" disabled={isLocked} /></div>
+                            <div className="shrink-0 sm:col-span-1 sm:flex sm:justify-center">
+                              {!isFixed && !isLocked && <button onClick={() => removeRow(sec.key, idx)} className="p-2 sm:p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>}
+                            </div>
                           </div>
                         </div>
                       ))}

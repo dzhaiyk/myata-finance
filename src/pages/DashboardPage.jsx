@@ -431,7 +431,7 @@ export default function DashboardPage() {
             <h3 className="text-sm font-semibold text-slate-300">Средняя выручка по дням недели</h3>
             <span className="text-[10px] text-slate-600 ml-auto">за всё время ({allReports.length} смен) · медиана {fmt(median)} ₸</span>
           </div>
-          <div className="grid grid-cols-7 gap-2">
+          <div className="grid grid-cols-7 gap-1 sm:gap-2">
             {weekdayStats.map(w => {
               const aboveMedian = w.avg >= median
               const barColor = aboveMedian ? 'bg-green-400/30 border-green-400/30' : 'bg-rose-400/30 border-rose-400/30'

@@ -459,7 +459,7 @@ export default function AccountsPage() {
                       </div>
                       <span className="text-xs text-slate-500">{TYPES[acct.type]}</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-4 items-end">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
                       <div>
                         <div className="text-[10px] text-slate-500 uppercase mb-1">Ожидаемый</div>
                         <div className="font-mono text-sm font-semibold">{fmt(expected)} ₸</div>

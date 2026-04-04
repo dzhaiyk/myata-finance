@@ -638,7 +638,7 @@ export default function PnLPage() {
         const marginPct = kpiValues.revenue > 0 ? (kpiValues.op_profit / kpiValues.revenue * 100).toFixed(1) : 0
         const marginColor = marginPct >= 30 ? 'text-green-400' : marginPct >= 15 ? 'text-yellow-400' : 'text-red-400'
         return (
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <div className="card-hover text-center"><div className="stat-label">Выручка</div><div className="stat-value text-lg text-green-400">{fmtM(kpiValues.revenue || 0)}</div></div>
             <div className="card-hover text-center"><div className="stat-label">Food Cost</div>
               <div className={cn('stat-value text-lg', (kpiValues.fc_pct || 0) > 0.32 ? 'text-red-400' : 'text-yellow-400')}>{fmtPct(kpiValues.fc_pct || 0)}</div></div>

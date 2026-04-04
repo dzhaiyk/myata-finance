@@ -57,8 +57,8 @@ export default function BulkOperationModal({ open, onClose, onSave, investors, m
   const title = mode === 'dividend' ? 'Выплатить дивиденды' : 'Внести от всех учредителей'
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="card w-full max-w-lg space-y-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="card w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-white">{title}</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white">
@@ -110,7 +110,7 @@ export default function BulkOperationModal({ open, onClose, onSave, investors, m
             <div className="space-y-2">
               {activeInvestors.map(inv => (
                 <div key={inv.id} className="flex items-center gap-3">
-                  <span className="text-sm text-slate-300 w-40 truncate">{inv.full_name}</span>
+                  <span className="text-sm text-slate-300 w-24 sm:w-40 truncate shrink-0">{inv.full_name}</span>
                   <input
                     type="text"
                     className="input flex-1"

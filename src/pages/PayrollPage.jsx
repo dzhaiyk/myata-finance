@@ -235,7 +235,7 @@ export default function PayrollPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="card-hover text-center">
           <div className="stat-label">Период</div>
           <div className="stat-value text-lg">{periodLabel} {MONTHS_RU[month - 1]?.slice(0, 3)}</div>
