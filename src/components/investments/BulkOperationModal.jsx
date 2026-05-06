@@ -47,7 +47,10 @@ export default function BulkOperationModal({ open, onClose, onSave, investors, m
   const handleSave = () => {
     const entries = activeInvestors.map(inv => ({
       investor_id: inv.id,
+      transaction_date: date,
+      type: mode,
       amount: perPerson ? parseNum(amounts[inv.id] || 0) : parseNum(uniformAmount),
+      notes: notes.trim() || null,
     })).filter(e => e.amount > 0)
 
     if (entries.length === 0) return

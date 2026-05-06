@@ -235,7 +235,11 @@ export default function InvestmentsPage() {
 
   const saveBulk = async (items) => {
     const rows = items.map(item => ({ ...item, created_by: profile?.id }))
-    await supabase.from('investor_transactions').insert(rows)
+    const { error } = await supabase.from('investor_transactions').insert(rows)
+    if (error) {
+      alert('Не удалось сохранить операции: ' + error.message)
+      return
+    }
     setShowBulkModal(false)
     await load()
   }
