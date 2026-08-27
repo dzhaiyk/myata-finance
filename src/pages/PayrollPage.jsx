@@ -10,7 +10,7 @@ const CURRENT_MONTH = new Date().getMonth() + 1
 
 export default function PayrollPage() {
   const { hasPermission } = useAuthStore()
-  const canManage = hasPermission('users.manage')
+  const canManage = hasPermission('payroll.manage')
 
   const [year, setYear] = useState(CURRENT_YEAR)
   const [month, setMonth] = useState(CURRENT_MONTH)
@@ -42,11 +42,13 @@ export default function PayrollPage() {
     const endDate = `${year}-${String(month).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`
 
     // Load advances from daily reports for this period
+    // Только отправленные отчёты — черновики могут измениться или быть удалены
     const { data: reports } = await supabase
       .from('daily_reports')
       .select('data, report_date')
       .gte('report_date', startDate)
       .lte('report_date', endDate)
+      .eq('status', 'submitted')
 
     // Sum advances per staff name from daily reports
     const advancesByName = {}
@@ -62,74 +64,86 @@ export default function PayrollPage() {
       })
     })
 
-    // Load or create period
-    let { data: per } = await supabase
+    // Load period — НЕ создаём при просмотре (иначе мусорные периоды на каждый клик);
+    // период создаётся при первом сохранении расчёта
+    const { data: per } = await supabase
       .from('payroll_periods')
       .select('*')
       .eq('year', year).eq('month', month).eq('period', period)
-      .single()
+      .maybeSingle()
 
-    if (!per) {
-      const { data: newPer } = await supabase
-        .from('payroll_periods')
-        .insert({ year, month, period })
-        .select()
-        .single()
-      per = newPer
-    }
+    setPeriodId(per?.id || null)
+    const perStatus = per?.status || 'draft'
+    setPeriodStatus(perStatus)
 
+    let details = []
     if (per) {
-      setPeriodId(per.id)
-      setPeriodStatus(per.status)
-
-      const { data: details } = await supabase
+      const { data } = await supabase
         .from('payroll_details')
         .select('*')
         .eq('period_id', per.id)
-
-      const buildRow = (s, pos, existing) => {
-        const dailyRate = s.daily_rate_override || pos?.daily_rate || 0
-        const salesPct = s.sales_pct_override || pos?.sales_pct || 0
-        // Match advances by staff name (case-insensitive)
-        const nameKey = s.full_name.trim().toLowerCase()
-        const autoAdvances = advancesByName[nameKey]?.total || 0
-        const advDetails = advancesByName[nameKey]?.details || []
-
-        if (existing) {
-          // Use saved data but update advances from daily reports
-          const r = { ...existing, daily_rate: dailyRate, sales_pct: salesPct, position_name: pos?.name || '—' }
-          r.advances_from_reports = autoAdvances
-          r.advances_details = advDetails
-          // Only auto-update advances if they haven't been manually overridden
-          if (!existing._manual_advances) {
-            r.advances = autoAdvances
-            r.total_payout = r.total_earned - r.advances - r.deductions
-          }
-          return r
-        }
-
-        const row = makeRow(s, pos, dailyRate, salesPct)
-        row.advances = autoAdvances
-        row.advances_from_reports = autoAdvances
-        row.advances_details = advDetails
-        row.total_payout = row.total_earned - row.advances - row.deductions
-        return row
-      }
-
-      if (details && details.length > 0) {
-        setRows(staffData.map(s => {
-          const pos = posData.find(p => p.id === s.position_id)
-          const existing = details.find(d => d.staff_id === s.id)
-          return buildRow(s, pos, existing)
-        }))
-      } else {
-        setRows(staffData.map(s => {
-          const pos = posData.find(p => p.id === s.position_id)
-          return buildRow(s, pos, null)
-        }))
-      }
+      details = data || []
     }
 
+    const buildRow = (s, pos, existing) => {
+      const dailyRate = s.daily_rate_override || pos?.daily_rate || 0
+      const salesPct = s.sales_pct_override || pos?.sales_pct || 0
+      // Match advances by staff name (case-insensitive)
+      const nameKey = s.full_name.trim().toLowerCase()
+      const autoAdvances = advancesByName[nameKey]?.total || 0
+      const advDetails = advancesByName[nameKey]?.details || []
+
+      if (existing) {
+        const r = { ...existing }
+        // Выплаченный период — исторические ставки не трогаем;
+        // черновик — подтягиваем актуальные ставки из справочника и пересчитываем
+        if (perStatus !== 'paid') {
+          r.daily_rate = dailyRate
+          r.sales_pct = salesPct
+        }
+        r.position_name = pos?.name || existing.position_name || '—'
+        r.advances_from_reports = autoAdvances
+        r.advances_details = advDetails
+        // Авто-обновление аванса только если он не был исправлен вручную (флаг из БД)
+        if (perStatus !== 'paid' && !existing.manual_advances) {
+          r.advances = autoAdvances
+        }
+        r.daily_total = r.days_worked * r.daily_rate
+        r.sales_bonus = Math.round(r.sales_amount * r.sales_pct / 100)
+        r.total_earned = r.daily_total + r.sales_bonus
+        r.total_payout = r.total_earned - r.advances - r.deductions
+        return r
+      }
+
+      const row = makeRow(s, pos, dailyRate, salesPct)
+      row.advances = autoAdvances
+      row.advances_from_reports = autoAdvances
+      row.advances_details = advDetails
+      row.total_payout = row.total_earned - row.advances - row.deductions
+      return row
+    }
+
+    const staffRows = staffData.map(s => {
+      const pos = posData.find(p => p.id === s.position_id)
+      const existing = details.find(d => d.staff_id === s.id)
+      return buildRow(s, pos, existing)
+    })
+
+    // Сохранённые строки уволенных сотрудников: раньше пересохранение периода
+    // их молча удаляло — теперь показываем и сохраняем вместе с остальными
+    const orphanRows = details
+      .filter(d => !staffData.some(s => s.id === d.staff_id))
+      .map(d => {
+        const nameKey = (d.staff_name || '').trim().toLowerCase()
+        return {
+          ...d,
+          department: 'Уволенные',
+          advances_from_reports: advancesByName[nameKey]?.total || 0,
+          advances_details: advancesByName[nameKey]?.details || [],
+        }
+      })
+
+    setRows([...staffRows, ...orphanRows])
     setAdvancesByName(advancesByName)
   }
 
@@ -165,14 +179,27 @@ export default function PayrollPage() {
   }
 
   const handleSave = async () => {
-    if (!periodId) return
+    if (periodStatus === 'paid' && !confirm('Период уже отмечен как выплаченный. Перезаписать расчёт?')) return
     setSaving(true)
     try {
+      // Период создаётся при первом сохранении (а не при каждом просмотре)
+      let pid = periodId
+      if (!pid) {
+        const { data: newPer, error: perErr } = await supabase
+          .from('payroll_periods')
+          .insert({ year, month, period })
+          .select()
+          .single()
+        if (perErr) throw perErr
+        pid = newPer.id
+        setPeriodId(pid)
+      }
       // Delete existing details for this period
-      await supabase.from('payroll_details').delete().eq('period_id', periodId)
+      // (rows включают и уволенных — их строки пересоздаются, а не теряются)
+      await supabase.from('payroll_details').delete().eq('period_id', pid)
       // Insert new
       const details = rows.map(r => ({
-        period_id: periodId,
+        period_id: pid,
         staff_id: r.staff_id,
         staff_name: r.staff_name,
         position_name: r.position_name,
@@ -187,6 +214,7 @@ export default function PayrollPage() {
         total_earned: r.total_earned,
         total_payout: r.total_payout,
         notes: r.notes || null,
+        manual_advances: !!(r._manual_advances || r.manual_advances),
       }))
       const { error } = await supabase.from('payroll_details').insert(details)
       if (error) throw error
@@ -196,6 +224,7 @@ export default function PayrollPage() {
   }
 
   const markPaid = async () => {
+    if (!periodId) return alert('Сначала сохраните расчёт')
     if (!confirm('Отметить период как выплаченный?')) return
     await supabase.from('payroll_periods').update({ status: 'paid', paid_date: formatLocalDate() }).eq('id', periodId)
     setPeriodStatus('paid')
@@ -311,7 +340,7 @@ export default function PayrollPage() {
                     <td className="table-cell text-right">
                       <div className="relative group">
                         <input type="text" inputMode="numeric" value={r.advances || ''} onChange={e => {
-                          const row = { ...rows[r._idx], advances: Number(e.target.value.replace(/[^0-9]/g, '')) || 0, _manual_advances: true }
+                          const row = { ...rows[r._idx], advances: Number(e.target.value.replace(/[^0-9]/g, '')) || 0, manual_advances: true }
                           row.total_payout = row.total_earned - row.advances - row.deductions
                           setRows(prev => prev.map((rr, i) => i === r._idx ? row : rr))
                         }}

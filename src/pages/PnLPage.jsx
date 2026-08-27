@@ -178,7 +178,7 @@ export default function PnLPage() {
       setAdjustments(adjRes.data || [])
     } else {
       const startDate = viewMode === 'ytd' ? `${year}-01-01` : `${year}-${String(month).padStart(2, '0')}-01`
-      const endMonth = viewMode === 'ytd' ? 12 : month
+      const endMonth = month // YTD — до выбранного месяца включительно, не до декабря
       const endDate = `${year}-${String(endMonth).padStart(2, '0')}-${new Date(year, endMonth, 0).getDate()}`
       const [drRes, btRes, adjRes] = await Promise.all([
         supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted'),
@@ -194,143 +194,30 @@ export default function PnLPage() {
     setLoading(false)
   }
 
-  // ===== COMPUTE ALL P&L VALUES =====
+  // ===== COMPUTE ALL P&L VALUES (month / ytd) =====
+  // Считаем помесячно той же функцией computeMonthValues, что и режимы «Год»/«Обзор»:
+  // единая логика historical/live (без двойного счёта), YTD = январь..выбранный месяц
+  // (согласовано с Cash Flow; раньше YTD захватывал будущие месяцы до декабря)
   const values = useMemo(() => {
-    const v = {}
-
-    // Determine which months we're computing for
+    if (viewMode === 'year' || viewMode === 'overall') return {}
     const startMonth = viewMode === 'ytd' ? 1 : month
-    const endMonth = viewMode === 'ytd' ? 12 : month
-
-    // Revenue from daily reports
-    let revK = 0, revB = 0, revH = 0, revO = 0
-    dailyReports.forEach(r => {
-      const depts = (r.data?.departments) || []
-      depts.forEach(d => {
-        const a = Number(d.amount) || 0
-        if (d.name === 'Кухня') revK += a
-        else if (d.name === 'Бар') revB += a
-        else if (d.name === 'Кальян') revH += a
-        else revO += a
-      })
-    })
-    v.rev_kitchen = revK; v.rev_bar = revB; v.rev_hookah = revH; v.rev_other = revO
-    v.revenue = revK + revB + revH + revO
-
-    // Cash expenses from daily reports
-    let cashPayroll = 0, cashKitchen = 0, cashBar = 0, cashHookah = 0, cashOther = 0, cashHookahCapex = 0
-    dailyReports.forEach(r => {
-      const w = r.data?.withdrawals || {}
-      ;(w.payroll || []).forEach(row => cashPayroll += Number(row.amount) || 0)
-      ;(w.suppliers_kitchen || []).forEach(row => cashKitchen += Number(row.amount) || 0)
-      ;(w.suppliers_bar || []).forEach(row => cashBar += Number(row.amount) || 0)
-      ;(w.tobacco || []).forEach(row => {
-        const amt = Number(row.amount) || 0
-        if (row.name === 'Аппараты') cashHookahCapex += amt
-        else cashHookah += amt
-      })
-      ;(w.other || []).forEach(row => cashOther += Number(row.amount) || 0)
-    })
-    // payroll_cash removed — ФОТ вносится вручную
-
-    // Bank expenses by category — period-aware aggregation
-    // Кредиты (возвраты) уменьшают расход по категории, дебеты — увеличивают
-    const bankByCat = {}
-    bankTx.forEach(tx => {
-      if (!tx.category || tx.category === 'uncategorized' || tx.category === 'internal') return
-      // Sum the period-allocated amount across all target months
-      let txTotal = 0
-      for (let m = startMonth; m <= endMonth; m++) {
-        txTotal += getTxAmountForMonth(tx, year, m)
-      }
-      if (txTotal !== 0) {
-        const signed = tx.is_debit ? txTotal : -txTotal
-        bankByCat[tx.category] = (bankByCat[tx.category] || 0) + signed
-      }
-    })
-    const bk = (cat) => bankByCat[cat] || 0
-
-    // Assign bank values to PNL keys
-    PNL_STRUCTURE.forEach(line => {
-      if (!line.source) return
-      if (line.source.startsWith('bank:')) {
-        const cat = line.source.replace('bank:', '')
-        v[line.key] = bk(cat)
-      } else if (line.source.startsWith('both:')) {
-        const cat = line.source.replace('both:', '')
-        if (line.key === 'fc_kitchen') v[line.key] = cashKitchen + bk(cat)
-        else if (line.key === 'fc_bar') v[line.key] = cashBar + bk(cat)
-        else if (line.key === 'fc_hookah') v[line.key] = cashHookah + bk(cat)
-        else if (line.key === 'opex_household') v[line.key] = cashOther + bk(cat)
-        else v[line.key] = bk(cat)
-      }
-    })
-
-    // Add hookah equipment (Аппараты) to CapEx прочее
-    v.capex_other = (v.capex_other || 0) + cashHookahCapex
-
-    // Calculate group sums (each group = sum of its direct children)
-    const groups = ['capex', 'payroll', 'foodcost', 'marketing', 'rent', 'utilities', 'opex_other', 'taxes']
-    groups.forEach(gKey => {
-      const gIdx = PNL_STRUCTURE.findIndex(l => l.key === gKey)
-      if (gIdx < 0) return
-      const gLevel = PNL_STRUCTURE[gIdx].level
-      let sum = 0
-      for (let i = gIdx + 1; i < PNL_STRUCTURE.length; i++) {
-        const line = PNL_STRUCTURE[i]
-        if (line.level <= gLevel) break
-        if (line.level === gLevel + 1 && !line.calc) sum += v[line.key] || 0
-      }
-      v[gKey] = sum
-    })
-
-    v.opex = v.payroll + v.foodcost + v.marketing + v.rent + v.utilities + v.opex_other + v.taxes
-    v.expenses = v.capex + v.opex
-    v.op_profit = v.revenue - v.opex
-    v.net_profit = v.revenue - v.expenses
-
-    // Adjustments — add to specific category or fallback to net_profit
-    adjustments.forEach(a => {
-      const amt = Number(a.amount) || 0
-      if (a.category && v[a.category] !== undefined) {
-        v[a.category] += amt
-      } else {
-        // Legacy adjustments without category
-        if (a.type === 'income') v.net_profit += amt
-        else v.net_profit -= amt
-      }
-    })
-    // Recalculate revenue and groups after adjustments
-    v.revenue = v.rev_kitchen + v.rev_bar + v.rev_hookah + v.rev_other
-    groups.forEach(gKey => {
-      const gIdx = PNL_STRUCTURE.findIndex(l => l.key === gKey)
-      if (gIdx < 0) return
-      const gLevel = PNL_STRUCTURE[gIdx].level
-      let sum = 0
-      for (let i = gIdx + 1; i < PNL_STRUCTURE.length; i++) {
-        const line = PNL_STRUCTURE[i]
-        if (line.level <= gLevel) break
-        if (line.level === gLevel + 1 && !line.calc) sum += v[line.key] || 0
-      }
-      v[gKey] = sum
-    })
-    v.opex = v.payroll + v.foodcost + v.marketing + v.rent + v.utilities + v.opex_other + v.taxes
-    v.expenses = v.capex + v.opex
-    v.op_profit = v.revenue - v.opex
-    v.net_profit = v.revenue - v.expenses
-
-    // Ratios
-    v.margin_pct = v.revenue > 0 ? v.op_profit / v.revenue : 0
-    v.fc_pct = v.revenue > 0 ? v.foodcost / v.revenue : 0
-    v.fc_kitchen_pct = revK > 0 ? (v.fc_kitchen / revK) : 0
-    v.fc_bar_pct = revB > 0 ? (v.fc_bar / revB) : 0
-    v.fc_hookah_pct = revH > 0 ? (v.fc_hookah / revH) : 0
-
-    return v
+    const totals = {}
+    for (let m = startMonth; m <= month; m++) {
+      const mv = computeMonthValues(year, m, dailyReports, bankTx, adjustments)
+      PNL_STRUCTURE.forEach(line => { totals[line.key] = (totals[line.key] || 0) + (mv[line.key] || 0) })
+    }
+    // Ratios пересчитываются от суммарных значений (а не суммой процентов)
+    totals.margin_pct = totals.revenue > 0 ? totals.op_profit / totals.revenue : 0
+    totals.fc_pct = totals.revenue > 0 ? totals.foodcost / totals.revenue : 0
+    totals.fc_kitchen_pct = totals.rev_kitchen > 0 ? totals.fc_kitchen / totals.rev_kitchen : 0
+    totals.fc_bar_pct = totals.rev_bar > 0 ? totals.fc_bar / totals.rev_bar : 0
+    totals.fc_hookah_pct = totals.rev_hookah > 0 ? totals.fc_hookah / totals.rev_hookah : 0
+    return totals
   }, [dailyReports, bankTx, adjustments, year, month, viewMode])
 
-  // Compute PnL values for a single month (used by year/overall modes)
-  const computeMonthValues = (targetYear, targetMonth, allDailyReports, allBankTx, allAdjustments) => {
+  // Compute PnL values for a single month — единая логика для ВСЕХ режимов
+  // (function declaration — hoisted, вызывается из values-memo выше по файлу)
+  function computeMonthValues(targetYear, targetMonth, allDailyReports, allBankTx, allAdjustments) {
     const v = {}
 
     // Filter data for this specific month
@@ -416,8 +303,11 @@ export default function PnLPage() {
     }
 
     // Apply manual adjustments on top
+    let legacyNet = 0 // старые корректировки без категории — прямо в прибыль
     manualAdj.forEach(a => {
-      if (a.category) v[a.category] = (v[a.category] || 0) + Number(a.amount)
+      const amt = Number(a.amount) || 0
+      if (a.category) v[a.category] = (v[a.category] || 0) + amt
+      else legacyNet += a.type === 'income' ? amt : -amt
     })
 
     // Calculate group sums
@@ -438,8 +328,8 @@ export default function PnLPage() {
     v.revenue = (v.rev_kitchen || 0) + (v.rev_bar || 0) + (v.rev_hookah || 0) + (v.rev_other || 0)
     v.opex = (v.payroll || 0) + (v.foodcost || 0) + (v.marketing || 0) + (v.rent || 0) + (v.utilities || 0) + (v.opex_other || 0) + (v.taxes || 0)
     v.expenses = (v.capex || 0) + v.opex
-    v.op_profit = v.revenue - v.opex
-    v.net_profit = v.revenue - v.expenses
+    v.op_profit = v.revenue - v.opex + legacyNet
+    v.net_profit = v.revenue - v.expenses + legacyNet
 
     // Ratios
     v.margin_pct = v.revenue > 0 ? v.op_profit / v.revenue : 0
@@ -519,10 +409,11 @@ export default function PnLPage() {
   const toggleSection = (key) => setCollapsed(p => ({ ...p, [key]: !p[key] }))
 
   const startEdit = () => {
-    // Pre-fill adjEdits from existing adjustments (one per category)
+    // Pre-fill adjEdits from existing MANUAL adjustments (historical — не корректировки,
+    // они входят в базовые значения и не должны дублироваться при сохранении)
     const edits = {}
     adjustments.forEach(a => {
-      if (a.category) edits[a.category] = String(Number(a.amount) || 0)
+      if (a.type !== 'historical' && a.category) edits[a.category] = String(Number(a.amount) || 0)
     })
     setAdjEdits(edits)
     setEditMode(true)
@@ -530,8 +421,10 @@ export default function PnLPage() {
 
   const saveEdits = async () => {
     const userName = profile?.full_name || 'Unknown'
-    // Delete existing adjustments for this month, then insert fresh values
+    // Delete existing MANUAL adjustments for this month, then insert fresh values.
+    // Historical-строки (импорт 2022–2025) не трогаем — раньше они удалялись безвозвратно.
     await supabase.from('pnl_data').delete().eq('year', year).eq('month', month)
+      .or('type.is.null,type.neq.historical')
     const inserts = Object.entries(adjEdits)
       .filter(([_, v]) => v !== '' && Number(v) !== 0)
       .map(([key, v]) => {
@@ -815,12 +708,12 @@ export default function PnLPage() {
         </div>
       )}
 
-      {/* Adjustment audit log */}
-      {!editMode && (viewMode === 'month' || viewMode === 'ytd') && adjustments.length > 0 && (
+      {/* Adjustment audit log — только ручные корректировки, без historical-импорта */}
+      {!editMode && (viewMode === 'month' || viewMode === 'ytd') && adjustments.some(a => a.type !== 'historical') && (
         <div className="card border-purple-500/20 bg-purple-500/5">
-          <div className="text-xs font-semibold text-purple-400 mb-3">Лог корректировок ({adjustments.length})</div>
+          <div className="text-xs font-semibold text-purple-400 mb-3">Лог корректировок ({adjustments.filter(a => a.type !== 'historical').length})</div>
           <div className="space-y-1.5">
-            {[...adjustments].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)).map(a => {
+            {adjustments.filter(a => a.type !== 'historical').sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)).map(a => {
               const catLine = PNL_STRUCTURE.find(l => l.key === a.category)
               const dt = a.created_at ? new Date(a.created_at) : null
               return (
