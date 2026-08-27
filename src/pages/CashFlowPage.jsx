@@ -15,7 +15,8 @@ const CF_STRUCTURE = [
   { key: 'cf_operating', label: 'ОПЕРАЦИОННАЯ ДЕЯТЕЛЬНОСТЬ', level: 0, calc: 'sum_children', section: 'operating' },
 
   { key: 'cf_cash_revenue', label: 'Наличная выручка', level: 1, section: 'operating' },
-  { key: 'cf_bank_income', label: 'Безналичные поступления (банк)', level: 1, section: 'operating' },
+  { key: 'cf_acquiring', label: 'Зачисления с терминалов (эквайринг)', level: 1, section: 'operating' },
+  { key: 'cf_bank_income', label: 'Прочие поступления (банк)', level: 1, section: 'operating' },
 
   { key: 'cf_cash_expenses', label: 'Наличные расходы', level: 1, calc: 'sum_children', section: 'operating' },
   { key: 'cf_cash_suppliers_kitchen', label: 'Закуп кухня (нал)', level: 2, section: 'operating' },
@@ -114,23 +115,27 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
   const bankDebitByCat = {}  // expenses (is_debit = true)
   let bankCreditTotal = 0     // income (is_debit = false, non-internal)
 
+  // Cash Flow — прямой метод: считаем фактическое движение денег.
+  // Зачисления эквайринга (acquiring_settlement) — это реальный приход
+  // карточной выручки на счёт, показываем отдельной строкой (в P&L они не
+  // идут: там выручка берётся из отчётов смен по отделам).
+  let acquiringTotal = 0
   bankTx.forEach(tx => {
-    if (!tx.category || tx.category === 'uncategorized') return
+    if (!tx.category || tx.category === 'uncategorized' || tx.category === 'internal') return
     const txAmount = getTxAmountForMonth(tx, targetYear, targetMonth)
     if (txAmount === 0) return
 
+    if (tx.category === 'acquiring_settlement') {
+      acquiringTotal += tx.is_debit ? -txAmount : txAmount
+      return
+    }
     if (tx.is_debit) {
-      // Expense — accumulate by category
-      if (tx.category !== 'internal') {
-        bankDebitByCat[tx.category] = (bankDebitByCat[tx.category] || 0) + txAmount
-      }
+      bankDebitByCat[tx.category] = (bankDebitByCat[tx.category] || 0) + txAmount
     } else {
-      // Income — accumulate total (non-internal)
-      if (tx.category !== 'internal') {
-        bankCreditTotal += txAmount
-      }
+      bankCreditTotal += txAmount
     }
   })
+  v.cf_acquiring = acquiringTotal
 
   v.cf_bank_income = bankCreditTotal
 
@@ -147,7 +152,7 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
   v.cf_bank_opex = v.cf_bank_payroll + v.cf_bank_cogs + v.cf_bank_rent + v.cf_bank_utilities + v.cf_bank_marketing + v.cf_bank_taxes + v.cf_bank_other_opex
 
   // Operating CF total
-  v.cf_operating = v.cf_cash_revenue + v.cf_bank_income + v.cf_cash_expenses + v.cf_bank_opex
+  v.cf_operating = v.cf_cash_revenue + v.cf_acquiring + v.cf_bank_income + v.cf_cash_expenses + v.cf_bank_opex
 
   // === INVESTING: CapEx (bank debits only) ===
   v.cf_capex_repair = -(bankDebitByCat['capex_repair'] || 0)
@@ -201,6 +206,7 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
     if (histRevenue > 0) {
       v.cf_operating = histRevenue - histExpenses
       v.cf_cash_revenue = 0
+      v.cf_acquiring = 0
       v.cf_bank_income = histRevenue
       v.cf_bank_opex = -histExpenses
       v.cf_cash_expenses = 0

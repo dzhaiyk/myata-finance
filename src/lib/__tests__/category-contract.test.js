@@ -12,10 +12,19 @@ import { CATEGORIES, KEYWORD_RULES } from '../categorize.js'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const read = (p) => readFileSync(resolve(root, p), 'utf8')
 
-// Канон: коды из INSERT в миграции 008
-const migrationSql = read('supabase/migrations/008_dynamic_categories.sql')
+// Канон: коды из INSERT в миграцию categories — базовый набор (008)
+// плюс добавленные позднее (021: acquiring_settlement).
+// При добавлении новой категории миграцией — дописать файл сюда.
+const CATEGORY_MIGRATIONS = [
+  'supabase/migrations/008_dynamic_categories.sql',
+  'supabase/migrations/021_closed_loop_bank.sql',
+]
 const dbCodes = new Set(
-  [...migrationSql.matchAll(/^\s*\('([a-z0-9_]+)',/gm)].map(m => m[1])
+  CATEGORY_MIGRATIONS.flatMap(f => {
+    const sql = read(f)
+    // INSERT INTO categories: строки ('code', 'name', ...) или VALUES ('code', ...)
+    return [...sql.matchAll(/(?:^\s*|VALUES\s*)\('([a-z0-9_]+)',\s*'/gm)].map(m => m[1])
+  })
 )
 
 describe('канон — миграция 008', () => {

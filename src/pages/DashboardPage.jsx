@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fmt, fmtK, fmtPct, MONTHS_RU } from '@/lib/utils'
 import { getTxAmountForMonth, bankTxRangeFilter } from '@/lib/pnl'
+import { isPnlCategory } from '@/lib/categories'
 import { yearsRange } from '@/lib/dates'
 import { DollarSign, TrendingDown, ShoppingCart, CirclePercent, AlertTriangle, FileText, Trophy, CalendarDays } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts'
@@ -95,7 +96,7 @@ function computePnL(dailyReports, bankTxs, adjustments, year, months) {
   // Сумма транзакции распределяется по месяцам периода (period allocation)
   const bankByCat = {}
   bankTxs.forEach(tx => {
-    if (!tx.category || tx.category === 'uncategorized' || tx.category === 'internal') return
+    if (!isPnlCategory(tx.category)) return
     let amt = 0
     months.forEach(m => { amt += getTxAmountForMonth(tx, year, m + 1) })
     if (amt === 0) return

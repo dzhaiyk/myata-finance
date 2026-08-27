@@ -77,6 +77,7 @@ export const CATEGORIES = {
   // Cash flow only
   dividends: { label: 'Дивиденды', group: 'dividends', pnl: null },
   internal: { label: 'Внутренний перевод', group: 'internal', pnl: null },
+  acquiring_settlement: { label: 'Зачисление эквайринга', group: 'acquiring', pnl: null },
   uncategorized: { label: '❓ Не распознано', group: 'uncategorized', pnl: null },
 }
 
@@ -115,8 +116,12 @@ export const KEYWORD_RULES = [
 
   // Beneficiary-based rules
   { field: 'beneficiary', pattern: /Бақыт Әділет/i, category: 'dividends' },
-  { field: 'beneficiary', pattern: /Kaspi Pay/i, category: 'bank_fee' },
-  { field: 'beneficiary', pattern: /KASPI BANK/i, category: 'bank_fee' },
+  // Kaspi Pay: направление решает — кредит = зачисление выручки с терминалов
+  // (нужно для сверки «терминалы ↔ зачисления»), дебет = комиссия эквайринга
+  { field: 'beneficiary', pattern: /Kaspi Pay/i, isDebit: false, category: 'acquiring_settlement' },
+  { field: 'beneficiary', pattern: /Kaspi Pay/i, isDebit: true, category: 'bank_fee' },
+  { field: 'beneficiary', pattern: /KASPI BANK/i, isDebit: false, category: 'acquiring_settlement' },
+  { field: 'beneficiary', pattern: /KASPI BANK/i, isDebit: true, category: 'bank_fee' },
   { field: 'beneficiary', pattern: /2ГИС|2gis/i, category: 'mkt_2gis' },
   { field: 'beneficiary', pattern: /авторское/i, category: 'opex_music' },
   { field: 'beneficiary', pattern: /Алатау Жарық|электри/i, category: 'util_electric' },
@@ -141,8 +146,11 @@ export const KEYWORD_RULES = [
  */
 export function categorizeTransaction(tx) {
   const { beneficiary = '', purpose = '' } = tx
+  const txIsDebit = (Number(tx.debit) || 0) > 0
 
   for (const rule of KEYWORD_RULES) {
+    // Правило с isDebit применяется только к своему направлению (дебет/кредит)
+    if (rule.isDebit !== undefined && rule.isDebit !== txIsDebit) continue
     const text = rule.field === 'purpose' ? purpose : beneficiary
     if (rule.pattern.test(text)) {
       return {
@@ -243,4 +251,43 @@ export function parseBankStatement(rows, { cutoffHour } = {}) {
       amount: tx.debit > 0 ? tx.debit : tx.credit,
     }
   })
+}
+
+/**
+ * Извлекает остатки начала/конца периода из шапки выписки (первые ~20 строк
+ * метаданных). Возвращает { opening, closing } — null, если не найдены
+ * (формат может отличаться, тогда сверка полноты просто не выполняется).
+ *
+ * Сверка полноты файла: opening + Σкредит − Σдебет должно равняться closing.
+ * Ловит обрезанный или отредактированный файл ДО записи в базу.
+ */
+export function parseStatementBalances(rows) {
+  const findBalance = (labelRe) => {
+    for (let i = 0; i < Math.min(20, rows.length); i++) {
+      const row = rows[i] || []
+      for (let c = 0; c < row.length; c++) {
+        if (typeof row[c] === 'string' && labelRe.test(row[c])) {
+          // Число — в этой же ячейке после текста или в следующих ячейках строки
+          const inCell = String(row[c]).replace(/\s/g, ' ').match(/(-?[\d\s]+[.,]?\d*)\s*(?:₸|KZT|тг)?\s*$/i)
+          if (inCell) {
+            const num = Number(inCell[1].replace(/\s/g, '').replace(',', '.'))
+            if (!isNaN(num) && /\d/.test(inCell[1])) return num
+          }
+          for (let k = c + 1; k < row.length; k++) {
+            if (typeof row[k] === 'number') return row[k]
+            if (typeof row[k] === 'string' && row[k].trim() !== '') {
+              const num = Number(row[k].replace(/\s/g, '').replace(',', '.'))
+              if (!isNaN(num)) return num
+            }
+          }
+        }
+      }
+    }
+    return null
+  }
+
+  return {
+    opening: findBalance(/остаток.*(на\s*начало|входящ)|входящ.*остаток/i),
+    closing: findBalance(/остаток.*(на\s*конец|исходящ)|исходящ.*остаток/i),
+  }
 }

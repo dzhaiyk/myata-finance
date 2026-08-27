@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
-import { parseBankStatement } from '@/lib/categorize'
+import { parseBankStatement, parseStatementBalances } from '@/lib/categorize'
 import { getCutoffHour, yearsRange } from '@/lib/dates'
 import { Upload, Trash2, Settings, Plus, X, Save, Calendar, Pencil, Check, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
@@ -224,7 +224,7 @@ export default function BankImportPage() {
   const [importing, setImporting] = useState(false)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [stagedRows, setStagedRows] = useState(null) // parsed rows awaiting confirmation
-  const [stagedMeta, setStagedMeta] = useState({ hidden: 0, duplicates: 0, fileName: '' })
+  const [stagedMeta, setStagedMeta] = useState({ hidden: 0, duplicates: 0, fileName: '', balanceCheck: null, parsedCount: 0 })
   const [savingStaged, setSavingStaged] = useState(false)
   const [filterMonth, setFilterMonth] = useState(() => new Date().getMonth() + 1)
   const [filterYear, setFilterYear] = useState(() => new Date().getFullYear())
@@ -320,6 +320,16 @@ export default function BankImportPage() {
       // parseBankStatement now handles date parsing and column mapping internally.
       // Ночные операции (до границы операционного дня) относятся к предыдущей дате.
       const parsed = parseBankStatement(rows, { cutoffHour: getCutoffHour() })
+
+      // Сверка полноты файла: остаток начала + обороты = остаток конца.
+      // Ловит обрезанную или отредактированную выписку ДО записи в базу.
+      const balances = parseStatementBalances(rows)
+      let balanceCheck = null
+      if (balances.opening != null && balances.closing != null) {
+        const turnover = parsed.reduce((s, t) => s + (t.credit || 0) - (t.debit || 0), 0)
+        const delta = Math.round((balances.opening + turnover - balances.closing) * 100) / 100
+        balanceCheck = { ...balances, delta, ok: Math.abs(delta) < 1 }
+      }
       const [rRes, cRes] = await Promise.all([
         supabase.from('bank_rules').select('*').eq('is_active', true),
         supabase.from('bank_rule_conditions').select('*'),
@@ -362,7 +372,7 @@ export default function BankImportPage() {
       }
       // Stage for preview
       setStagedRows(newRows)
-      setStagedMeta({ hidden, duplicates, fileName: file.name })
+      setStagedMeta({ hidden, duplicates, fileName: file.name, balanceCheck, parsedCount: parsed.length })
     } catch (err) { alert('Ошибка: ' + err.message) }
     setImporting(false); e.target.value = ''
   }
@@ -392,9 +402,11 @@ export default function BankImportPage() {
         inserted = data || []
         alert(`Сохранено ${inserted.length} записей`)
       }
-      // Create account_transactions for the linked bank account (с привязкой reference_id)
+      // Create account_transactions for the linked bank account (с привязкой reference_id).
+      // КАЖДАЯ строка выписки двигает баланс счёта — категория влияет только на P&L/CF.
+      // Раньше uncategorized/internal пропускались, и расчётный баланс навсегда расходился с банком.
       const acctTxs = inserted
-        .filter(r => r.account_id && r.category !== 'uncategorized' && r.category !== 'internal')
+        .filter(r => r.account_id)
         .map(r => ({
           account_id: r.account_id,
           transaction_date: r.transaction_date,
@@ -403,6 +415,7 @@ export default function BankImportPage() {
           description: r.beneficiary || r.purpose || r.category,
           reference_type: 'bank_import',
           reference_id: String(r.id),
+          category: r.category,
         }))
       if (acctTxs.length > 0) {
         await supabase.from('account_transactions').insert(acctTxs)
@@ -451,22 +464,13 @@ export default function BankImportPage() {
     })
   }, [stagedRows, stagedSort])
 
-  // Синхронизация операции по счёту с категорией банковской транзакции:
-  // uncategorized/internal не двигают баланс счёта, остальные — expense/income
+  // Синхронизация операции по счёту при смене категории.
+  // Баланс счёта не зависит от категории (каждая строка выписки = движение денег),
+  // но category в account_transactions обновляем для отчётности по счетам.
   const syncAccountTx = async (tx, category) => {
-    await supabase.from('account_transactions').delete()
+    await supabase.from('account_transactions')
+      .update({ category })
       .eq('reference_type', 'bank_import').eq('reference_id', String(tx.id))
-    if (tx.account_id && category !== 'uncategorized' && category !== 'internal') {
-      await supabase.from('account_transactions').insert({
-        account_id: tx.account_id,
-        transaction_date: tx.transaction_date,
-        type: tx.is_debit ? 'expense' : 'income',
-        amount: Number(tx.amount),
-        description: tx.beneficiary || tx.purpose || category,
-        reference_type: 'bank_import',
-        reference_id: String(tx.id),
-      })
-    }
   }
 
   const updateCategory = async (id, category) => {
@@ -818,6 +822,16 @@ export default function BankImportPage() {
                 {stagedMeta.duplicates > 0 && ` · ${stagedMeta.duplicates} дублей пропущено`}
                 {stagedMeta.hidden > 0 && ` · ${stagedMeta.hidden} скрыто правилами`}
               </p>
+              {/* Сверка полноты файла по остаткам из шапки выписки */}
+              {stagedMeta.balanceCheck ? (
+                <p className={cn('text-xs mt-1', stagedMeta.balanceCheck.ok ? 'text-green-400' : 'text-red-400')}>
+                  {stagedMeta.balanceCheck.ok
+                    ? `✅ Выписка полная: ${fmt(stagedMeta.balanceCheck.opening)} + обороты = ${fmt(stagedMeta.balanceCheck.closing)} ₸`
+                    : `⚠️ Выписка неполная! Расхождение ${fmt(stagedMeta.balanceCheck.delta)} ₸ (остаток начала ${fmt(stagedMeta.balanceCheck.opening)}, конца ${fmt(stagedMeta.balanceCheck.closing)}). Файл обрезан или изменён — проверьте перед сохранением.`}
+                </p>
+              ) : (
+                <p className="text-xs text-slate-600 mt-1">Остатки в шапке файла не найдены — полнота выписки не проверена</p>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {stagedSelected.size > 0 && (

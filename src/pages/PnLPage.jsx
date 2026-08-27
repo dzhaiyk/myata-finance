@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, fmtK, MONTHS_RU } from '@/lib/utils'
 import { getTxAmountForMonth } from '@/lib/pnl'
+import { isPnlCategory } from '@/lib/categories'
 import { yearsRange } from '@/lib/dates'
 import { ChevronDown, ChevronRight, Plus, Trash2, Info, FileText, Upload, ChevronsUpDown, Pencil, Save } from 'lucide-react'
 
@@ -251,7 +252,7 @@ export default function PnLPage() {
       // Кредиты (возвраты) уменьшают расход по категории, дебеты — увеличивают
       const bankByCat = {}
       allBankTx.forEach(tx => {
-        if (!tx.category || tx.category === 'uncategorized' || tx.category === 'internal') return
+        if (!isPnlCategory(tx.category)) return
         const txAmount = getTxAmountForMonth(tx, targetYear, targetMonth)
         if (txAmount !== 0) {
           const signed = tx.is_debit ? txAmount : -txAmount
