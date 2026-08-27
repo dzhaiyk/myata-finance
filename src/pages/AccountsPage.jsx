@@ -14,6 +14,9 @@ const today = () => getBusinessDate()
 export default function AccountsPage() {
   const { hasPermission, profile } = useAuthStore()
   const canManage = hasPermission('settings.edit')
+  // Движение денег (переводы, ручные операции, удаление) — отдельное право:
+  // раньше было доступно любому, у кого открыта страница
+  const canOperate = hasPermission('accounts.manage')
   const [accounts, setAccounts] = useState([])
   const [transactions, setTransactions] = useState([])
   const [balances, setBalances] = useState([])
@@ -263,14 +266,16 @@ export default function AccountsPage() {
           <h1 className="text-2xl font-display font-bold tracking-tight">Счета и остатки</h1>
           <p className="text-sm text-slate-500 mt-0.5">Контроль денежных потоков</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setShowTransfer(true)} className="btn-secondary text-sm flex items-center gap-2">
-            <ArrowRightLeft className="w-4 h-4" /> Перевод
-          </button>
-          <button onClick={() => setShowManualTx(true)} className="btn-primary text-sm flex items-center gap-2">
-            <Plus className="w-4 h-4" /> Операция
-          </button>
-        </div>
+        {canOperate && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowTransfer(true)} className="btn-secondary text-sm flex items-center gap-2">
+              <ArrowRightLeft className="w-4 h-4" /> Перевод
+            </button>
+            <button onClick={() => setShowManualTx(true)} className="btn-primary text-sm flex items-center gap-2">
+              <Plus className="w-4 h-4" /> Операция
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -552,7 +557,7 @@ export default function AccountsPage() {
                     </td>
                     <td className="table-cell text-center text-[10px] text-slate-500">{tx.reference_type || '—'}</td>
                     <td className="table-cell">
-                      {tx.reference_type === 'manual' && (
+                      {tx.reference_type === 'manual' && canOperate && (
                         <button onClick={() => deleteTransaction(tx.id)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
                       )}
                     </td>

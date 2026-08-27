@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, MONTHS_RU } from '@/lib/utils'
+import { yearsRange } from '@/lib/dates'
 import { Plus, HandCoins, Users, List, BarChart3, Trash2, Pencil } from 'lucide-react'
 import TransactionModal from '@/components/investments/TransactionModal'
 import BulkOperationModal from '@/components/investments/BulkOperationModal'
@@ -31,7 +32,7 @@ const TX_TYPE_BADGES = {
 
 const MONTHS_SHORT = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
 
-const DIVIDEND_YEARS = [2022, 2023, 2024, 2025, 2026]
+const DIVIDEND_YEARS = yearsRange()
 
 function AvgMonthlyDividends({ investors, transactions }) {
   const data = useMemo(() => {

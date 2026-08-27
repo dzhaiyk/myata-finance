@@ -152,6 +152,31 @@ export default function DailyReportPage() {
     loadJournal()
   }, [location.key])
 
+  // Касса на начало для черновиков: конец предыдущей ЗАКРЫТОЙ смены строго до выбранной даты.
+  // Пересчитывается при смене даты — раньше при бэкдейте касса оставалась от другой даты.
+  useEffect(() => {
+    if (mode !== 'form' || status === 'submitted') return
+    let cancelled = false
+    ;(async () => {
+      const { data: prevReport } = await supabase
+        .from('daily_reports').select('data')
+        .eq('status', 'submitted')
+        .lt('report_date', date)
+        .order('report_date', { ascending: false })
+        .limit(1).maybeSingle()
+      if (cancelled) return
+      const prevCashEnd = prevReport?.data?.cash_end ?? prevReport?.data?.cash_actual
+      if (prevCashEnd != null) {
+        setCashStart(String(prevCashEnd))
+      } else {
+        // Нет закрытых смен раньше этой даты — остаток из счёта «Касса»
+        const bal = await getCashBalance()
+        if (!cancelled) setCashStart(String(bal || 0))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [date, mode, status])
+
   const loadJournal = async (page = journalPage) => {
     setJournalLoading(true)
     const from = page * JOURNAL_PAGE_SIZE
@@ -223,21 +248,8 @@ export default function DailyReportPage() {
     if (d.departments) setDepartments(d.departments)
     setTerminals(d.terminals || {})
     setMode('form')
-
-    // Для черновиков: касса на начало = касса на конец предыдущей закрытой смены
-    const isDraft = !report.status || report.status === 'draft'
-    if (isDraft) {
-      const { data: prevReport } = await supabase
-        .from('daily_reports').select('data')
-        .eq('status', 'submitted')
-        .lt('report_date', report.report_date)
-        .order('report_date', { ascending: false })
-        .limit(1).single()
-      const prevCashEnd = prevReport?.data?.cash_end ?? prevReport?.data?.cash_actual
-      setCashStart(prevCashEnd != null ? String(prevCashEnd) : String(d.cash_start || ''))
-    } else {
-      setCashStart(String(d.cash_start || ''))
-    }
+    // Для черновиков cashStart пересчитает эффект по [date, mode, status]
+    setCashStart(String(d.cash_start || ''))
   }
 
   const newReport = async () => {
@@ -250,20 +262,7 @@ export default function DailyReportPage() {
     setTerminals({})
     setLastSaved(null)
     setMode('form')
-    // Касса на начало = касса на конец предыдущей закрытой смены
-    const { data: prevReport } = await supabase
-      .from('daily_reports').select('data')
-      .eq('status', 'submitted')
-      .order('report_date', { ascending: false })
-      .limit(1).single()
-    const prevCashEnd = prevReport?.data?.cash_end ?? prevReport?.data?.cash_actual
-    if (prevCashEnd != null) {
-      setCashStart(String(prevCashEnd))
-    } else {
-      // Fallback: если нет закрытых смен, берём из счёта
-      const bal = await getCashBalance()
-      setCashStart(String(bal || 0))
-    }
+    // Касса на начало пересчитается эффектом по [date, mode, status]
   }
 
   // Calculations
@@ -1082,8 +1081,8 @@ export default function DailyReportPage() {
         <div className="card border-blue-500/20 bg-blue-500/5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="label">Остаток на начало смены</label>
-              <MoneyInput value={cashStart} onChange={() => {}} disabled={true} className="opacity-50 cursor-not-allowed" />
+              <label className="label">Остаток на начало смены <span className="text-slate-600">(авто из прошлой смены)</span></label>
+              <MoneyInput value={cashStart} onChange={setCashStart} disabled={isLocked} />
             </div>
             <div>
               <label className="label">Остаток на конец смены</label>

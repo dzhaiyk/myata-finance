@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
 import { parseBankStatement } from '@/lib/categorize'
-import { getCutoffHour } from '@/lib/dates'
+import { getCutoffHour, yearsRange } from '@/lib/dates'
 import { Upload, Trash2, Settings, Plus, X, Save, Calendar, Pencil, Check, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
 const MONTHS_SHORT = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек']
@@ -151,7 +151,7 @@ const PeriodEditor = ({ tx, onSave, disabled }) => {
     setShowCustom(true)
   }
 
-  const years = [2023, 2024, 2025, 2026]
+  const years = yearsRange(2023, 1) // +1 год вперёд для периодов «вперёд 3/6 мес»
 
   return (
     <div className="relative inline-block">
@@ -578,7 +578,7 @@ export default function BankImportPage() {
             {MONTHS_SHORT.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
           </select>
           <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} className="input text-sm">
-            {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+            {yearsRange(2024, 1).map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           {canManage && (
             <button onClick={() => setShowRules(!showRules)}

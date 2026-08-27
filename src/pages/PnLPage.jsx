@@ -2,34 +2,12 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, fmtK, MONTHS_RU } from '@/lib/utils'
+import { getTxAmountForMonth } from '@/lib/pnl'
+import { yearsRange } from '@/lib/dates'
 import { ChevronDown, ChevronRight, Plus, Trash2, Info, FileText, Upload, ChevronsUpDown, Pencil, Save } from 'lucide-react'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const CURRENT_MONTH = new Date().getMonth() + 1
-
-// Period allocation: how much of a transaction's amount belongs to a specific month
-function getTxAmountForMonth(tx, targetYear, targetMonth) {
-  const amount = Number(tx.amount) || 0
-
-  // No period set → standard behavior by transaction_date
-  if (!tx.period_from || !tx.period_to) {
-    const d = new Date(tx.transaction_date)
-    return (d.getFullYear() === targetYear && d.getMonth() + 1 === targetMonth) ? amount : 0
-  }
-
-  const from = new Date(tx.period_from)
-  const to = new Date(tx.period_to)
-  const fromYM = from.getFullYear() * 12 + from.getMonth()
-  const toYM = to.getFullYear() * 12 + to.getMonth()
-  const targetYM = targetYear * 12 + (targetMonth - 1)
-
-  // Target month not in range
-  if (targetYM < fromYM || targetYM > toYM) return 0
-
-  // Split evenly across all months in the period
-  const totalMonths = toYM - fromYM + 1
-  return Math.round(amount / totalMonths)
-}
 
 // P&L structure matching the restaurant's actual format
 // Each line: { key, label, level (0=header,1=group,2=sub), source, calc }
@@ -366,7 +344,7 @@ export default function PnLPage() {
     }
 
     if (viewMode === 'overall') {
-      const years = [2022, 2023, 2024, 2025, 2026]
+      const years = yearsRange()
       const columns = years.map(y => {
         const yearValues = {}
         for (let m = 1; m <= 12; m++) {
@@ -494,7 +472,7 @@ export default function PnLPage() {
                 </select>
               )}
               <select value={year} onChange={e => setYear(Number(e.target.value))} className="input text-sm">
-                {[2022, 2023, 2024, 2025, 2026].map(y => <option key={y}>{y}</option>)}
+                {yearsRange().map(y => <option key={y}>{y}</option>)}
               </select>
             </>
           )}

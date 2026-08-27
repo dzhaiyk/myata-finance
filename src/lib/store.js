@@ -105,6 +105,7 @@ export const ALL_PERMISSIONS = {
   'staff.manage': 'Управление персоналом',
   'suppliers.view': 'Просмотр поставщиков',
   'suppliers.manage': 'Управление поставщиками',
+  'accounts.manage': 'Счета: переводы и ручные операции',
   'payroll.view': 'Просмотр зарплат',
   'payroll.manage': 'Расчёт и выплата зарплат',
   'users.view': 'Просмотр пользователей',

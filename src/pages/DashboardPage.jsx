@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fmt, fmtK, fmtPct, MONTHS_RU } from '@/lib/utils'
+import { getTxAmountForMonth, bankTxRangeFilter } from '@/lib/pnl'
+import { yearsRange } from '@/lib/dates'
 import { DollarSign, TrendingDown, ShoppingCart, CirclePercent, AlertTriangle, FileText, Trophy, CalendarDays } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts'
 
@@ -52,8 +54,10 @@ const PieWithLegend = ({ title, data, total }) => (
 )
 
 // Compute PnL values for a set of daily reports + bank transactions + adjustments
-// Same logic as PnLPage.jsx values computation
-function computePnL(dailyReports, bankTxs, adjustments) {
+// Same logic as PnLPage.jsx values computation.
+// months — Set 0-based месяцев года, по которым распределяются банковские суммы
+// (period allocation, как в PnLPage — иначе цифры расходятся с P&L)
+function computePnL(dailyReports, bankTxs, adjustments, year, months) {
   const v = {}
 
   // Revenue
@@ -87,11 +91,14 @@ function computePnL(dailyReports, bankTxs, adjustments) {
   })
 
   // Bank expenses by category
-  // Кредиты (возвраты) уменьшают расход по категории — как в PnLPage
+  // Кредиты (возвраты) уменьшают расход по категории — как в PnLPage.
+  // Сумма транзакции распределяется по месяцам периода (period allocation)
   const bankByCat = {}
   bankTxs.forEach(tx => {
     if (!tx.category || tx.category === 'uncategorized' || tx.category === 'internal') return
-    const amt = Math.abs(Number(tx.amount) || 0)
+    let amt = 0
+    months.forEach(m => { amt += getTxAmountForMonth(tx, year, m + 1) })
+    if (amt === 0) return
     bankByCat[tx.category] = (bankByCat[tx.category] || 0) + (tx.is_debit ? amt : -amt)
   })
   const bk = (cat) => bankByCat[cat] || 0
@@ -151,7 +158,7 @@ function computePnL(dailyReports, bankTxs, adjustments) {
 }
 
 export default function DashboardPage() {
-  const [year, setYear] = useState(2026)
+  const [year, setYear] = useState(new Date().getFullYear())
   const [reports, setReports] = useState([])
   const [allReports, setAllReports] = useState([])
   const [bankTx, setBankTx] = useState([])
@@ -168,7 +175,9 @@ export default function DashboardPage() {
     const [reportsRes, allReportsRes, bankRes, adjRes] = await Promise.all([
       supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted').order('report_date'),
       supabase.from('daily_reports').select('id, report_date, total_revenue, status').eq('status', 'submitted').order('report_date'),
-      supabase.from('bank_transactions').select('transaction_date, amount, is_debit, category').gte('transaction_date', startDate).lte('transaction_date', endDate),
+      // Включая транзакции, распределённые на этот год периодом (period allocation)
+      supabase.from('bank_transactions').select('transaction_date, amount, is_debit, category, period_from, period_to')
+        .or(bankTxRangeFilter(startDate, endDate)),
       supabase.from('pnl_data').select('*').eq('year', year),
     ])
 
@@ -184,24 +193,25 @@ export default function DashboardPage() {
   const currentMonth = now.getFullYear() === year ? now.getMonth() : 12
   const monthsWithBank = new Set()
   bankTx.forEach(tx => {
-    const m = new Date(tx.transaction_date).getMonth()
+    // Только транзакции с датой в выбранном году: period-overlap подгружает соседние годы
+    const d = new Date(tx.transaction_date)
+    if (d.getFullYear() !== year) return
+    const m = d.getMonth()
     if (m < currentMonth) monthsWithBank.add(m)
   })
 
   const completedReports = reports.filter(r => monthsWithBank.has(new Date(r.report_date).getMonth()))
-  const completedBankTx = bankTx.filter(tx => monthsWithBank.has(new Date(tx.transaction_date).getMonth()))
   const completedAdj = adjustments.filter(a => monthsWithBank.has(a.month - 1))
 
-  // Compute PnL using same logic as PnLPage
-  const pnl = computePnL(completedReports, completedBankTx, completedAdj)
+  // Compute PnL using same logic as PnLPage (period allocation по закрытым месяцам)
+  const pnl = computePnL(completedReports, bankTx, completedAdj, year, monthsWithBank)
 
   // Monthly breakdown
   const monthlyData = MONTHS_RU.map((name, i) => {
     if (!monthsWithBank.has(i)) return { month: name.slice(0, 3), revenue: 0, expenses: 0 }
     const mReports = completedReports.filter(r => new Date(r.report_date).getMonth() === i)
-    const mBank = completedBankTx.filter(tx => new Date(tx.transaction_date).getMonth() === i)
     const mAdj = adjustments.filter(a => a.month === i + 1)
-    const mPnl = computePnL(mReports, mBank, mAdj)
+    const mPnl = computePnL(mReports, bankTx, mAdj, year, new Set([i]))
     return { month: name.slice(0, 3), revenue: mPnl.revenue, expenses: mPnl.expenses }
   })
 
@@ -309,7 +319,7 @@ export default function DashboardPage() {
           </p>
         </div>
         <select value={year} onChange={e => setYear(Number(e.target.value))} className="input text-sm">
-          <option value={2026}>2026</option>
+          {yearsRange().map(y => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
 

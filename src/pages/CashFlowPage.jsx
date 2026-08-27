@@ -2,27 +2,12 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, fmtK, MONTHS_RU } from '@/lib/utils'
+import { getTxAmountForMonth } from '@/lib/pnl'
+import { yearsRange } from '@/lib/dates'
 import { ChevronDown, ChevronRight, ChevronsUpDown, Info, FileText, Upload, Wallet } from 'lucide-react'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const CURRENT_MONTH = new Date().getMonth() + 1
-
-// Period allocation (same as PnLPage)
-function getTxAmountForMonth(tx, targetYear, targetMonth) {
-  const amount = Number(tx.amount) || 0
-  if (!tx.period_from || !tx.period_to) {
-    const d = new Date(tx.transaction_date)
-    return (d.getFullYear() === targetYear && d.getMonth() + 1 === targetMonth) ? amount : 0
-  }
-  const from = new Date(tx.period_from)
-  const to = new Date(tx.period_to)
-  const fromYM = from.getFullYear() * 12 + from.getMonth()
-  const toYM = to.getFullYear() * 12 + to.getMonth()
-  const targetYM = targetYear * 12 + (targetMonth - 1)
-  if (targetYM < fromYM || targetYM > toYM) return 0
-  const totalMonths = toYM - fromYM + 1
-  return Math.round(amount / totalMonths)
-}
 
 // === CASH FLOW STRUCTURE ===
 const CF_STRUCTURE = [
@@ -320,7 +305,7 @@ export default function CashFlowPage() {
     }
 
     // Overall: columns = years
-    const years = [2022, 2023, 2024, 2025, 2026]
+    const years = yearsRange()
     const columns = years.map(y => {
       const yearValues = {}
       for (let m = 1; m <= 12; m++) {
@@ -423,7 +408,7 @@ export default function CashFlowPage() {
           )}
           {viewMode !== 'overall' && (
             <select value={year} onChange={e => setYear(Number(e.target.value))} className="input text-sm">
-              {[2022, 2023, 2024, 2025, 2026].map(y => <option key={y}>{y}</option>)}
+              {yearsRange().map(y => <option key={y}>{y}</option>)}
             </select>
           )}
           <div className="flex bg-slate-900 rounded-lg p-0.5">

@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, fmtK, MONTHS_RU, linearRegression } from '@/lib/utils'
+import { getTxAmountForMonth } from '@/lib/pnl'
+import { yearsRange } from '@/lib/dates'
 import { BarChart2, TrendingUp, TrendingDown, ArrowRight, AlertTriangle, Calendar } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -13,22 +15,6 @@ const WEEKDAYS_ORDER = [1, 2, 3, 4, 5, 6, 0] // Mon–Sun
 
 const chartTooltipStyle = {
   background: '#172033', border: '1px solid #293548', borderRadius: 12, fontSize: 12
-}
-
-// Period allocation (same as PnLPage)
-function getTxAmountForMonth(tx, targetYear, targetMonth) {
-  const amount = Number(tx.amount) || 0
-  if (!tx.period_from || !tx.period_to) {
-    const d = new Date(tx.transaction_date)
-    return (d.getFullYear() === targetYear && d.getMonth() + 1 === targetMonth) ? amount : 0
-  }
-  const from = new Date(tx.period_from)
-  const to = new Date(tx.period_to)
-  const fromYM = from.getFullYear() * 12 + from.getMonth()
-  const toYM = to.getFullYear() * 12 + to.getMonth()
-  const targetYM = targetYear * 12 + (targetMonth - 1)
-  if (targetYM < fromYM || targetYM > toYM) return 0
-  return Math.round(amount / (toYM - fromYM + 1))
 }
 
 export default function AnalyticsPage() {
@@ -127,7 +113,7 @@ export default function AnalyticsPage() {
   // ====== 3.3 Food Cost % Trend ======
   const fcTrend = useMemo(() => {
     const months = []
-    for (let y = 2022; y <= 2026; y++) {
+    for (const y of yearsRange()) {
       for (let m = 1; m <= 12; m++) {
         // Get revenue from daily reports
         const monthReports = allReports.filter(r => {
@@ -197,7 +183,7 @@ export default function AnalyticsPage() {
   const payrollTrend = useMemo(() => {
     const payrollCats = ['payroll_mgmt', 'payroll_kitchen', 'payroll_bar', 'payroll_hookah', 'payroll_hall', 'payroll_transport', 'payroll_other']
     const months = []
-    for (let y = 2022; y <= 2026; y++) {
+    for (const y of yearsRange()) {
       for (let m = 1; m <= 12; m++) {
         const monthReports = allReports.filter(r => {
           const d = new Date(r.report_date)
@@ -333,7 +319,7 @@ export default function AnalyticsPage() {
   // ====== 3.7 Revenue Seasonality Heatmap ======
   const seasonality = useMemo(() => {
     const grid = {} // { 'YYYY': { 0..11: revenue } }
-    const years = [2022, 2023, 2024, 2025, 2026]
+    const years = yearsRange()
 
     years.forEach(y => { grid[y] = {} })
 

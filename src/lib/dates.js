@@ -1,5 +1,17 @@
 import { supabase } from './supabase'
 
+// Первый год данных заведения (исторический импорт начинается с 2022)
+export const START_YEAR = 2022
+
+// Список лет от `from` до текущего (+extraForward лет вперёд).
+// Автоматически расширяется с наступлением нового года — не хардкодить [2022..2026].
+export function yearsRange(from = START_YEAR, extraForward = 0) {
+  const current = new Date().getFullYear() + extraForward
+  const years = []
+  for (let y = from; y <= current; y++) years.push(y)
+  return years
+}
+
 // Граница операционного дня: заведение закрывается ночью (~02:00),
 // поэтому операции после полуночи и до этой границы относятся к ПРЕДЫДУЩЕЙ дате.
 // Настраивается в «Настройки → Операционный день», хранится в settings (key='shift').

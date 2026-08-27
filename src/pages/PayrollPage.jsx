@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, MONTHS_RU } from '@/lib/utils'
-import { formatLocalDate } from '@/lib/dates'
+import { formatLocalDate, yearsRange } from '@/lib/dates'
 import { Calculator, Save, CheckCircle2, DollarSign, Calendar, Users } from 'lucide-react'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -255,7 +255,7 @@ export default function PayrollPage() {
             {MONTHS_RU.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
           </select>
           <select value={year} onChange={e => setYear(Number(e.target.value))} className="input text-sm">
-            <option value={2025}>2025</option><option value={2026}>2026</option>
+            {yearsRange(2025).map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           <div className="flex bg-slate-900 rounded-lg p-0.5">
             <button onClick={() => setPeriod(1)} className={cn('px-3 py-1.5 rounded-md text-xs font-medium transition-all', period === 1 ? 'bg-slate-700 text-white' : 'text-slate-500')}>1–15</button>

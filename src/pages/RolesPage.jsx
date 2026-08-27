@@ -106,6 +106,7 @@ export default function RolesPage() {
   const groupNames = {
     daily_report: 'Ежедневный отчёт', pnl: 'P&L', cashflow: 'Cash Flow', dashboard: 'Dashboard',
     bank_import: 'Импорт выписки', staff: 'Персонал', suppliers: 'Поставщики', payroll: 'Зарплата',
+    accounts: 'Счета', investments: 'Инвестиции',
     users: 'Пользователи', roles: 'Роли', settings: 'Настройки', telegram: 'Telegram',
   }
 
