@@ -87,11 +87,12 @@ function computePnL(dailyReports, bankTxs, adjustments) {
   })
 
   // Bank expenses by category
+  // Кредиты (возвраты) уменьшают расход по категории — как в PnLPage
   const bankByCat = {}
   bankTxs.forEach(tx => {
     if (!tx.category || tx.category === 'uncategorized' || tx.category === 'internal') return
-    if (!tx.is_debit) return
-    bankByCat[tx.category] = (bankByCat[tx.category] || 0) + Math.abs(Number(tx.amount) || 0)
+    const amt = Math.abs(Number(tx.amount) || 0)
+    bankByCat[tx.category] = (bankByCat[tx.category] || 0) + (tx.is_debit ? amt : -amt)
   })
   const bk = (cat) => bankByCat[cat] || 0
 

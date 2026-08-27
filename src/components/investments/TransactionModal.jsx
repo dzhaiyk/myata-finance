@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getBusinessDate } from '@/lib/dates'
 
 const TYPE_OPTIONS = [
   { value: 'investment', label: 'Внесение' },
@@ -9,7 +10,7 @@ const TYPE_OPTIONS = [
   { value: 'share_sale', label: 'Продажа доли' },
 ]
 
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => getBusinessDate()
 
 export default function TransactionModal({ open, onClose, onSave, investors, editTx }) {
   const [form, setForm] = useState({

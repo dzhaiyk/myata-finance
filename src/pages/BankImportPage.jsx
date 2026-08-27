@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
 import { parseBankStatement } from '@/lib/categorize'
+import { getCutoffHour } from '@/lib/dates'
 import { Upload, Trash2, Settings, Plus, X, Save, Calendar, Pencil, Check, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
 const MONTHS_SHORT = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек']
@@ -23,8 +24,11 @@ const OPERATORS = {
 }
 
 // Hash for deduplication — uses SubtleCrypto SHA-256 for collision resistance
+// ВАЖНО: хеш строится по КАЛЕНДАРНОЙ дате (dateRaw), а не по операционной —
+// иначе уже импортированные записи при повторном импорте станут «новыми»
 async function generateTxHash(tx) {
-  const str = `${tx.date}|${tx.number}|${tx.amount}|${tx.isDebit}|${(tx.beneficiary || '').trim().toLowerCase()}|${(tx.purpose || '').slice(0, 120).trim().toLowerCase()}`
+  const hashDate = tx.dateRaw || tx.date
+  const str = `${hashDate}|${tx.number}|${tx.amount}|${tx.isDebit}|${(tx.beneficiary || '').trim().toLowerCase()}|${(tx.purpose || '').slice(0, 120).trim().toLowerCase()}`
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str))
   return Array.from(new Uint8Array(buf)).slice(0, 12).map(b => b.toString(16).padStart(2, '0')).join('')
 }
@@ -313,8 +317,9 @@ export default function BankImportPage() {
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1 })
       const batchId = crypto.randomUUID()
 
-      // parseBankStatement now handles date parsing and column mapping internally
-      const parsed = parseBankStatement(rows)
+      // parseBankStatement now handles date parsing and column mapping internally.
+      // Ночные операции (до границы операционного дня) относятся к предыдущей дате.
+      const parsed = parseBankStatement(rows, { cutoffHour: getCutoffHour() })
       const [rRes, cRes] = await Promise.all([
         supabase.from('bank_rules').select('*').eq('is_active', true),
         supabase.from('bank_rule_conditions').select('*'),

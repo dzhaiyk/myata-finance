@@ -91,9 +91,12 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
   )
 
   // === OPERATING: Cash revenue ===
+  // data.revenue — массив [{type: 'Наличные', amount: '12500'}], суммы — строки с запятой
+  const parseNum = (val) => Number(String(val ?? '').replace(/\s/g, '').replace(',', '.')) || 0
   let cashRevenue = 0
   monthReports.forEach(r => {
-    cashRevenue += Number(r.data?.payments?.cash) || 0
+    const cashRow = (r.data?.revenue || []).find(x => x.type === 'Наличные')
+    cashRevenue += parseNum(cashRow?.amount)
   })
   v.cf_cash_revenue = cashRevenue
 
@@ -101,16 +104,16 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
   let cashKitchen = 0, cashBar = 0, cashTobacco = 0, cashPayroll = 0, cashOther = 0, cashWithdrawal = 0
   monthReports.forEach(r => {
     const w = r.data?.withdrawals || {}
-    const sum = (arr) => (arr || []).reduce((s, row) => s + (Number(row.amount) || 0), 0)
+    const sum = (arr) => (arr || []).reduce((s, row) => s + parseNum(row.amount), 0)
     cashKitchen += sum(w.suppliers_kitchen)
     cashBar += sum(w.suppliers_bar)
     ;(w.tobacco || []).forEach(row => {
-      const amt = Number(row.amount) || 0
+      const amt = parseNum(row.amount)
       if (row.name !== 'Аппараты') cashTobacco += amt
     })
     cashPayroll += sum(w.payroll)
     cashOther += sum(w.other)
-    cashWithdrawal += sum(w.withdrawals)
+    cashWithdrawal += sum(w.cash_withdrawals)
   })
 
   v.cf_cash_suppliers_kitchen = -cashKitchen
@@ -170,7 +173,7 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
   let cashHookahCapex = 0
   monthReports.forEach(r => {
     ;(r.data?.withdrawals?.tobacco || []).forEach(row => {
-      if (row.name === 'Аппараты') cashHookahCapex += Number(row.amount) || 0
+      if (row.name === 'Аппараты') cashHookahCapex += parseNum(row.amount)
     })
   })
   v.cf_capex_hookah = -cashHookahCapex
@@ -239,15 +242,6 @@ export default function CashFlowPage() {
     CF_STRUCTURE.filter(l => l.calc === 'sum_children' && l.level > 0).forEach(l => { c[l.key] = true })
     return c
   })
-
-  if (!hasPermission('cashflow.view')) {
-    return (
-      <div className="text-center text-slate-500 py-20">
-        <Wallet className="w-12 h-12 mx-auto mb-3 text-slate-700" />
-        <p>Нет доступа к Cash Flow</p>
-      </div>
-    )
-  }
 
   useEffect(() => { loadData() }, [year, month, viewMode])
 
@@ -372,6 +366,16 @@ export default function CashFlowPage() {
     : viewMode === 'year' ? `${year} год`
     : viewMode === 'ytd' ? `${year} YTD (до ${MONTHS_RU[month - 1]})`
     : `${MONTHS_RU[month - 1]} ${year}`
+
+  // Проверка прав ПОСЛЕ всех хуков (Rules of Hooks)
+  if (!hasPermission('cashflow.view')) {
+    return (
+      <div className="text-center text-slate-500 py-20">
+        <Wallet className="w-12 h-12 mx-auto mb-3 text-slate-700" />
+        <p>Нет доступа к Cash Flow</p>
+      </div>
+    )
+  }
 
   if (loading) return <div className="text-center text-slate-500 py-20">Загрузка...</div>
 

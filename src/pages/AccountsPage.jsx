@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
+import { getBusinessDate } from '@/lib/dates'
 import { Plus, Edit3, Trash2, ArrowRightLeft, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Save, RefreshCw, Eye, Power, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
 const TYPES = { cash: 'Касса', bank: 'Банк. счёт', deposit: 'Депозит', terminal: 'Терминал' }
 const TYPE_ICONS = { cash: '💵', bank: '🏦', deposit: '💰', terminal: '📱' }
 const TYPE_OPTIONS = Object.entries(TYPES).map(([k, v]) => ({ value: k, label: v }))
 
-const today = () => new Date().toISOString().split('T')[0]
+const today = () => getBusinessDate()
 
 export default function AccountsPage() {
   const { hasPermission, profile } = useAuthStore()

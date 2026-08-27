@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { X } from 'lucide-react'
 import { fmt, cn } from '@/lib/utils'
+import { getBusinessDate } from '@/lib/dates'
 
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => getBusinessDate()
 
 export default function BulkOperationModal({ open, onClose, onSave, investors, mode }) {
   const activeInvestors = useMemo(

@@ -234,6 +234,7 @@ export default function PnLPage() {
     // payroll_cash removed — ФОТ вносится вручную
 
     // Bank expenses by category — period-aware aggregation
+    // Кредиты (возвраты) уменьшают расход по категории, дебеты — увеличивают
     const bankByCat = {}
     bankTx.forEach(tx => {
       if (!tx.category || tx.category === 'uncategorized' || tx.category === 'internal') return
@@ -243,7 +244,8 @@ export default function PnLPage() {
         txTotal += getTxAmountForMonth(tx, year, m)
       }
       if (txTotal !== 0) {
-        bankByCat[tx.category] = (bankByCat[tx.category] || 0) + txTotal
+        const signed = tx.is_debit ? txTotal : -txTotal
+        bankByCat[tx.category] = (bankByCat[tx.category] || 0) + signed
       }
     })
     const bk = (cat) => bankByCat[cat] || 0
@@ -381,12 +383,14 @@ export default function PnLPage() {
       })
 
       // Bank expenses by category — period-aware
+      // Кредиты (возвраты) уменьшают расход по категории, дебеты — увеличивают
       const bankByCat = {}
       allBankTx.forEach(tx => {
         if (!tx.category || tx.category === 'uncategorized' || tx.category === 'internal') return
         const txAmount = getTxAmountForMonth(tx, targetYear, targetMonth)
         if (txAmount !== 0) {
-          bankByCat[tx.category] = (bankByCat[tx.category] || 0) + txAmount
+          const signed = tx.is_debit ? txAmount : -txAmount
+          bankByCat[tx.category] = (bankByCat[tx.category] || 0) + signed
         }
       })
       const bk = (cat) => bankByCat[cat] || 0

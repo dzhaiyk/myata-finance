@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from './supabase'
+import { loadCutoffHour } from './dates'
 
 const SESSION_KEY = 'myata_session'
 
@@ -10,6 +11,7 @@ export const useAuthStore = create((set, get) => ({
   loading: true,
 
   initialize: async () => {
+    await loadCutoffHour()
     const saved = localStorage.getItem(SESSION_KEY)
     if (saved) {
       try {

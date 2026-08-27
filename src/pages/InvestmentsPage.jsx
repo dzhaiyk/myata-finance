@@ -244,28 +244,56 @@ export default function InvestmentsPage() {
     await load()
   }
 
-  const saveTransfer = async ({ oldInvestor, newInvestor, saleTx, purchaseTx }) => {
-    // Update old investor
-    await supabase.from('investors').update({
-      status: 'exited',
-      exit_date: oldInvestor.exit_date,
-      exit_type: oldInvestor.exit_type,
-      successor_id: oldInvestor.successor_id,
-    }).eq('id', oldInvestor.id)
+  // Модалка отдаёт { from_id, to_id, to_name, amount, date, notes }:
+  // to_id — существующий учредитель, to_name — имя нового (ровно одно из двух)
+  const saveTransfer = async ({ from_id, to_id, to_name, amount, date, notes }) => {
+    const seller = investors.find(i => i.id === Number(from_id))
+    if (!seller || !amount) return
 
-    // Create or update new investor
-    if (newInvestor.id) {
-      await supabase.from('investors').update(newInvestor).eq('id', newInvestor.id)
+    // 1. Преемник: существующий (доля суммируется) или новый учредитель
+    let successorId = to_id ? Number(to_id) : null
+    if (successorId) {
+      const buyer = investors.find(i => i.id === successorId)
+      if (buyer) {
+        const { error } = await supabase.from('investors').update({
+          share_pct: (Number(buyer.share_pct) || 0) + (Number(seller.share_pct) || 0),
+          status: 'active',
+        }).eq('id', successorId)
+        if (error) { alert('Ошибка обновления покупателя: ' + error.message); return }
+      }
     } else {
-      const { data } = await supabase.from('investors').insert(newInvestor).select().single()
-      if (data) purchaseTx.investor_id = data.id
+      const { data, error } = await supabase.from('investors').insert({
+        full_name: to_name,
+        share_pct: seller.share_pct,
+        entry_date: date,
+        status: 'active',
+      }).select().single()
+      if (error || !data) { alert('Ошибка создания учредителя: ' + (error?.message || '')); return }
+      successorId = data.id
     }
 
-    // Insert transactions
-    await supabase.from('investor_transactions').insert([
-      { ...saleTx, created_by: profile?.id },
-      { ...purchaseTx, created_by: profile?.id },
+    // 2. Продавец выходит
+    const { error: exitErr } = await supabase.from('investors').update({
+      status: 'exited',
+      exit_date: date,
+      exit_type: 'sold',
+      successor_id: successorId,
+      purchase_price: amount,
+    }).eq('id', seller.id)
+    if (exitErr) { alert('Ошибка: ' + exitErr.message); return }
+
+    // 3. Пара операций: продажа у продавца, покупка у преемника
+    const { error: txErr } = await supabase.from('investor_transactions').insert([
+      {
+        investor_id: seller.id, transaction_date: date, type: 'share_sale', amount,
+        notes: notes?.trim() || `Продажа доли`, created_by: profile?.id,
+      },
+      {
+        investor_id: successorId, transaction_date: date, type: 'share_purchase', amount,
+        notes: notes?.trim() || `Покупка доли у ${seller.full_name}`, created_by: profile?.id,
+      },
     ])
+    if (txErr) { alert('Ошибка сохранения операций: ' + txErr.message); return }
 
     setShowTransferModal(false)
     await load()

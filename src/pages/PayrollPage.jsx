@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, MONTHS_RU } from '@/lib/utils'
+import { formatLocalDate } from '@/lib/dates'
 import { Calculator, Save, CheckCircle2, DollarSign, Calendar, Users } from 'lucide-react'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -196,7 +197,7 @@ export default function PayrollPage() {
 
   const markPaid = async () => {
     if (!confirm('Отметить период как выплаченный?')) return
-    await supabase.from('payroll_periods').update({ status: 'paid', paid_date: new Date().toISOString().split('T')[0] }).eq('id', periodId)
+    await supabase.from('payroll_periods').update({ status: 'paid', paid_date: formatLocalDate() }).eq('id', periodId)
     setPeriodStatus('paid')
   }
 

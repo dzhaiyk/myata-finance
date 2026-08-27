@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getBusinessDate } from '@/lib/dates'
 
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => getBusinessDate()
 
 export default function ShareTransferModal({ open, onClose, onSave, investors }) {
   const [fromId, setFromId] = useState('')

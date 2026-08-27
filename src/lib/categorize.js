@@ -1,12 +1,15 @@
 // Auto-categorization rules for bank statement imports
 // Priority: keyword in purpose > beneficiary pattern > KNP code
+// ВАЖНО: коды категорий обязаны совпадать с таблицей categories (миграция 008)
+// и с PNL_STRUCTURE/CF-группами. Не вводить новые коды без миграции.
+import { businessDateFromParts } from './dates'
 
 export const CATEGORIES = {
   // Revenue
-  revenue_kitchen: { label: 'Доходы — Кухня', group: 'revenue', pnl: 'Кухня' },
-  revenue_bar: { label: 'Доходы — Бар', group: 'revenue', pnl: 'Бар' },
-  revenue_hookah: { label: 'Доходы — Кальян', group: 'revenue', pnl: 'Кальян' },
-  revenue_other: { label: 'Доходы — Прочее', group: 'revenue', pnl: 'Прочее' },
+  income_kaspi: { label: 'Доход Kaspi', group: 'revenue', pnl: null },
+  income_cash: { label: 'Доход наличные', group: 'revenue', pnl: null },
+  income_halyk: { label: 'Доход Halyk', group: 'revenue', pnl: null },
+  income_other: { label: 'Прочий доход', group: 'revenue', pnl: null },
 
   // COGS
   cogs_kitchen: { label: 'Закуп кухня', group: 'cogs', pnl: 'Закуп кухня' },
@@ -14,24 +17,25 @@ export const CATEGORIES = {
   cogs_hookah: { label: 'Закуп кальян', group: 'cogs', pnl: 'Закуп кальян' },
 
   // Payroll
-  payroll: { label: 'ФОТ', group: 'payroll', pnl: 'ФОТ Прочее' },
   payroll_mgmt: { label: 'ФОТ Менеджмент', group: 'payroll', pnl: 'ФОТ Менеджмент' },
   payroll_kitchen: { label: 'ФОТ Кухня', group: 'payroll', pnl: 'ФОТ Кухня' },
   payroll_bar: { label: 'ФОТ Бар', group: 'payroll', pnl: 'ФОТ Бар' },
   payroll_hookah: { label: 'ФОТ Кальян', group: 'payroll', pnl: 'ФОТ Кальян' },
   payroll_hall: { label: 'ФОТ Зал', group: 'payroll', pnl: 'ФОТ Зал' },
+  payroll_transport: { label: 'Развозка', group: 'payroll', pnl: 'Развозка' },
+  payroll_other: { label: 'ФОТ Прочее', group: 'payroll', pnl: 'ФОТ Прочее' },
 
   // Marketing
-  marketing_smm: { label: 'Маркетинг — СММ', group: 'marketing', pnl: 'СММ' },
-  marketing_target: { label: 'Маркетинг — Таргет', group: 'marketing', pnl: 'Таргет' },
-  marketing_2gis: { label: 'Маркетинг — 2ГИС', group: 'marketing', pnl: '2ГИС' },
-  marketing_yandex: { label: 'Маркетинг — Яндекс', group: 'marketing', pnl: 'Яндекс' },
-  marketing_google: { label: 'Маркетинг — Google', group: 'marketing', pnl: 'Google' },
-  marketing_other: { label: 'Маркетинг — Прочее', group: 'marketing', pnl: 'Маркетинг прочее' },
+  mkt_smm: { label: 'Маркетинг — СММ', group: 'marketing', pnl: 'СММ' },
+  mkt_target: { label: 'Маркетинг — Таргет', group: 'marketing', pnl: 'Таргет' },
+  mkt_2gis: { label: 'Маркетинг — 2ГИС', group: 'marketing', pnl: '2ГИС' },
+  mkt_yandex: { label: 'Маркетинг — Яндекс', group: 'marketing', pnl: 'Яндекс' },
+  mkt_google: { label: 'Маркетинг — Google', group: 'marketing', pnl: 'Google' },
+  mkt_other: { label: 'Маркетинг — Прочее', group: 'marketing', pnl: 'Маркетинг прочее' },
 
   // Rent
-  rent_main: { label: 'Аренда помещения', group: 'rent', pnl: 'Аренда помещения' },
-  rent_storage: { label: 'Аренда склада/кровли', group: 'rent', pnl: 'Аренда склада и кровли' },
+  rent_premises: { label: 'Аренда помещения', group: 'rent', pnl: 'Аренда помещения' },
+  rent_warehouse: { label: 'Аренда склада/кровли', group: 'rent', pnl: 'Аренда склада и кровли' },
   rent_property_tax: { label: 'Налог на недвижимость', group: 'rent', pnl: 'Налог на недвижимость' },
 
   // Utilities
@@ -40,12 +44,12 @@ export const CATEGORIES = {
   util_heating: { label: 'Отопление', group: 'utilities', pnl: 'Отопление' },
   util_bi: { label: 'BI Service', group: 'utilities', pnl: 'BI Service' },
   util_internet: { label: 'Интернет и связь', group: 'utilities', pnl: 'Интернет и связь' },
-  util_trash: { label: 'Вывоз мусора', group: 'utilities', pnl: 'Вывоз мусора' },
+  util_waste: { label: 'Вывоз мусора', group: 'utilities', pnl: 'Вывоз мусора' },
   util_other: { label: 'Ком.услуги прочее', group: 'utilities', pnl: 'Ком.услуги прочее' },
 
   // Other OpEx
-  opex_supplies: { label: 'Хозтовары', group: 'opex_other', pnl: 'Хозтовары' },
-  opex_bank_fees: { label: 'Комиссии банка', group: 'opex_other', pnl: 'Комиссии банка/эквайринг' },
+  household: { label: 'Хозтовары', group: 'opex_other', pnl: 'Хозтовары' },
+  bank_fee: { label: 'Комиссии банка', group: 'opex_other', pnl: 'Комиссии банка/эквайринг' },
   opex_security: { label: 'Система безопасности', group: 'opex_other', pnl: 'Система безопасности' },
   opex_software: { label: 'Программное обеспечение', group: 'opex_other', pnl: 'Программное обеспечение' },
   opex_menu: { label: 'Меню', group: 'opex_other', pnl: 'Меню' },
@@ -53,9 +57,9 @@ export const CATEGORIES = {
   opex_grease: { label: 'Чистка жироуловителей', group: 'opex_other', pnl: 'Чистка жироуловителей' },
   opex_repair: { label: 'Мелкий ремонт', group: 'opex_other', pnl: 'Мелкий ремонт' },
   opex_uniform: { label: 'Форма персонала', group: 'opex_other', pnl: 'Форма для персонала' },
-  opex_kao: { label: 'Авторские права (КАО)', group: 'opex_other', pnl: 'Авторские права на музыку (КАО)' },
+  opex_music: { label: 'Авторские права (КАО)', group: 'opex_other', pnl: 'Авторские права на музыку (КАО)' },
   opex_royalty: { label: 'Роялти', group: 'opex_other', pnl: 'Роялти' },
-  opex_other: { label: 'Прочие OpEx', group: 'opex_other', pnl: 'Прочее' },
+  opex_misc: { label: 'Прочие OpEx', group: 'opex_other', pnl: 'Прочее' },
 
   // Taxes
   tax_retail: { label: 'Розничный налог', group: 'taxes', pnl: 'Розничный налог' },
@@ -67,12 +71,12 @@ export const CATEGORIES = {
 
   // CapEx
   capex_repair: { label: 'Ремонт (CapEx)', group: 'capex', pnl: 'Ремонт' },
-  capex_equipment: { label: 'Мебель и техника', group: 'capex', pnl: 'Мебель и техника' },
+  capex_furniture: { label: 'Мебель и техника', group: 'capex', pnl: 'Мебель и техника' },
   capex_other: { label: 'CapEx прочее', group: 'capex', pnl: 'CAPEX прочее' },
 
   // Cash flow only
   dividends: { label: 'Дивиденды', group: 'dividends', pnl: null },
-  internal_transfer: { label: 'Внутренний перевод', group: 'internal', pnl: null },
+  internal: { label: 'Внутренний перевод', group: 'internal', pnl: null },
   uncategorized: { label: '❓ Не распознано', group: 'uncategorized', pnl: null },
 }
 
@@ -83,13 +87,13 @@ export const KEYWORD_RULES = [
   { field: 'purpose', pattern: /кухня/i, category: 'cogs_kitchen' },
   { field: 'purpose', pattern: /бар/i, category: 'cogs_bar' },
   { field: 'purpose', pattern: /кальян|дымн/i, category: 'cogs_hookah' },
-  { field: 'purpose', pattern: /хоз\s*товар/i, category: 'opex_supplies' },
-  { field: 'purpose', pattern: /аренд/i, category: 'rent_main' },
+  { field: 'purpose', pattern: /хоз\s*товар/i, category: 'household' },
+  { field: 'purpose', pattern: /аренд/i, category: 'rent_premises' },
   { field: 'purpose', pattern: /отопление|горяч/i, category: 'util_heating' },
   { field: 'purpose', pattern: /коммунальн/i, category: 'util_other' },
   { field: 'purpose', pattern: /электри/i, category: 'util_electric' },
   { field: 'purpose', pattern: /водоснаб/i, category: 'util_water' },
-  { field: 'purpose', pattern: /вывоз.*мусор/i, category: 'util_trash' },
+  { field: 'purpose', pattern: /вывоз.*мусор/i, category: 'util_waste' },
   { field: 'purpose', pattern: /дератизац|дезинсек/i, category: 'opex_pest' },
   { field: 'purpose', pattern: /жироулов/i, category: 'opex_grease' },
   { field: 'purpose', pattern: /розничн.*налог/i, category: 'tax_retail' },
@@ -99,22 +103,22 @@ export const KEYWORD_RULES = [
   { field: 'purpose', pattern: /лицензи.*дымн|лицензи.*кальян/i, category: 'tax_hookah' },
   { field: 'purpose', pattern: /безвозмезд.*перевод/i, category: 'dividends' },
   { field: 'purpose', pattern: /дивиденд/i, category: 'dividends' },
-  { field: 'purpose', pattern: /зарплат|ЗП/i, category: 'payroll' },
-  { field: 'purpose', pattern: /операций по картам/i, category: 'opex_bank_fees' },
-  { field: 'purpose', pattern: /информационно-технолог/i, category: 'opex_bank_fees' },
-  { field: 'purpose', pattern: /комисси.*ведени.*счет/i, category: 'opex_bank_fees' },
-  { field: 'purpose', pattern: /маркетинг|реклам/i, category: 'marketing_other' },
-  { field: 'purpose', pattern: /СММ|smm/i, category: 'marketing_smm' },
-  { field: 'purpose', pattern: /таргет/i, category: 'marketing_target' },
+  { field: 'purpose', pattern: /зарплат|ЗП/i, category: 'payroll_other' },
+  { field: 'purpose', pattern: /операций по картам/i, category: 'bank_fee' },
+  { field: 'purpose', pattern: /информационно-технолог/i, category: 'bank_fee' },
+  { field: 'purpose', pattern: /комисси.*ведени.*счет/i, category: 'bank_fee' },
+  { field: 'purpose', pattern: /маркетинг|реклам/i, category: 'mkt_other' },
+  { field: 'purpose', pattern: /СММ|smm/i, category: 'mkt_smm' },
+  { field: 'purpose', pattern: /таргет/i, category: 'mkt_target' },
   { field: 'purpose', pattern: /роялти/i, category: 'opex_royalty' },
-  { field: 'purpose', pattern: /KaspiPay.*Депозит|со счета.*на.*счет/i, category: 'internal_transfer' },
+  { field: 'purpose', pattern: /KaspiPay.*Депозит|со счета.*на.*счет/i, category: 'internal' },
 
   // Beneficiary-based rules
   { field: 'beneficiary', pattern: /Бақыт Әділет/i, category: 'dividends' },
-  { field: 'beneficiary', pattern: /Kaspi Pay/i, category: 'opex_bank_fees' },
-  { field: 'beneficiary', pattern: /KASPI BANK/i, category: 'opex_bank_fees' },
-  { field: 'beneficiary', pattern: /2ГИС|2gis/i, category: 'marketing_2gis' },
-  { field: 'beneficiary', pattern: /авторское/i, category: 'opex_kao' },
+  { field: 'beneficiary', pattern: /Kaspi Pay/i, category: 'bank_fee' },
+  { field: 'beneficiary', pattern: /KASPI BANK/i, category: 'bank_fee' },
+  { field: 'beneficiary', pattern: /2ГИС|2gis/i, category: 'mkt_2gis' },
+  { field: 'beneficiary', pattern: /авторское/i, category: 'opex_music' },
   { field: 'beneficiary', pattern: /Алатау Жарық|электри/i, category: 'util_electric' },
   { field: 'beneficiary', pattern: /Алматы Су/i, category: 'util_water' },
   { field: 'beneficiary', pattern: /тепловые сети/i, category: 'util_heating' },
@@ -122,10 +126,10 @@ export const KEYWORD_RULES = [
   { field: 'beneficiary', pattern: /Кафе Софт|iiko/i, category: 'opex_software' },
   { field: 'beneficiary', pattern: /Управляющая компания Мята/i, category: 'opex_royalty' },
   { field: 'beneficiary', pattern: /Ак Тартип/i, category: 'opex_pest' },
-  { field: 'beneficiary', pattern: /RIM PARTNERS/i, category: 'internal_transfer' },
-  { field: 'beneficiary', pattern: /Izdeu|Jarnama/i, category: 'marketing_other' },
-  { field: 'beneficiary', pattern: /ЖК 4YOU/i, category: 'rent_main' },
-  { field: 'beneficiary', pattern: /Абласанов/i, category: 'rent_storage' },
+  { field: 'beneficiary', pattern: /RIM PARTNERS/i, category: 'internal' },
+  { field: 'beneficiary', pattern: /Izdeu|Jarnama/i, category: 'mkt_other' },
+  { field: 'beneficiary', pattern: /ЖК 4YOU/i, category: 'rent_premises' },
+  { field: 'beneficiary', pattern: /Абласанов/i, category: 'rent_warehouse' },
   { field: 'beneficiary', pattern: /УГД|налоговое/i, category: 'tax_payroll' },
   { field: 'beneficiary', pattern: /Государственная корпораци/i, category: 'tax_payroll' },
 ]
@@ -167,8 +171,12 @@ export function categorizeTransaction(tx) {
  *
  * First ~11 rows are metadata (account info, period, balances).
  * Row 11 is column headers. Some files have a row of [1,2,3,...9] after headers.
+ *
+ * Операционная дата: транзакции до cutoffHour (граница операционного дня)
+ * относятся к предыдущей дате — заведение закрывается после полуночи.
+ * dateRaw (календарная дата) сохраняется для стабильности tx_hash-дедупликации.
  */
-export function parseBankStatement(rows) {
+export function parseBankStatement(rows, { cutoffHour } = {}) {
   // Find the header row by looking for "Дебет" in position [2]
   let headerIdx = -1
   for (let i = 0; i < Math.min(20, rows.length); i++) {
@@ -198,16 +206,21 @@ export function parseBankStatement(rows) {
     const binMatch = rawBeneficiary.match(/ИИН\/БИН\s*(\d+)/)
     const bin = binMatch ? binMatch[1] : ''
 
-    // Parse date: "30.01.2026 23:42:00" → "2026-01-30"
+    // Parse date: "30.01.2026 23:42:00" → calendar "2026-01-30" + hour 23
     const rawDate = String(row[1] || '')
-    let date = rawDate
-    const dateMatch = rawDate.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/)
+    let dateRaw = rawDate
+    let hour = null
+    const dateMatch = rawDate.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):)?/)
     if (dateMatch) {
-      date = `${dateMatch[3]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[1].padStart(2, '0')}`
+      dateRaw = `${dateMatch[3]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[1].padStart(2, '0')}`
+      if (dateMatch[4] != null) hour = Number(dateMatch[4])
     }
+    // Операционная дата: ночные операции (до cutoffHour) — к предыдущему дню
+    const date = dateMatch ? businessDateFromParts(dateRaw, hour, cutoffHour) : dateRaw
 
     const tx = {
       date,
+      dateRaw,
       number: String(row[0] || ''),
       debit: typeof row[2] === 'number' ? row[2] : 0,
       credit: typeof row[3] === 'number' ? row[3] : 0,

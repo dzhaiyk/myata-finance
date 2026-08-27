@@ -4,6 +4,7 @@ import { fmt, cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { sendTelegramNotification, formatDailyReportNotification, formatCashDiscrepancyAlert } from '@/lib/telegram'
+import { getBusinessDate } from '@/lib/dates'
 import { Save, Send, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Plus, Trash2, Calendar, ArrowLeft, FileText, Eye, Clock, Check, Pencil, Download } from 'lucide-react'
 import jsPDF from 'jspdf'
 
@@ -119,10 +120,8 @@ export default function DailyReportPage() {
   // Form state
   const [reportId, setReportId] = useState(null)
   const [status, setStatus] = useState('draft')
-  const [date, setDate] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 1)
-    return d.toISOString().split('T')[0]
-  })
+  // Операционная дата смены: заполнение в 02:30 после закрытия → дата вчерашней смены
+  const [date, setDate] = useState(() => getBusinessDate())
   const [saving, setSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState(null)
   const [expanded, setExpanded] = useState({ suppliers_kitchen: true, suppliers_bar: true, tobacco: true, payroll: true, other: true, cash_withdrawals: true })
@@ -243,8 +242,7 @@ export default function DailyReportPage() {
 
   const newReport = async () => {
     setReportId(null); setStatus('draft')
-    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
-    setDate(yesterday.toISOString().split('T')[0])
+    setDate(getBusinessDate())
     setCashStart(''); setCashEnd('')
     setWithdrawals(emptyWithdrawals())
     setRevenue(PAYMENT_TYPES.map(t => ({ type: t, amount: '', checks: '' })))
@@ -321,10 +319,25 @@ export default function DailyReportPage() {
     total_revenue: totalRevenue, total_withdrawals: totalWithdrawals, cash_discrepancy: discrepancy,
   })
 
+  // Защита от молчаливой перезаписи: report_date UNIQUE, upsert затирал бы чужой отчёт
+  const guardOverwrite = async () => {
+    const { data: existing } = await supabase.from('daily_reports')
+      .select('id, status').eq('report_date', date).maybeSingle()
+    if (!existing) return true
+    if (reportId && existing.id === reportId) return true
+    if (existing.status === 'submitted') {
+      alert(`Отчёт за ${date} уже отправлен. Откройте его из журнала (админ может вернуть в черновик).`)
+      return false
+    }
+    // За эту дату уже есть черновик — сохранение продолжит его (upsert по report_date)
+    return true
+  }
+
   // Save as draft
   const saveDraft = async () => {
     setSaving(true)
     try {
+      if (!(await guardOverwrite())) { setSaving(false); return }
       const payload = buildPayload('draft')
       const { data, error } = await supabase.from('daily_reports').upsert(payload, { onConflict: 'report_date' }).select().single()
       if (error) throw error
@@ -343,6 +356,7 @@ export default function DailyReportPage() {
     }
     setSaving(true)
     try {
+      if (!(await guardOverwrite())) { setSaving(false); return }
       const payload = buildPayload('submitted')
       const { data, error } = await supabase.from('daily_reports').upsert(payload, { onConflict: 'report_date' }).select().single()
       if (error) throw error

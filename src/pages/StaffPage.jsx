@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
+import { formatLocalDate } from '@/lib/dates'
 import { Plus, Trash2, Edit3, Users, Briefcase } from 'lucide-react'
 
 const DEPARTMENTS = ['Кухня', 'Бар', 'Кальян', 'Зал', 'Менеджмент', 'Прочее']
@@ -68,7 +69,7 @@ export default function StaffPage() {
     if (reason === null) return // cancelled
     await supabase.from('staff').update({
       is_active: false,
-      terminated_at: new Date().toISOString().split('T')[0],
+      terminated_at: formatLocalDate(),
       termination_reason: reason || null,
     }).eq('id', s.id)
     load()

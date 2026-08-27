@@ -38,10 +38,6 @@ export default function AnalyticsPage() {
   const [bankTx, setBankTx] = useState([])
   const [loading, setLoading] = useState(true)
 
-  if (!hasPermission('dashboard.view')) {
-    return <div className="text-center text-slate-500 py-20">Нет доступа</div>
-  }
-
   useEffect(() => {
     const load = async () => {
       setLoading(true)
@@ -153,13 +149,12 @@ export default function AnalyticsPage() {
             fcB += sum(w.suppliers_bar)
             ;(w.tobacco || []).forEach(row => { if (row.name !== 'Аппараты') fcH += Number(row.amount) || 0 })
           })
-          // Add bank cogs
+          // Add bank cogs (кредиты-возвраты уменьшают закуп)
           bankTx.forEach(tx => {
-            if (!tx.is_debit) return
-            const amt = getTxAmountForMonth(tx, y, m)
-            if (tx.category === 'cogs_kitchen') fcK += Math.abs(amt)
-            else if (tx.category === 'cogs_bar') fcB += Math.abs(amt)
-            else if (tx.category === 'cogs_hookah') fcH += Math.abs(amt)
+            const amt = getTxAmountForMonth(tx, y, m) * (tx.is_debit ? 1 : -1)
+            if (tx.category === 'cogs_kitchen') fcK += amt
+            else if (tx.category === 'cogs_bar') fcB += amt
+            else if (tx.category === 'cogs_hookah') fcH += amt
           })
         } else if (historical.length > 0) {
           historical.forEach(h => {
@@ -217,8 +212,8 @@ export default function AnalyticsPage() {
             depts.forEach(d => { revenue += Number(d.amount) || 0 })
           })
           bankTx.forEach(tx => {
-            if (!tx.is_debit || !payrollCats.includes(tx.category)) return
-            payroll += Math.abs(getTxAmountForMonth(tx, y, m))
+            if (!payrollCats.includes(tx.category)) return
+            payroll += getTxAmountForMonth(tx, y, m) * (tx.is_debit ? 1 : -1)
           })
         } else if (historical.length > 0) {
           historical.forEach(h => {
@@ -264,8 +259,8 @@ export default function AnalyticsPage() {
         let total = 0
         // Bank transactions
         bankTx.forEach(tx => {
-          if (!tx.is_debit || !cat.cats.includes(tx.category)) return
-          total += Math.abs(getTxAmountForMonth(tx, y, m))
+          if (!cat.cats.includes(tx.category)) return
+          total += getTxAmountForMonth(tx, y, m) * (tx.is_debit ? 1 : -1)
         })
         // Historical pnl_data
         pnlData.filter(a => a.year === y && a.month === m && a.type === 'historical' && cat.cats.includes(a.category))
@@ -282,8 +277,8 @@ export default function AnalyticsPage() {
       // Current month value
       let currentVal = 0
       bankTx.forEach(tx => {
-        if (!tx.is_debit || !cat.cats.includes(tx.category)) return
-        currentVal += Math.abs(getTxAmountForMonth(tx, currentY, currentM))
+        if (!cat.cats.includes(tx.category)) return
+        currentVal += getTxAmountForMonth(tx, currentY, currentM) * (tx.is_debit ? 1 : -1)
       })
 
       const deviation = stddev > 0 ? (currentVal - mean) / stddev : 0
@@ -376,6 +371,11 @@ export default function AnalyticsPage() {
     if (ratio >= 0.5) return 'bg-green-500/15 text-green-400'
     if (ratio >= 0.25) return 'bg-yellow-500/15 text-yellow-400'
     return 'bg-red-500/15 text-red-400'
+  }
+
+  // Проверка прав ПОСЛЕ всех хуков (Rules of Hooks)
+  if (!hasPermission('dashboard.view')) {
+    return <div className="text-center text-slate-500 py-20">Нет доступа</div>
   }
 
   if (loading) return <div className="text-center text-slate-500 py-20">Загрузка аналитики...</div>
