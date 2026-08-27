@@ -21,7 +21,7 @@ export default function AccountsPage() {
   const [transactions, setTransactions] = useState([])
   const [balances, setBalances] = useState([])
   const [loading, setLoading] = useState(true)
-  const [cashLastEnd, setCashLastEnd] = useState(null)
+  const [cashReports, setCashReports] = useState([]) // [{report_date, cash_end, cash_actual}] desc
   const [tab, setTab] = useState('overview') // overview | transactions | reconcile | settings
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [showTransfer, setShowTransfer] = useState(false)
@@ -37,27 +37,29 @@ export default function AccountsPage() {
 
   const load = async () => {
     setLoading(true)
-    const [accRes, txRes, balRes, lastReportRes] = await Promise.all([
+    const [accRes, txRes, balRes, reportsRes] = await Promise.all([
       supabase.from('accounts').select('*').order('sort_order, id'),
       supabase.from('account_transactions').select('*').order('transaction_date', { ascending: false }),
       supabase.from('account_balances').select('*').order('balance_date', { ascending: false }).limit(50),
-      supabase.from('daily_reports').select('data').eq('status', 'submitted').order('report_date', { ascending: false }).limit(1).single(),
+      // Остатки кассы по всем закрытым сменам — для баланса кассы НА ДАТУ (сверка задним числом)
+      supabase.from('daily_reports')
+        .select('report_date, cash_end:data->>cash_end, cash_actual:data->>cash_actual')
+        .eq('status', 'submitted').order('report_date', { ascending: false }),
     ])
     setAccounts(accRes.data || [])
     setTransactions(txRes.data || [])
     setBalances(balRes.data || [])
-    const ce = lastReportRes.data?.data?.cash_end ?? lastReportRes.data?.data?.cash_actual
-    setCashLastEnd(ce != null ? Number(ce) : null)
+    setCashReports(reportsRes.data || [])
     setLoading(false)
   }
 
-  // Calculate current balance from initial + all transactions
-  const calcOwnBalance = (accountId) => {
+  // Calculate balance from initial + transactions (опционально — на дату включительно)
+  const calcOwnBalance = (accountId, upToDate = null) => {
     const acct = accounts.find(a => a.id === accountId)
     if (!acct) return 0
     const initial = Number(acct.initial_balance) || 0
     const txTotal = transactions
-      .filter(t => t.account_id === accountId)
+      .filter(t => t.account_id === accountId && (!upToDate || t.transaction_date <= upToDate))
       .reduce((sum, t) => {
         if (t.type === 'income' || t.type === 'transfer_in') return sum + Number(t.amount)
         if (t.type === 'expense' || t.type === 'transfer_out') return sum - Number(t.amount)
@@ -67,14 +69,18 @@ export default function AccountsPage() {
   }
 
   // Parent balance = own balance + sum of children balances
-  // Cash account = last submitted report's cash_end
-  const calcBalance = (accountId) => {
+  // Cash account = cash_end последней закрытой смены (не позже upToDate, если задана)
+  const calcBalance = (accountId, upToDate = null) => {
     const acct = accounts.find(a => a.id === accountId)
-    if (acct?.type === 'cash' && cashLastEnd != null) return cashLastEnd
-    const own = calcOwnBalance(accountId)
+    if (acct?.type === 'cash') {
+      const rep = cashReports.find(r => !upToDate || r.report_date <= upToDate)
+      const ce = rep != null ? Number(rep.cash_end ?? rep.cash_actual) : NaN
+      if (!isNaN(ce)) return ce
+    }
+    const own = calcOwnBalance(accountId, upToDate)
     const childrenSum = accounts
       .filter(a => a.parent_account_id === accountId)
-      .reduce((sum, child) => sum + calcOwnBalance(child.id), 0)
+      .reduce((sum, child) => sum + calcOwnBalance(child.id, upToDate), 0)
     return own + childrenSum
   }
 
@@ -150,7 +156,7 @@ export default function AccountsPage() {
     const entries = Object.entries(reconcileInputs).filter(([_, v]) => v !== '' && v !== undefined)
     if (entries.length === 0) return alert('Введите хотя бы один фактический остаток')
     for (const [accountId, actual] of entries) {
-      const expected = calcBalance(Number(accountId))
+      const expected = calcBalance(Number(accountId), reconcileDate)
       await supabase.from('account_balances').upsert({
         account_id: Number(accountId), balance_date: reconcileDate,
         expected_balance: expected, actual_balance: Number(String(actual).replace(',', '.')),
@@ -198,9 +204,15 @@ export default function AccountsPage() {
   // Delete account permanently
   const deleteAccount = async (accountId) => {
     const acct = accounts.find(a => a.id === accountId)
-    if (!confirm(`Удалить счёт «${acct?.name}» навсегда? Все операции по этому счёту тоже будут удалены.`)) return
+    if (!confirm(`Удалить счёт «${acct?.name}» навсегда? Все операции по этому счёту (и парные переводы на других счетах) тоже будут удалены.`)) return
     // Delete child records first
     await supabase.from('account_balances').delete().eq('account_id', accountId)
+    // Парные стороны переводов на ДРУГИХ счетах — иначе их балансы разъезжаются
+    const { data: ownTxs } = await supabase.from('account_transactions').select('id').eq('account_id', accountId)
+    const ownIds = (ownTxs || []).map(t => t.id)
+    if (ownIds.length > 0) {
+      await supabase.from('account_transactions').delete().in('linked_transaction_id', ownIds)
+    }
     await supabase.from('account_transactions').delete().eq('account_id', accountId)
     // Unlink children
     await supabase.from('accounts').update({ parent_account_id: null }).eq('parent_account_id', accountId)
@@ -452,7 +464,8 @@ export default function AccountsPage() {
             </div>
             <div className="space-y-3">
               {activeAccounts.map(acct => {
-                const expected = calcBalance(acct.id)
+                // Ожидаемый остаток НА ДАТУ сверки, а не текущий
+                const expected = calcBalance(acct.id, reconcileDate)
                 const existingBal = balances.find(b => b.account_id === acct.id && b.balance_date === reconcileDate)
                 const actual = reconcileInputs[acct.id] !== undefined ? reconcileInputs[acct.id] : (existingBal?.actual_balance ?? '')
                 const disc = actual !== '' ? Number(String(actual).replace(',', '.')) - expected : null

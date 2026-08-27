@@ -372,38 +372,40 @@ export default function BankImportPage() {
     if (!stagedRows || stagedRows.length === 0) return
     setSavingStaged(true)
     try {
-      const { error } = await supabase.from('bank_transactions').insert(stagedRows)
+      // .select() возвращает вставленные строки с id — нужны для reference_id,
+      // чтобы удаление/перекатегоризация синхронизировались с балансом счёта
+      let inserted = []
+      const { data, error } = await supabase.from('bank_transactions').insert(stagedRows).select()
       if (error) {
         // If batch fails due to unique constraint, fall back to one-by-one insert
         if (error.message?.includes('unique') || error.message?.includes('duplicate')) {
-          let saved = 0, skipped = 0
+          let skipped = 0
           for (const row of stagedRows) {
-            const { error: e2 } = await supabase.from('bank_transactions').insert(row)
-            if (e2) skipped++; else saved++
+            const { data: one, error: e2 } = await supabase.from('bank_transactions').insert(row).select().single()
+            if (e2) skipped++; else inserted.push(one)
           }
-          alert(`Сохранено ${saved} записей` + (skipped > 0 ? `, ${skipped} дублей пропущено` : ''))
+          alert(`Сохранено ${inserted.length} записей` + (skipped > 0 ? `, ${skipped} дублей пропущено` : ''))
         } else {
           throw error
         }
       } else {
-        alert(`Сохранено ${stagedRows.length} записей`)
+        inserted = data || []
+        alert(`Сохранено ${inserted.length} записей`)
       }
-      // Create account_transactions for the linked bank account
-      const accountId = stagedRows[0]?.account_id
-      if (accountId) {
-        const acctTxs = stagedRows
-          .filter(r => r.category !== 'uncategorized' && r.category !== 'internal')
-          .map(r => ({
-            account_id: accountId,
-            transaction_date: r.transaction_date,
-            type: r.is_debit ? 'expense' : 'income',
-            amount: Number(r.amount),
-            description: r.beneficiary || r.purpose || r.category,
-            reference_type: 'bank_import',
-          }))
-        if (acctTxs.length > 0) {
-          await supabase.from('account_transactions').insert(acctTxs)
-        }
+      // Create account_transactions for the linked bank account (с привязкой reference_id)
+      const acctTxs = inserted
+        .filter(r => r.account_id && r.category !== 'uncategorized' && r.category !== 'internal')
+        .map(r => ({
+          account_id: r.account_id,
+          transaction_date: r.transaction_date,
+          type: r.is_debit ? 'expense' : 'income',
+          amount: Number(r.amount),
+          description: r.beneficiary || r.purpose || r.category,
+          reference_type: 'bank_import',
+          reference_id: String(r.id),
+        }))
+      if (acctTxs.length > 0) {
+        await supabase.from('account_transactions').insert(acctTxs)
       }
       setStagedRows(null)
       load()
@@ -449,8 +451,28 @@ export default function BankImportPage() {
     })
   }, [stagedRows, stagedSort])
 
+  // Синхронизация операции по счёту с категорией банковской транзакции:
+  // uncategorized/internal не двигают баланс счёта, остальные — expense/income
+  const syncAccountTx = async (tx, category) => {
+    await supabase.from('account_transactions').delete()
+      .eq('reference_type', 'bank_import').eq('reference_id', String(tx.id))
+    if (tx.account_id && category !== 'uncategorized' && category !== 'internal') {
+      await supabase.from('account_transactions').insert({
+        account_id: tx.account_id,
+        transaction_date: tx.transaction_date,
+        type: tx.is_debit ? 'expense' : 'income',
+        amount: Number(tx.amount),
+        description: tx.beneficiary || tx.purpose || category,
+        reference_type: 'bank_import',
+        reference_id: String(tx.id),
+      })
+    }
+  }
+
   const updateCategory = async (id, category) => {
     await supabase.from('bank_transactions').update({ category, confidence: 'manual' }).eq('id', id)
+    const tx = transactions.find(t => t.id === id)
+    if (tx) await syncAccountTx(tx, category)
     setTransactions(prev => prev.map(t => t.id === id ? { ...t, category, confidence: 'manual' } : t))
   }
 
@@ -462,12 +484,17 @@ export default function BankImportPage() {
   const deleteTransaction = async (id) => {
     const { error } = await supabase.from('bank_transactions').delete().eq('id', id)
     if (error) return alert('Ошибка удаления: ' + error.message)
+    // Связанная операция по счёту тоже удаляется — иначе баланс счёта разъезжается
+    await supabase.from('account_transactions').delete()
+      .eq('reference_type', 'bank_import').eq('reference_id', String(id))
     setTransactions(prev => prev.filter(t => t.id !== id))
   }
   const deleteSelected = async () => {
     const ids = [...selectedIds]; if (!confirm(`Удалить ${ids.length} записей?`)) return
     const { error } = await supabase.from('bank_transactions').delete().in('id', ids)
     if (error) return alert('Ошибка удаления: ' + error.message)
+    await supabase.from('account_transactions').delete()
+      .eq('reference_type', 'bank_import').in('reference_id', ids.map(String))
     setSelectedIds(new Set()); load()
   }
 
