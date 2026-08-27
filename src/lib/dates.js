@@ -1,4 +1,5 @@
-import { supabase } from './supabase'
+// supabase импортируется лениво внутри load/save — модуль остаётся чистым
+// и тестируется встроенным node:test без Vite-окружения (import.meta.env)
 
 // Первый год данных заведения (исторический импорт начинается с 2022)
 export const START_YEAR = 2022
@@ -31,6 +32,7 @@ export function setCutoffHour(hour) {
 // Загружается один раз при старте приложения (store.initialize)
 export async function loadCutoffHour() {
   try {
+    const { supabase } = await import('./supabase')
     const { data } = await supabase.from('settings').select('value').eq('key', 'shift').single()
     if (data?.value?.cutoff_hour != null) setCutoffHour(data.value.cutoff_hour)
   } catch (_) { /* нет записи — используем DEFAULT_CUTOFF_HOUR */ }
@@ -39,6 +41,7 @@ export async function loadCutoffHour() {
 
 export async function saveCutoffHour(hour) {
   setCutoffHour(hour)
+  const { supabase } = await import('./supabase')
   const { error } = await supabase.from('settings').upsert(
     { key: 'shift', value: { cutoff_hour: cachedCutoffHour }, updated_at: new Date().toISOString() },
     { onConflict: 'key' }

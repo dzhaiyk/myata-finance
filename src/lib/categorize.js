@@ -2,7 +2,7 @@
 // Priority: keyword in purpose > beneficiary pattern > KNP code
 // ВАЖНО: коды категорий обязаны совпадать с таблицей categories (миграция 008)
 // и с PNL_STRUCTURE/CF-группами. Не вводить новые коды без миграции.
-import { businessDateFromParts } from './dates'
+import { businessDateFromParts } from './dates.js'
 
 export const CATEGORIES = {
   // Revenue
