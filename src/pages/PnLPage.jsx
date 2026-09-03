@@ -20,7 +20,10 @@ const PNL_STRUCTURE = [
   { key: 'rev_kitchen', label: 'Кухня', level: 2, section: 'revenue', source: 'daily:dept_kitchen' },
   { key: 'rev_bar', label: 'Бар', level: 2, section: 'revenue', source: 'daily:dept_bar' },
   { key: 'rev_hookah', label: 'Кальян', level: 2, section: 'revenue', source: 'daily:dept_hookah' },
-  { key: 'rev_other', label: 'Прочее', level: 2, section: 'revenue', source: 'daily:dept_other' },
+  // Прочий доход приходит из двух мест: отдел «Прочее» в отчёте смены и
+  // поступления на счёт, не связанные с эквайрингом (например, аренда места
+  // под станции зарядки). У банковских строк знак обратный: кредит = доход.
+  { key: 'rev_other', label: 'Прочее', level: 2, section: 'revenue', source: 'both:income_other', dailyField: 'dept_other' },
 
   // === EXPENSES ===
   { key: 'expenses', label: 'РАСХОДЫ', level: 0, section: 'expenses', calc: 'sum_children' },
@@ -277,6 +280,8 @@ export default function PnLPage() {
           else if (line.key === 'fc_hookah') v[line.key] = cashHookah + bk(cat)
           else if (line.key === 'payroll_other') v[line.key] = cashTech + bk(cat)
           else if (line.key === 'opex_household') v[line.key] = cashOther + bk(cat)
+          // Доход: у bk() дебет со знаком «+», поэтому для выручки знак переворачиваем
+          else if (line.section === 'revenue') v[line.key] = (line.key === 'rev_other' ? revO : 0) - bk(cat)
           else v[line.key] = bk(cat)
         }
       })

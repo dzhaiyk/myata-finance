@@ -157,3 +157,20 @@ describe('ответы учредителя 03.09.2026 (вечер)', () => {
     assert.equal(r.category, 'payroll_mgmt')
   })
 })
+
+describe('прочий доход на счёт (04.09.2026)', () => {
+  it('поступление от арендатора станций зарядки → income_other', () => {
+    const r = categorizeTransaction({
+      purpose: 'Оплата по Договору №523 от 01.07.2025 за октябрь 25 г. Платежи по лизингу (текущая аренда)',
+      beneficiary: 'ЧК PowerBNK Ltd.', credit: 50307,
+    })
+    assert.equal(r.category, 'income_other')
+  })
+
+  it('платёж в их адрес (дебет) прочим доходом не считается', () => {
+    const r = categorizeTransaction({
+      purpose: 'Оплата по Договору №523 за аренду оборудования', beneficiary: 'ЧК PowerBNK Ltd.', debit: 50307,
+    })
+    assert.notEqual(r.category, 'income_other')
+  })
+})

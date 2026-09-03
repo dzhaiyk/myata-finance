@@ -95,6 +95,9 @@ export const KEYWORD_RULES = [
   { field: 'purpose', pattern: /расчеты по карточкам/i, category: 'acquiring_settlement' }, // зачисление эквайринга Halyk
   { field: 'purpose', pattern: /пополнение с терминала/i, category: 'acquiring_settlement' }, // зачисление POS Halyk (выписка по счёту)
   { field: 'purpose', pattern: /комисси\S* за операци/i, category: 'bank_fee' },           // «Комиссия за операцию …» в выписке Halyk
+  // Поступления не от эквайринга: субаренда места под станции зарядки. Правило
+  // должно стоять выше правила «аренда» по назначению, иначе доход уйдёт в расход.
+  { field: 'beneficiary', pattern: /PowerBNK/i, isDebit: false, category: 'income_other' }, // арендатор станций зарядки платит нам (ответ 04.09.2026)
   { field: 'purpose', pattern: /перевод собственных средств на карту/i, category: 'cash_withdrawal' }, // обналичка через карту учредителя (ответ 03.09.2026)
   { field: 'purpose', pattern: /ИПН с доходов, не облагаемых/i, category: 'tax_retail' },     // налог ИП с дохода — не ФОТ (ответ 03.09.2026)
   { field: 'purpose', pattern: /страхован\S* жизни/i, category: 'tax_insurance' },           // Nomad Life — страхование сотрудников
