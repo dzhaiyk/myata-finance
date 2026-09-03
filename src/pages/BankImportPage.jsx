@@ -311,24 +311,44 @@ export default function BankImportPage() {
     if (!selectedAccountId) { alert('Выберите счёт для импорта'); e.target.value = ''; return }
     setImporting(true)
     try {
-      const XLSX = await import('xlsx')
       const data = await file.arrayBuffer()
-      const wb = XLSX.read(data); const ws = wb.Sheets[wb.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 })
       const batchId = crypto.randomUUID()
+      const isPdf = /\.pdf$/i.test(file.name)
 
-      // parseBankStatement now handles date parsing and column mapping internally.
-      // Ночные операции (до границы операционного дня) относятся к предыдущей дате.
-      const parsed = parseBankStatement(rows, { cutoffHour: getCutoffHour() })
-
-      // Сверка полноты файла: остаток начала + обороты = остаток конца.
-      // Ловит обрезанную или отредактированную выписку ДО записи в базу.
-      const balances = parseStatementBalances(rows)
+      let parsed = []
       let balanceCheck = null
-      if (balances.opening != null && balances.closing != null) {
-        const turnover = parsed.reduce((s, t) => s + (t.credit || 0) - (t.debit || 0), 0)
-        const delta = Math.round((balances.opening + turnover - balances.closing) * 100) / 100
-        balanceCheck = { ...balances, delta, ok: Math.abs(delta) < 1 }
+      let parseIssues = []
+
+      if (isPdf) {
+        // Halyk отдаёт выписку только в PDF: таблица собирается по координатам текста
+        const { parseHalykPdf } = await import('@/lib/halykStatement')
+        const res = await parseHalykPdf(data)
+        parsed = res.rows
+        parseIssues = res.issues
+        const { openingBalance, closingBalance } = res.meta
+        if (openingBalance != null && closingBalance != null) {
+          const turnover = res.totals.credit - res.totals.debit
+          const delta = Math.round((openingBalance + turnover - closingBalance) * 100) / 100
+          balanceCheck = { opening: openingBalance, closing: closingBalance, delta, ok: Math.abs(delta) < 1 }
+        }
+        if (!parsed.length) throw new Error('В PDF не найдено ни одной операции. Это выписка по счёту Halyk?')
+      } else {
+        const XLSX = await import('xlsx')
+        const wb = XLSX.read(data); const ws = wb.Sheets[wb.SheetNames[0]]
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1 })
+
+        // parseBankStatement now handles date parsing and column mapping internally.
+        // Ночные операции (до границы операционного дня) относятся к предыдущей дате.
+        parsed = parseBankStatement(rows, { cutoffHour: getCutoffHour() })
+
+        // Сверка полноты файла: остаток начала + обороты = остаток конца.
+        // Ловит обрезанную или отредактированную выписку ДО записи в базу.
+        const balances = parseStatementBalances(rows)
+        if (balances.opening != null && balances.closing != null) {
+          const turnover = parsed.reduce((s, t) => s + (t.credit || 0) - (t.debit || 0), 0)
+          const delta = Math.round((balances.opening + turnover - balances.closing) * 100) / 100
+          balanceCheck = { ...balances, delta, ok: Math.abs(delta) < 1 }
+        }
       }
       const [rRes, cRes] = await Promise.all([
         supabase.from('bank_rules').select('*').eq('is_active', true),
@@ -372,7 +392,7 @@ export default function BankImportPage() {
       }
       // Stage for preview
       setStagedRows(newRows)
-      setStagedMeta({ hidden, duplicates, fileName: file.name, balanceCheck, parsedCount: parsed.length })
+      setStagedMeta({ hidden, duplicates, fileName: file.name, balanceCheck, parsedCount: parsed.length, parseIssues })
     } catch (err) { alert('Ошибка: ' + err.message) }
     setImporting(false); e.target.value = ''
   }
@@ -622,8 +642,8 @@ export default function BankImportPage() {
             {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
           </select>
           <label className={cn('btn-primary text-sm flex items-center gap-2 cursor-pointer', importing && 'opacity-50')}>
-            <Upload className="w-4 h-4" />{importing ? 'Импорт...' : 'Загрузить Excel'}
-            <input type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" disabled={importing} />
+            <Upload className="w-4 h-4" />{importing ? 'Импорт...' : 'Загрузить выписку'}
+            <input type="file" accept=".xlsx,.xls,.pdf" onChange={handleFile} className="hidden" disabled={importing} />
           </label>
         </div>
       </div>
@@ -832,6 +852,9 @@ export default function BankImportPage() {
               ) : (
                 <p className="text-xs text-slate-600 mt-1">Остатки в шапке файла не найдены — полнота выписки не проверена</p>
               )}
+              {(stagedMeta.parseIssues || []).map((issue, i) => (
+                <p key={i} className="text-xs text-amber-400 mt-1">⚠️ {issue}</p>
+              ))}
             </div>
             <div className="flex items-center gap-2">
               {stagedSelected.size > 0 && (

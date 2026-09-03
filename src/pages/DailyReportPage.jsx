@@ -138,6 +138,8 @@ export default function DailyReportPage() {
     cash_withdrawals: [{ amount: '', comment: '' }],
   })
   const [withdrawals, setWithdrawals] = useState(emptyWithdrawals())
+  const [iikoLoading, setIikoLoading] = useState(false)
+  const [iikoError, setIikoError] = useState('')
   const [revenue, setRevenue] = useState(PAYMENT_TYPES.map(t => ({ type: t, amount: '', checks: '' })))
   const [departments, setDepartments] = useState(DEPARTMENTS.map(d => ({ name: d, amount: '' })))
   const [allAccounts, setAllAccounts] = useState([]) // all accounts for parent lookup
@@ -695,6 +697,27 @@ export default function DailyReportPage() {
   const isSubmitted = status === 'submitted'
   const isLocked = isSubmitted
 
+  // Выручка из iiko: заполняет отделы и типы оплат за дату отчёта.
+  // Кассу, терминалы и изъятия по-прежнему вводит менеджер — на этом и держится сверка.
+  const fillFromIiko = async () => {
+    setIikoError('')
+    setIikoLoading(true)
+    try {
+      const { fetchSales, toDailyReportShape } = await import('@/lib/iiko')
+      const days = await fetchSales({ from: date, to: date })
+      const shape = toDailyReportShape(days[date])
+      if (!shape) throw new Error(`за ${date} нет продаж`)
+      const filled = departments.some(d => d.amount) || revenue.some(r => r.amount)
+      if (filled && !confirm('Выручка уже заполнена. Заменить данными из iiko?')) return
+      setDepartments(shape.departments)
+      setRevenue(prev => shape.revenue.map(r => ({ ...r, checks: prev.find(p => p.type === r.type)?.checks || r.checks })))
+    } catch (err) {
+      setIikoError(String(err.message || err))
+    } finally {
+      setIikoLoading(false)
+    }
+  }
+
   // ============ JOURNAL VIEW ============
   if (mode === 'journal') {
     return (
@@ -865,7 +888,16 @@ export default function DailyReportPage() {
 
       {/* ══════════ БЛОК 1: ДОХОДЫ ══════════ */}
       <div className="space-y-4">
-        <h2 className="text-lg font-display font-bold text-green-400 flex items-center gap-2">💰 Доходы</h2>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="text-lg font-display font-bold text-green-400 flex items-center gap-2">💰 Доходы</h2>
+          {!isLocked && (
+            <button onClick={fillFromIiko} disabled={iikoLoading}
+              className="btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50">
+              <Download className="w-3.5 h-3.5" />{iikoLoading ? 'Загрузка из iiko...' : 'Заполнить из iiko'}
+            </button>
+          )}
+        </div>
+        {iikoError && <p className="text-xs text-red-400">iiko: {iikoError}</p>}
 
         {/* Выручка по отделам */}
         <div className="card border-green-500/20 bg-green-500/5">

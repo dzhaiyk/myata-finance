@@ -44,6 +44,9 @@ src/
 │   ├── UsersPage.jsx     # Управление пользователями
 │   ├── RolesPage.jsx     # RBAC: матрица прав
 │   └── SettingsPage.jsx  # Настройки Telegram-бота
+netlify/
+└── functions/
+    └── iiko.js           # Прокси к iiko Cloud API (ключ в env Netlify, не во фронтенде)
 supabase/
 └── migrations/           # 11 миграций (001–011)
 ```
@@ -108,7 +111,7 @@ daily_report (view/create/edit/delete/submit/reopen), pnl (view/edit), cashflow 
 - Режим: месяц или YTD
 
 ### Импорт выписок (BankImportPage)
-- Формат: Excel из Kaspi Business
+- Форматы: Excel из Kaspi Business и PDF из приложения Halyk (`lib/pdfText.js` + `lib/halykStatement.js`, без внешних библиотек)
 - Парсинг через categorize.js (regex-правила по полям: purpose → beneficiary → КНП)
 - Дедупликация через SHA-256 хеш (tx_hash)
 - Ручная перекатегоризация
@@ -146,7 +149,10 @@ VITE_SUPABASE_URL=https://xxx.supabase.co
 VITE_SUPABASE_ANON_KEY=xxx
 VITE_TELEGRAM_BOT_TOKEN=xxx
 VITE_TELEGRAM_CHAT_ID=xxx
+VITE_IIKO_PROXY_KEY=xxx        # необязательно, парный ключ к IIKO_PROXY_KEY
 ```
+
+Серверные (только в панели Netlify, во фронтенд не попадают): `IIKO_API_LOGIN`, `IIKO_PROXY_KEY`, `IIKO_API_HOST`. См. `docs/Интеграции.md`.
 
 ## Команды
 
