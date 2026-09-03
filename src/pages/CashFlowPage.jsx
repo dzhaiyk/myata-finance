@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, fmtK, MONTHS_RU } from '@/lib/utils'
-import { getTxAmountForMonth } from '@/lib/pnl'
 import { yearsRange } from '@/lib/dates'
 import { ChevronDown, ChevronRight, ChevronsUpDown, Info, FileText, Upload, Wallet } from 'lucide-react'
 import { cashPayrollOf } from '@/lib/reconcile'
@@ -47,6 +46,7 @@ const CF_STRUCTURE = [
   { key: 'cf_financing', label: 'ФИНАНСОВАЯ ДЕЯТЕЛЬНОСТЬ', level: 0, calc: 'sum_children', section: 'financing' },
   { key: 'cf_dividends', label: 'Дивиденды выплаченные', level: 1, section: 'financing' },
   { key: 'cf_investments_in', label: 'Взносы учредителей', level: 1, section: 'financing' },
+  { key: 'cf_cash_withdrawal_bank', label: 'Снятие наличных со счёта', level: 1, section: 'financing' },
   { key: 'cf_bank_internal', label: 'Внутренние переводы (нетто)', level: 1, section: 'financing' },
 
   // Totals
@@ -122,14 +122,32 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
   // Зачисления эквайринга (acquiring_settlement) — это реальный приход
   // карточной выручки на счёт, показываем отдельной строкой (в P&L они не
   // идут: там выручка берётся из отчётов смен по отделам).
+  // Cash Flow — по дате платежа, а не по периоду начисления: деньги уходят со
+  // счёта в день операции. Распределение по периодам (period_from/period_to)
+  // существует для P&L и здесь применяться не должно.
+  const inMonth = (tx) => {
+    const d = new Date(tx.transaction_date)
+    return d.getFullYear() === targetYear && d.getMonth() + 1 === targetMonth
+  }
   let acquiringTotal = 0
-  bankTx.forEach(tx => {
+  let bankDividendsNet = 0   // дивиденды деньгами: дебет — выплата, кредит — возврат
+  let cashWithdrawalNet = 0  // снятие наличных со счёта: деньги уходят из контура
+  const monthBankTx = bankTx.filter(inMonth)
+  monthBankTx.forEach(tx => {
     if (!tx.category || tx.category === 'uncategorized' || tx.category === 'internal') return
-    const txAmount = getTxAmountForMonth(tx, targetYear, targetMonth)
+    const txAmount = Number(tx.amount) || 0
     if (txAmount === 0) return
 
     if (tx.category === 'acquiring_settlement') {
       acquiringTotal += tx.is_debit ? -txAmount : txAmount
+      return
+    }
+    if (tx.category === 'dividends') {
+      bankDividendsNet += tx.is_debit ? txAmount : -txAmount
+      return
+    }
+    if (tx.category === 'cash_withdrawal') {
+      cashWithdrawalNet += tx.is_debit ? txAmount : -txAmount
       return
     }
     if (tx.is_debit) {
@@ -138,6 +156,7 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
       bankCreditTotal += txAmount
     }
   })
+  v.cf_cash_withdrawal_bank = -cashWithdrawalNet
   v.cf_acquiring = acquiringTotal
 
   v.cf_bank_income = bankCreditTotal
@@ -179,14 +198,20 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
     return d.getFullYear() === targetYear && d.getMonth() + 1 === targetMonth
   })
 
-  v.cf_dividends = -monthInvTx.filter(t => t.type === 'dividend').reduce((s, t) => s + (Number(t.amount) || 0), 0)
-  v.cf_investments_in = monthInvTx.filter(t => t.type === 'investment').reduce((s, t) => s + (Number(t.amount) || 0), 0)
+  // Дивиденды: пока есть выписка, берём фактические платежи со счёта. Журнал
+  // (investor_transactions) содержит и дивиденды, выданные наличными из снятых
+  // со счёта денег, — их нельзя считать второй раз рядом со строкой снятия.
+  const journalDividends = monthInvTx.filter(t => t.type === 'dividend').reduce((s, t) => s + (Number(t.amount) || 0), 0)
+  const journalInvestments = monthInvTx.filter(t => t.type === 'investment').reduce((s, t) => s + (Number(t.amount) || 0), 0)
+  const hasBankMonth = monthBankTx.length > 0
+  v.cf_dividends = hasBankMonth ? -bankDividendsNet : -journalDividends
+  v.cf_investments_in = hasBankMonth ? 0 : journalInvestments
 
   // Internal transfers (bank category = internal) — net of credits minus debits
   let internalIn = 0, internalOut = 0
-  bankTx.forEach(tx => {
+  monthBankTx.forEach(tx => {
     if (tx.category === 'internal') {
-      const txAmount = getTxAmountForMonth(tx, targetYear, targetMonth)
+      const txAmount = Number(tx.amount) || 0
       if (txAmount === 0) return
       if (tx.is_debit) internalOut += txAmount
       else internalIn += txAmount
@@ -194,7 +219,7 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
   })
   v.cf_bank_internal = internalIn - internalOut
 
-  v.cf_financing = v.cf_dividends + v.cf_investments_in + v.cf_bank_internal
+  v.cf_financing = v.cf_dividends + v.cf_investments_in + v.cf_cash_withdrawal_bank + v.cf_bank_internal
 
   // === NET CHANGE ===
   v.cf_net_change = v.cf_operating + v.cf_investing + v.cf_financing
