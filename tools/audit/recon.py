@@ -2,6 +2,12 @@ import json, re
 from collections import defaultdict
 pe=json.load(open("pnl_excel.json")); pd=json.load(open("pnl_daily.json"))["monthly"]; hb=json.load(open("hist_bank.json"))["by"]; zt=json.load(open("zatratki_monthly.json"))
 YEARS=("2022","2023","2024","2025")
+# интерполяция пропусков кассовых книг (решение учредителя 03.09.2026): 2024-07, 2024-10 = среднее соседних месяцев; 2025-03 (1–15) = ×31/15
+def _interp(y, m, a, b):
+    la, lb = pd[y].get(str(a), {}), pd[y].get(str(b), {})
+    pd[y][str(m)] = {k: (la.get(k,0)+lb.get(k,0))/2 for k in set(la)|set(lb)}
+_interp("2024", 7, 6, 8); _interp("2024", 10, 9, 11)
+pd["2025"]["3"] = {k: v*31/15 for k,v in pd["2025"]["3"].items()}
 def ex(y,*names):
     s=0
     for n in names:
@@ -33,6 +39,7 @@ GROUPS=[
  ("  Закуп кухня",      lambda y: ex(y,"Закуп кухня"),              lambda y: pdl(y,"Закуп кухня"),  lambda y: bank(y,eq("cogs_kitchen"))),
  ("  Закуп бар",        lambda y: ex(y,"Закуп бар"),                lambda y: pdl(y,"Закуп бар"),    lambda y: bank(y,eq("cogs_bar"))),
  ("  Закуп кальян",     lambda y: ex(y,"Закуп кальян"),             lambda y: pdl(y,"Закуп кальян"), lambda y: bank(y,eq("cogs_hookah"))),
+ ("  Закуп без отдела", lambda y: 0,                                lambda y: 0,                     lambda y: bank(y,eq("cogs_other"))),
  ("Хозтовары",          lambda y: ex(y,"Хозтовары"),                lambda y: pdl(y,"Хозтовары"),    lambda y: bank(y,eq("household","opex_household"))),
  ("Маркетинг",          lambda y: ex(y,"Маркетинг"),                lambda y: pdl(y,"Маркетинг"),    lambda y: bank(y,pre("mkt_"))),
  ("Аренда",             lambda y: ex(y,"Аренда"),                   lambda y: pdl(y,"Аренда"),       lambda y: bank(y,pre("rent_"))),
@@ -56,9 +63,11 @@ for y in YEARS:
     print("  банк вне P&L:", {c: round(bank(y,eq(c))) for c in ("acquiring_settlement","dividends","owner_out","owner_in","cash_withdrawal","internal")})
 json.dump(out, open("recon_groups.json","w"), ensure_ascii=False)
 # monthly revenue: Excel vs PnL_Daily vs Затратки vs Kaspi acquiring credits
-acq=defaultdict(float); acq_n=defaultdict(int)
+acq=defaultdict(float); acq_n=defaultdict(int); _seen=set()
 for line in open("stmt_2022_2025.jsonl"):
     t=json.loads(line)
+    if t.get("tx_hash") in _seen: continue
+    _seen.add(t.get("tx_hash"))
     if t.get("category")=="acquiring_settlement" and not t["is_debit"]:
         acq[t["transaction_date"][:7]]+=t["amount"]; acq_n[t["transaction_date"][:7]]+=1
 print(f"\n===== Выручка по месяцам: Excel | PnL_Daily | Затратки итого | Затратки банк | Kaspi эквайринг (кредит по выписке)")

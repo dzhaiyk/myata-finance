@@ -90,7 +90,7 @@ export default function ControlPage() {
     const freshness = checkStatementFreshness(bankTx)
     const revenue = checkRevenueConsistency(submitted)
     const cashDisc = checkCashDiscrepancies(submitted)
-    const acquiring = checkAcquiring(submitted, bankTx)
+    const acquiring = checkAcquiring(submitted, bankTx, { accounts })
 
     // ФОТ по ведомости (pnl_data) ↔ выплаты из кассы (авансы + инкассация «зп») и по банку.
     // Техперсонал платится ежедневно из кассы и в ведомость не входит.
@@ -227,7 +227,9 @@ export default function ControlPage() {
             state={!acquiring.hasData ? 'none' : acquiring.ok ? 'ok' : 'fail'}
             value={!acquiring.hasData ? 'нет данных' : `${acquiring.deltaPct > 0 ? '+' : ''}${acquiring.deltaPct}%`}
             detail={acquiring.hasData
-              ? `терминалы ${fmt(acquiring.terminalsTotal)} → зачислено ${fmt(acquiring.settled)} ₸`
+              ? (acquiring.banks?.length
+                ? acquiring.banks.map(b => `${b.bank}: ${fmt(b.base)} → ${fmt(b.settled)} ₸ (${b.deltaPct > 0 ? '+' : ''}${b.deltaPct}%)`).join(' · ')
+                : `терминалы ${fmt(acquiring.terminalsTotal)} → зачислено ${fmt(acquiring.settled)} ₸`)
               : 'нужны терминалы в отчётах и выписка'} />
           <Check title="ФОТ" subtitle="Ведомость ↔ выдано из кассы и по банку"
             state={payroll.accrued === 0 ? 'none' : payroll.ok ? 'ok' : 'fail'}

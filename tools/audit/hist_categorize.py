@@ -1,12 +1,30 @@
 import json, re
 from collections import defaultdict
 rows=[json.loads(l) for l in open("stmt_2022_2025.jsonl")]
+_seen=set(); _ded=[]
+for _r in rows:
+    _h=_r.get("tx_hash")
+    if _h and _h in _seen: continue
+    if _h: _seen.add(_h)
+    _ded.append(_r)
+print(f"dedupe by tx_hash: {len(rows)} -> {len(_ded)} rows"); rows=_ded
 PARTNERS=[("Алмас",r"Алмас Хамитович|Almas Abdeshov|Абдешов"),("Абу",r"Койшиев Абу|Abu-Raikhan|Абу-Райхан"),("Жайык",r"Дауренбеков|Zhaiyk|Жайык"),("Әділет",r"Бақыт Әділет|Adilet"),("Алмаз",r"Ахметқали Алмаз|Akhmetkali|Ahmetkali")]
 def partner(b):
     for n,p in PARTNERS:
         if re.search(p,b,re.I): return n
     return None
 EXTRA=[ # (field, regex, category) — applied only when base category is weak
+ ("beneficiary", r"ПЕРСЕЙ", "cogs_kitchen"),
+ ("beneficiary", r"SKbar|ХО\.ХО|Alco Spirits", "cogs_bar"),
+ ("beneficiary", r"BBS TRADE|Galleon|АтикоАрго|ИП Kai\b|Занькин|Атшабарова", "cogs_other"),
+ ("beneficiary", r"Кар-Тел", "util_internet"),
+ ("beneficiary", r"Kafe Soft MD", "opex_software"),
+ ("beneficiary", r"Kafe Soft MiX|Kafe Soft Consult", "capex_furniture"),
+ ("beneficiary", r"Чокан|KAMI GROUP", "opex_menu"),
+ ("beneficiary", r"Махмудова|М.хаметжан", "household"),
+ ("beneficiary", r"HEADHUNTER|IT Сервис|И\.Н\. SERVICE", "opex_misc"),
+ ("beneficiary", r"Халык-Life|Nomad", "tax_insurance"),
+ ("beneficiary", r"VentMont|AirComfort", "opex_repair"),
  ("purpose", r"перевод собственных средств с текущего счета", "cash_withdrawal"),
  ("beneficiary", r"С карты Kaspi Business", "internal"),
  ("beneficiary", r"WOLT|GLOVO|Яндекс.?Еда|Yandex", "acquiring_settlement"),

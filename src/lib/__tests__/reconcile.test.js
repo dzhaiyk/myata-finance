@@ -237,3 +237,50 @@ describe('Наличная ЗП и транзит учредителей (03.09.
     assert.equal(unexplainedOwnerCash(-1200000, 0).unexplained, -1200000)
   })
 })
+
+describe('Сверка №3 по банкам (Kaspi/Halyk, 03.09.2026)', () => {
+  const accounts = [
+    { id: 2, bank_name: 'Kaspi', parent_account_id: null }, { id: 10, bank_name: 'Kaspi', parent_account_id: 2 },
+    { id: 15, bank_name: 'Halyk', parent_account_id: null }, { id: 16, bank_name: 'Halyk', parent_account_id: 15 },
+  ]
+  const reports = [
+    mkReport('2026-08-01', {
+      revenue: [{ type: 'Наличные', amount: '100000' }, { type: 'Kaspi', amount: '150000' }, { type: 'Halyk', amount: '50000' }],
+      terminals: { 10: '150000' },
+    }),
+    mkReport('2026-08-02', {
+      revenue: [{ type: 'Наличные', amount: '100000' }, { type: 'Kaspi', amount: '150000' }, { type: 'Halyk', amount: '40000' }],
+      terminals: { 10: '150000', 16: '40000' },
+    }),
+  ]
+
+  it('терминалы и зачисления группируются по банку; без терминала Halyk берётся тип оплаты', () => {
+    const r = checkAcquiring(reports, [
+      { account_id: 2, category: 'acquiring_settlement', is_debit: false, amount: 300000 },
+      { account_id: 15, category: 'acquiring_settlement', is_debit: false, amount: 90000 },
+    ], { accounts, feePct: 0 })
+    const kaspi = r.banks.find(b => b.bank === 'Kaspi')
+    const halyk = r.banks.find(b => b.bank === 'Halyk')
+    assert.equal(kaspi.base, 300000); assert.equal(kaspi.settled, 300000); assert.equal(kaspi.ok, true)
+    assert.equal(halyk.terminals, 40000); assert.equal(halyk.fallback, 50000); assert.equal(halyk.base, 90000)
+    assert.equal(halyk.ok, true)
+    assert.equal(r.terminalsTotal, 390000); assert.equal(r.ok, true)
+  })
+
+  it('недозачисление по одному банку валит общую сверку', () => {
+    const r = checkAcquiring(reports, [
+      { account_id: 2, category: 'acquiring_settlement', is_debit: false, amount: 300000 },
+      { account_id: 15, category: 'acquiring_settlement', is_debit: false, amount: 50000 },
+    ], { accounts, feePct: 0 })
+    assert.equal(r.ok, false)
+    assert.equal(r.banks.find(b => b.bank === 'Halyk').ok, false)
+    assert.equal(r.banks.find(b => b.bank === 'Kaspi').ok, true)
+  })
+
+  it('без списка счетов — прежнее поведение (одна сумма)', () => {
+    const r = checkAcquiring(reports, [{ category: 'acquiring_settlement', is_debit: false, amount: 340000 }], { feePct: 0 })
+    assert.equal(r.terminalsTotal, 340000)
+    assert.equal(r.banks, undefined)
+    assert.equal(r.ok, true)
+  })
+})

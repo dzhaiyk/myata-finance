@@ -11,7 +11,9 @@
 | 5 | `recon.py` | результаты шагов 1–4 | таблицы «Excel против наличка + банк» и выручка по месяцам |
 | 6 | `fot_hist.py` | `ФОТ/2022…2025` | `fot_hist.json` — ведомости по половинам месяца против Excel-ФОТ |
 | 7 | `fot_parse2.py --all` | `ФОТ/2026` | ведомости 2026 по отделам (для внесения в `pnl_data`) |
-| 8 | `pnl_reimport.py` | `pnl_excel.json` | `sql/reimport_hist.sql` — переимпорт исторического P&L (выполнять только после подтверждения) |
+| 8 | `pnl_reimport.py` | `pnl_excel.json` | `sql/reimport_hist.sql` — переимпорт исторического P&L (выполнен 03.09.2026) |
+| 9 | `halyk_pos_parse.py` | `halyk.txt` (pdftotext от `Halyk_Statement.pdf`) | `halyk_pos.json` — зачисления Halyk ИП по дням (загружены на счёт id 15) |
+| 10 | `investors_cf.py` | `2. Cash flow.xlsx` | `cf_partners.json`, `investors_cf.sql` — выравнивание дивидендов (ждёт подтверждения) |
 
 `stmt_2022_2025.jsonl` создаётся `import_stmt.mjs` (см. историю сессии аудита); при потере — пересобрать из выписок теми же правилами, что и импорт в приложении.
 

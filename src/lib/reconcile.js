@@ -55,20 +55,65 @@ export function checkCashDiscrepancies(reports, threshold = 500) {
  * Банк зачисляет с задержкой (D+1..D+3) и за вычетом комиссии, поэтому
  * сверяем НАКОПИТЕЛЬНО за период с допуском по проценту комиссии.
  */
-export function checkAcquiring(reports, bankTx, { feePct = 1.5, tolerancePct = 1 } = {}) {
-  const terminalsTotal = reports.reduce((s, r) => s + reportTotals(r).terminals, 0)
-  const settled = bankTx
-    .filter(t => t.category === 'acquiring_settlement')
-    .reduce((s, t) => s + (t.is_debit ? -num(t.amount) : num(t.amount)), 0)
+export function checkAcquiring(reports, bankTx, { feePct = 1.5, tolerancePct = 1, accounts = null } = {}) {
+  const signed = (t) => (t.is_debit ? -num(t.amount) : num(t.amount))
+  const settledRows = bankTx.filter(t => t.category === 'acquiring_settlement')
+  const judge = (base, settled) => {
+    const expected = base * (1 - feePct / 100)
+    const delta = settled - expected
+    const deltaPct = base > 0 ? (delta / base) * 100 : 0
+    return {
+      expected: Math.round(expected), delta: Math.round(delta), deltaPct: Number(deltaPct.toFixed(2)),
+      ok: base === 0 || Math.abs(deltaPct) <= tolerancePct,
+    }
+  }
 
-  const expected = terminalsTotal * (1 - feePct / 100)
-  const delta = settled - expected
-  const deltaPct = terminalsTotal > 0 ? (delta / terminalsTotal) * 100 : 0
+  if (!accounts) {
+    const terminalsTotal = reports.reduce((s, r) => s + reportTotals(r).terminals, 0)
+    const settled = settledRows.reduce((s, t) => s + signed(t), 0)
+    return { terminalsTotal, settled, ...judge(terminalsTotal, settled), hasData: terminalsTotal > 0 || settled > 0 }
+  }
+
+  // По банкам (Kaspi, Halyk …): терминалы отчёта относятся к банку родительского счёта,
+  // зачисления — к банку счёта выписки. Если в отчёте нет терминала этого банка
+  // (например, Halyk до появления терминала в приложении), берём сумму типа оплаты.
+  const byId = new Map(accounts.map(a => [Number(a.id), a]))
+  const bankOfAccount = (id) => {
+    const a = byId.get(Number(id))
+    const parent = a?.parent_account_id ? byId.get(Number(a.parent_account_id)) : null
+    return (parent?.bank_name || a?.bank_name || 'other')
+  }
+  const bankOfPayment = (type) => accounts.find(a => a.bank_name && !a.parent_account_id
+    && String(type || '').toLowerCase().includes(a.bank_name.toLowerCase()))?.bank_name || null
+  const banks = {}
+  const bucket = (b) => (banks[b] = banks[b] || { bank: b, terminals: 0, fallback: 0, settled: 0 })
+
+  reports.forEach(r => {
+    const terminals = r.data?.terminals || {}
+    const covered = new Set()
+    Object.entries(terminals).forEach(([tid, v]) => {
+      const b = bankOfAccount(tid)
+      bucket(b).terminals += num(v)
+      if (num(v) > 0) covered.add(b)
+    })
+    ;(r.data?.revenue || []).forEach(p => {
+      const b = bankOfPayment(p.type)
+      if (b && !covered.has(b)) bucket(b).fallback += num(p.amount)
+    })
+  })
+  settledRows.forEach(t => { bucket(bankOfAccount(t.account_id)).settled += signed(t) })
+
+  const list = Object.values(banks).map(b => {
+    const base = b.terminals + b.fallback
+    return { ...b, base, ...judge(base, b.settled) }
+  }).sort((a, b) => a.bank.localeCompare(b.bank))
+  const terminalsTotal = list.reduce((s, b) => s + b.base, 0)
+  const settled = list.reduce((s, b) => s + b.settled, 0)
   return {
-    terminalsTotal, settled, expected: Math.round(expected), delta: Math.round(delta),
-    deltaPct: Number(deltaPct.toFixed(2)),
-    ok: terminalsTotal === 0 || Math.abs(deltaPct) <= tolerancePct,
+    terminalsTotal, settled, ...judge(terminalsTotal, settled),
+    ok: list.every(b => b.ok),
     hasData: terminalsTotal > 0 || settled > 0,
+    banks: list,
   }
 }
 

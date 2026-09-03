@@ -156,3 +156,4 @@ for (y,m) in sorted(month):
     out[f"{y}-{m:02d}"]=dict(halves=hs, total=tot, excel=ex, **{d:month[(y,m)].get(d,0) for d in DEPTS})
     print(f"{y}-{m:02d}{hs:>9}"+"".join(f"{month[(y,m)].get(d,0):>11,.0f}" for d in DEPTS)+f"{tot:>12,.0f}{ex:>12,.0f}{ex-tot:>12,.0f}")
 json.dump(out, open("fot_hist.json","w"), ensure_ascii=False)
+json.dump({f"{k[0]}-{k[1]:02d}-h{k[2]}": {"total": v[0], "by_dept": v[3]} for k,v in chosen.items()}, open("fot_halves.json","w"), ensure_ascii=False)
