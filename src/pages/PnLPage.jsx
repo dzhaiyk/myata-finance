@@ -5,7 +5,7 @@ import { cn, fmt, fmtK, MONTHS_RU } from '@/lib/utils'
 import { getTxAmountForMonth } from '@/lib/pnl'
 import { isPnlCategory } from '@/lib/categories'
 import { yearsRange } from '@/lib/dates'
-import { ChevronDown, ChevronRight, Plus, Trash2, Info, FileText, Upload, ChevronsUpDown, Pencil, Save } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Trash2, Info, FileText, Upload, ChevronsUpDown, Pencil, Save, AlertCircle } from 'lucide-react'
 import { isTechStaff } from '@/lib/reconcile'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -508,6 +508,28 @@ export default function PnLPage() {
           )}
         </div>
       </div>
+
+      {/* Месяц без выписки: расходы по банку будут пустыми — предупреждаем прямо,
+          иначе пустой P&L выглядит как ошибка приложения */}
+      {viewMode === 'month' && !loading && (() => {
+        const inMonth = bankTx.filter(tx => {
+          const d = new Date(tx.transaction_date)
+          return d.getFullYear() === year && d.getMonth() + 1 === month && isPnlCategory(tx.category)
+        })
+        if (inMonth.length > 0) return null
+        return (
+          <div className="card border-amber-500/30 bg-amber-500/5 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <div className="font-semibold text-amber-300">Выписки за {periodLabel} не загружены</div>
+              <div className="text-slate-400 mt-1">
+                Аренда, налоги, коммуналка, хозтовары и безналичный закуп приходят из банковской выписки.
+                Пока её нет, эти строки пустые. Загрузите выписку на странице «Импорт выписок».
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* KPI Cards */}
       {(() => {
