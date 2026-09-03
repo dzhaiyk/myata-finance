@@ -5,7 +5,8 @@ import { cn, fmt, MONTHS_RU } from '@/lib/utils'
 import { yearsRange } from '@/lib/dates'
 import {
   checkRevenueConsistency, checkCashDiscrepancies, checkAcquiring, checkAccountBalance,
-  checkPayroll, findMissingShifts, checkStatementFreshness, countOpenIssues, reportTotals, num,
+  findMissingShifts, checkStatementFreshness, countOpenIssues, num,
+  sumCashPayroll, cashTransit, checkPayrollLoop, unexplainedOwnerCash,
 } from '@/lib/reconcile'
 import { ShieldCheck, AlertTriangle, CheckCircle2, XCircle, MinusCircle, CalendarX, Upload } from 'lucide-react'
 
@@ -44,7 +45,9 @@ export default function ControlPage() {
   const [accounts, setAccounts] = useState([])
   const [acctTx, setAcctTx] = useState([])
   const [balances, setBalances] = useState([])
-  const [payrollDetails, setPayrollDetails] = useState([])
+  const [pnlRows, setPnlRows] = useState([])       // ФОТ по ведомости (pnl_data payroll_*) с начала года
+  const [ytdReports, setYtdReports] = useState([]) // отчёты смен с начала года — для транзита наличных
+  const [transitTx, setTransitTx] = useState([])   // снятия/возвраты наличных и безнал ЗП с начала года
   const [loading, setLoading] = useState(true)
 
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`
@@ -53,20 +56,27 @@ export default function ControlPage() {
   useEffect(() => {
     const load = async () => {
       setLoading(true)
-      const [repRes, btRes, accRes, atRes, balRes, ppRes] = await Promise.all([
-        supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).order('report_date'),
+      const yearStart = `${year}-01-01`
+      const [repRes, btRes, accRes, atRes, balRes, pnlRes, trRes] = await Promise.all([
+        supabase.from('daily_reports').select('*').gte('report_date', yearStart).lte('report_date', endDate).order('report_date'),
         supabase.from('bank_transactions').select('*').gte('transaction_date', startDate).lte('transaction_date', endDate),
         supabase.from('accounts').select('*').eq('is_active', true).order('sort_order, id'),
         supabase.from('account_transactions').select('account_id, transaction_date, type, amount'),
         supabase.from('account_balances').select('*').gte('balance_date', startDate).lte('balance_date', endDate),
-        supabase.from('payroll_periods').select('id, year, month, payroll_details(total_earned)').eq('year', year).eq('month', month),
+        supabase.from('pnl_data').select('month, category, amount, type').eq('year', year).lte('month', month),
+        supabase.from('bank_transactions').select('transaction_date, amount, is_debit, category, purpose')
+          .gte('transaction_date', yearStart).lte('transaction_date', endDate)
+          .in('category', ['cash_withdrawal', 'internal', ...PAYROLL_CATS]),
       ])
-      setReports(repRes.data || [])
+      const allReports = repRes.data || []
+      setYtdReports(allReports)
+      setReports(allReports.filter(r => r.report_date >= startDate))
       setBankTx(btRes.data || [])
       setAccounts(accRes.data || [])
       setAcctTx(atRes.data || [])
       setBalances(balRes.data || [])
-      setPayrollDetails((ppRes.data || []).flatMap(p => p.payroll_details || []))
+      setPnlRows(pnlRes.data || [])
+      setTransitTx(trRes.data || [])
       setLoading(false)
     }
     load()
@@ -82,13 +92,33 @@ export default function ControlPage() {
     const cashDisc = checkCashDiscrepancies(submitted)
     const acquiring = checkAcquiring(submitted, bankTx)
 
-    // ФОТ: нал авансы из отчётов + безнал по банку
-    const cashAdvances = submitted.reduce(
-      (s, r) => s + (r.data?.withdrawals?.payroll || []).reduce((x, row) => x + num(row.amount), 0), 0)
-    const bankPayroll = bankTx
+    // ФОТ по ведомости (pnl_data) ↔ выплаты из кассы (авансы + инкассация «зп») и по банку.
+    // Техперсонал платится ежедневно из кассы и в ведомость не входит.
+    const accruedOf = (m) => pnlRows
+      .filter(pr => pr.month === m && PAYROLL_CATS.includes(pr.category) && pr.category !== 'payroll_other' && pr.type !== 'historical')
+      .reduce((sum, pr) => sum + num(pr.amount), 0)
+    const bankPayrollOf = (rows) => rows
       .filter(t => t.is_debit && PAYROLL_CATS.includes(t.category))
-      .reduce((s, t) => s + num(t.amount), 0)
-    const payroll = checkPayroll(payrollDetails, cashAdvances, bankPayroll)
+      .reduce((sum, t) => sum + num(t.amount), 0)
+    const payroll = checkPayrollLoop({ accrued: accruedOf(month), cash: sumCashPayroll(submitted), bankPayroll: bankPayrollOf(bankTx) })
+
+    // Транзит наличных учредителей помесячно с начала года:
+    // снято со счетов → выдано на ЗП (остаток ведомости) / возвращено в оборот → остаток на руках
+    const pad = (n) => String(n).padStart(2, '0')
+    let cumNet = 0, cumOwners = 0
+    const transitRows = Array.from({ length: month }, (_, i) => i + 1).map(m => {
+      const mStart = `${year}-${pad(m)}-01`
+      const mEnd = `${year}-${pad(m)}-${new Date(year, m, 0).getDate()}`
+      const tx = transitTx.filter(t => t.transaction_date >= mStart && t.transaction_date <= mEnd)
+      const tr = cashTransit(tx)
+      const reps = ytdReports.filter(r => r.status === 'submitted' && r.report_date >= mStart && r.report_date <= mEnd)
+      const loop = checkPayrollLoop({ accrued: accruedOf(m), cash: sumCashPayroll(reps), bankPayroll: bankPayrollOf(tx) })
+      const fromOwners = Math.max(0, loop.fromOwners)
+      cumNet += tr.net; cumOwners += fromOwners
+      return { month: m, withdrawn: tr.withdrawn, returned: tr.returned, net: tr.net, fromOwners, cumulative: cumNet - cumOwners }
+    })
+    const owners = { ...unexplainedOwnerCash(cumNet, cumOwners), withdrawn: cumNet + transitRows.reduce((a, r) => a + r.returned, 0),
+      returned: transitRows.reduce((a, r) => a + r.returned, 0), fromOwners: cumOwners }
 
     // Остатки счетов: расчёт ↔ последняя сверка месяца
     const accountChecks = accounts.filter(a => !a.parent_account_id).map(a => {
@@ -107,20 +137,21 @@ export default function ControlPage() {
         date: last?.balance_date, ...checkAccountBalance(expected, last?.actual_balance ?? null) }
     })
 
-    return { open, missing, freshness, revenue, cashDisc, acquiring, payroll, accountChecks }
-  }, [reports, submitted, bankTx, accounts, acctTx, balances, payrollDetails, startDate, endDate])
+    return { open, missing, freshness, revenue, cashDisc, acquiring, payroll, accountChecks, transitRows, owners }
+  }, [reports, submitted, bankTx, accounts, acctTx, balances, pnlRows, ytdReports, transitTx, year, month, startDate, endDate])
 
   if (!hasPermission('dashboard.view')) {
     return <div className="text-center text-slate-500 py-20">Нет доступа</div>
   }
   if (loading) return <div className="text-center text-slate-500 py-20">Загрузка сверок...</div>
 
-  const { open, missing, freshness, revenue, cashDisc, acquiring, payroll, accountChecks } = checks
+  const { open, missing, freshness, revenue, cashDisc, acquiring, payroll, accountChecks, transitRows, owners } = checks
   const blockers = [
     missing.length > 0, open.drafts > 0, open.uncategorized > 0, !freshness.ok,
     revenue.length > 0, cashDisc.length > 0,
     acquiring.hasData && !acquiring.ok,
-    !payroll.ok,
+    payroll.accrued > 0 && !payroll.ok,
+    !owners.ok,
     accountChecks.some(a => a.ok === false),
   ].filter(Boolean).length
 
@@ -198,11 +229,45 @@ export default function ControlPage() {
             detail={acquiring.hasData
               ? `терминалы ${fmt(acquiring.terminalsTotal)} → зачислено ${fmt(acquiring.settled)} ₸`
               : 'нужны терминалы в отчётах и выписка'} />
-          <Check title="ФОТ" subtitle="Начислено ↔ выплачено"
-            state={payrollDetails.length === 0 ? 'none' : payroll.ok ? 'ok' : 'fail'}
-            value={payrollDetails.length === 0 ? 'нет расчёта' : `${fmt(payroll.delta)} ₸`}
-            detail={payrollDetails.length > 0
-              ? `начислено ${fmt(payroll.accrued)} → выплачено ${fmt(payroll.paid)} ₸` : null} />
+          <Check title="ФОТ" subtitle="Ведомость ↔ выдано из кассы и по банку"
+            state={payroll.accrued === 0 ? 'none' : payroll.ok ? 'ok' : 'fail'}
+            value={payroll.accrued === 0 ? 'нет ведомости' : `${fmt(payroll.fromOwners)} ₸`}
+            detail={payroll.accrued > 0
+              ? `начислено ${fmt(payroll.accrued)} → из кассы/банка ${fmt(payroll.trackedPaid)} ₸; остаток выдан из наличных учредителей`
+              : 'внесите ФОТ месяца в P&L (ведомость)'} />
+        </div>
+      </div>
+
+      {/* Наличные вне кассы: снято со счетов учредителями → ЗП / возврат в оборот */}
+      <div>
+        <h2 className="text-sm font-semibold text-slate-400 mb-3">Наличные у учредителей (с начала года)</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <Check title="Необъяснённый остаток" subtitle="Снято со счетов − возвращено − выдано на ЗП"
+            state={owners.ok ? 'ok' : 'fail'}
+            value={`${fmt(owners.unexplained)} ₸`}
+            detail={`снято ${fmt(owners.withdrawn)} · возвращено ${fmt(owners.returned)} · на ЗП ${fmt(owners.fromOwners)} ₸`} />
+          <div className="card p-0 overflow-x-auto lg:col-span-2">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead><tr>
+                <th className="table-header text-left">Месяц</th>
+                <th className="table-header text-right">Снято со счетов</th>
+                <th className="table-header text-right">Возвращено в оборот</th>
+                <th className="table-header text-right">ЗП не из кассы</th>
+                <th className="table-header text-right">На руках (накопит.)</th>
+              </tr></thead>
+              <tbody>
+                {transitRows.map(r => (
+                  <tr key={r.month} className="hover:bg-slate-800/30">
+                    <td className="table-cell">{MONTHS_RU[r.month - 1]}</td>
+                    <td className="table-cell text-right font-mono text-xs">{fmt(r.withdrawn)}</td>
+                    <td className="table-cell text-right font-mono text-xs">{fmt(r.returned)}</td>
+                    <td className="table-cell text-right font-mono text-xs">{fmt(r.fromOwners)}</td>
+                    <td className={cn('table-cell text-right font-mono text-xs font-bold', r.cumulative > 500000 ? 'text-red-400' : 'text-green-400')}>{fmt(r.cumulative)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -300,6 +365,7 @@ export default function ControlPage() {
           <p><b className="text-slate-300">Ежедневно:</b> менеджер сдаёт отчёт смены, бухгалтер загружает выписку за день.</p>
           <p><b className="text-slate-300">Эквайринг</b> сверяется накопительно за месяц: банк зачисляет с задержкой и минус комиссия (~1.5%). Отклонение больше 1% — повод разбираться.</p>
           <p><b className="text-slate-300">Остатки счетов</b> сверяйте на вкладке «Счета → Сверка»: расчётный остаток должен совпадать с банковским приложением.</p>
+          <p><b className="text-slate-300">ФОТ и наличные учредителей:</b> выдачу ЗП из кассы проводите как инкассацию с комментарием «зп»; снятия со счетов (банкомат, карта) и возвраты («Взнос наличных», «Фин помощь») берутся из выписки. Остаток «на руках» больше 500 тыс. — деньги вне контура.</p>
         </div>
       </div>
     </div>

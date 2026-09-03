@@ -1,3 +1,4 @@
+import { cashPayrollOf, sumCashPayroll, cashTransit, checkPayrollLoop, unexplainedOwnerCash, isPayrollComment } from '../reconcile.js'
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
@@ -194,5 +195,45 @@ describe('Незакрытые хвосты', () => {
     )
     assert.equal(r.drafts, 1)
     assert.equal(r.uncategorized, 2)
+  })
+})
+
+describe('Наличная ЗП и транзит учредителей (03.09.2026)', () => {
+  const rep = {
+    report_date: '2026-05-16', status: 'submitted',
+    data: { withdrawals: {
+      payroll: [{ name: 'Асхат', amount: '10 000' }, { name: 'Техперсонал', amount: '14000' }, { name: 'Тех персанал', amount: '7000' }],
+      cash_withdrawals: [{ amount: '2 000 000', comment: 'на ЗП' }, { amount: '300000', comment: 'Маржан аванс' }, { amount: '50000', comment: 'на таргет' }],
+    } },
+  }
+  it('делит авансы, техперсонал, выдачу ЗП (инкассация «зп/аванс») и прочую инкассацию', () => {
+    assert.deepEqual(cashPayrollOf(rep), { advances: 10000, techStaff: 21000, payout: 2300000, otherCollected: 50000 })
+    assert.equal(isPayrollComment('на фот'), true)
+    assert.equal(isPayrollComment('bi service'), false)
+    assert.deepEqual(sumCashPayroll([rep, rep]).payout, 4600000)
+  })
+  it('транзит: снятия со счёта минус возвраты без депозитных ног', () => {
+    const tx = [
+      { is_debit: true, category: 'cash_withdrawal', amount: '1500000', purpose: 'Снятия наличных в Kaspi Банкомат' },
+      { is_debit: true, category: 'cash_withdrawal', amount: '1000000', purpose: 'Перевод собственных средств на карту Kaspi Gold *0291' },
+      { is_debit: false, category: 'internal', amount: '700000', purpose: 'Взнос наличных в Kaspi Банкомате' },
+      { is_debit: false, category: 'internal', amount: '3000000', purpose: 'Фин помощь. Пополнение' },
+      { is_debit: false, category: 'internal', amount: '2000000', purpose: 'Перевод со счета U36207975-001 от 19/08/2024 на счет KaspiPay через интернет отделение' },
+      { is_debit: false, category: 'internal', amount: '2700000', purpose: 'Перевод с Депозита U34948588-002 от 31/05/2026 на счет Kaspi Pay' },
+      { is_debit: true, category: 'internal', amount: '500000', purpose: 'Перевод со счета KaspiPay на Депозит' },
+    ]
+    assert.deepEqual(cashTransit(tx), { withdrawn: 2500000, returned: 3700000, net: -1200000 })
+  })
+  it('ФОТ-контур: остаток ведомости, не выданный из кассы/банка, = деньги учредителей', () => {
+    const r = checkPayrollLoop({ accrued: 6421289, cash: { advances: 1660540, payout: 3739536, techStaff: 434000 }, bankPayroll: 0 })
+    assert.equal(r.trackedPaid, 5400076)
+    assert.equal(r.fromOwners, 1021213)
+    assert.equal(r.ok, false)
+    assert.equal(checkPayrollLoop({ accrued: 0, cash: { advances: 0, payout: 0 } }).ok, true)
+  })
+  it('необъяснённый остаток у учредителей', () => {
+    assert.deepEqual(unexplainedOwnerCash(5000000, 4800000), { unexplained: 200000, ok: true })
+    assert.equal(unexplainedOwnerCash(5000000, 1000000).ok, false)
+    assert.equal(unexplainedOwnerCash(-1200000, 0).unexplained, -1200000)
   })
 })

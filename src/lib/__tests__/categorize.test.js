@@ -126,3 +126,27 @@ describe('новые формулировки Kaspi (2026)', () => {
     assert.equal(r.category, 'household')
   })
 })
+
+describe('решения аудита 03.09.2026', () => {
+  it('перевод собственных средств на карту учредителя → cash_withdrawal (не дивиденды)', () => {
+    const r = categorizeTransaction({ purpose: 'Перевод собственных средств на карту Kaspi Gold *0291', beneficiary: 'Алмаз А.', debit: 1500000 })
+    assert.equal(r.category, 'cash_withdrawal')
+  })
+  it('ИПН ИП «не облагаемых у источника» → tax_retail, ИПН с зарплат → tax_payroll', () => {
+    assert.equal(categorizeTransaction({ purpose: 'ИПН с доходов, не облагаемых у источника выплаты за август 2026г', beneficiary: 'УГД по Бостандыкскому району', debit: 1745000 }).category, 'tax_retail')
+    assert.equal(categorizeTransaction({ purpose: 'ИПН с доходов, облагаемых у источника выплаты за июль 2026г', beneficiary: 'УГД по Жетысускому району', debit: 39600 }).category, 'tax_payroll')
+  })
+  it('страхование жизни сотрудников (Nomad Life) → tax_insurance', () => {
+    assert.equal(categorizeTransaction({ purpose: 'За страховую премия (взнос) по страхованию жизни. Оплата по счету', beneficiary: 'АО "Компания по страхованию жизни "Nomad Life"', debit: 85000 }).category, 'tax_insurance')
+  })
+  it('«Фин помощь» от учредителя (кредит) → internal', () => {
+    assert.equal(categorizeTransaction({ purpose: 'Фин помощь. Пополнение', beneficiary: 'Ахметқали Алмаз Маратұлы', credit: 3000000 }).category, 'internal')
+  })
+  it('СМР / дизайнер → capex_repair, мебель → capex_furniture, меню → opex_menu, крафт-пакеты → household', () => {
+    assert.equal(categorizeTransaction({ purpose: 'За услуги по ремонту товаров и техническому обслуживанию. Оплата по счету #3 Строительно монтажные работы.', beneficiary: 'ИП "Esko Group"', debit: 5000000 }).category, 'capex_repair')
+    assert.equal(categorizeTransaction({ purpose: 'За профессиональные, научные и технические услуги. Оплата по счету #01 Аванс за услуги дизайнера.', beneficiary: 'ИП ELZAT MUQASH', debit: 800000 }).category, 'capex_repair')
+    assert.equal(categorizeTransaction({ purpose: 'За профессиональные, научные и технические услуги. Изготовление и установка мебели.', beneficiary: 'ИП ЖАНАТОВА Л.Е.', debit: 1114652 }).category, 'capex_furniture')
+    assert.equal(categorizeTransaction({ purpose: 'За профессиональные, научные и технические услуги. Подписка на бесконтактное меню.', beneficiary: 'ТОО KAMI GROUP', debit: 75000 }).category, 'opex_menu')
+    assert.equal(categorizeTransaction({ purpose: 'За товары. Оплата по счету#7 от 18.06.26г Крафт пакеты.', beneficiary: 'ИП МҰХАМЕТЖАН', debit: 66000 }).category, 'household')
+  })
+})

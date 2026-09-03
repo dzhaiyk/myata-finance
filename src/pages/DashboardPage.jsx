@@ -6,6 +6,7 @@ import { isPnlCategory } from '@/lib/categories'
 import { yearsRange } from '@/lib/dates'
 import { DollarSign, TrendingDown, ShoppingCart, CirclePercent, AlertTriangle, FileText, Trophy, CalendarDays } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts'
+import { isTechStaff } from '@/lib/reconcile'
 
 const fmtM = (v) => {
   if (!v || v === 0) return ''
@@ -77,7 +78,7 @@ function computePnL(dailyReports, bankTxs, adjustments, year, months) {
   v.revenue = revK + revB + revH + revO
 
   // Cash expenses
-  let cashKitchen = 0, cashBar = 0, cashHookah = 0, cashOther = 0, cashHookahCapex = 0
+  let cashKitchen = 0, cashBar = 0, cashHookah = 0, cashOther = 0, cashHookahCapex = 0, cashTech = 0
   dailyReports.forEach(r => {
     const w = r.data?.withdrawals || {}
     const sum = (arr) => (arr || []).reduce((s, row) => s + (Number(row.amount) || 0), 0)
@@ -89,6 +90,7 @@ function computePnL(dailyReports, bankTxs, adjustments, year, months) {
       else cashHookah += amt
     })
     cashOther += sum(w.other)
+    ;(w.payroll || []).forEach(row => { if (isTechStaff(row.name)) cashTech += Number(row.amount) || 0 })
   })
 
   // Bank expenses by category
@@ -126,6 +128,7 @@ function computePnL(dailyReports, bankTxs, adjustments, year, months) {
 
   // Set individual keys from bank
   payrollKeys.forEach(k => { v[k] = bk(k) })
+  v.payroll_other += cashTech // техперсонал — ежедневно из кассы, только в отчётах смен
   marketingKeys.forEach(k => { v[k] = bk(k) })
   rentKeys.forEach(k => { v[k] = bk(k) })
   utilKeys.forEach(k => { v[k] = bk(k) })

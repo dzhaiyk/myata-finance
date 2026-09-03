@@ -5,6 +5,7 @@ import { cn, fmt, fmtK, MONTHS_RU } from '@/lib/utils'
 import { getTxAmountForMonth } from '@/lib/pnl'
 import { yearsRange } from '@/lib/dates'
 import { ChevronDown, ChevronRight, ChevronsUpDown, Info, FileText, Upload, Wallet } from 'lucide-react'
+import { cashPayrollOf } from '@/lib/reconcile'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const CURRENT_MONTH = new Date().getMonth() + 1
@@ -22,9 +23,9 @@ const CF_STRUCTURE = [
   { key: 'cf_cash_suppliers_kitchen', label: 'Закуп кухня (нал)', level: 2, section: 'operating' },
   { key: 'cf_cash_suppliers_bar', label: 'Закуп бар (нал)', level: 2, section: 'operating' },
   { key: 'cf_cash_tobacco', label: 'Закуп кальян (нал)', level: 2, section: 'operating' },
-  { key: 'cf_cash_payroll', label: 'Авансы ЗП (нал)', level: 2, section: 'operating' },
+  { key: 'cf_cash_payroll', label: 'ЗП, авансы, техперсонал (нал)', level: 2, section: 'operating' },
   { key: 'cf_cash_other', label: 'Хозрасходы (нал)', level: 2, section: 'operating' },
-  { key: 'cf_cash_withdrawal', label: 'Инкассация', level: 2, section: 'operating' },
+  { key: 'cf_cash_withdrawal', label: 'Инкассация (прочее)', level: 2, section: 'operating' },
 
   { key: 'cf_bank_opex', label: 'Операционные расходы (банк)', level: 1, calc: 'sum_children', section: 'operating' },
   { key: 'cf_bank_payroll', label: 'ФОТ (безнал)', level: 2, section: 'operating' },
@@ -97,9 +98,11 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
       const amt = parseNum(row.amount)
       if (row.name !== 'Аппараты') cashTobacco += amt
     })
-    cashPayroll += sum(w.payroll)
+    // Выдача ЗП из кассы проводится менеджерами как инкассация с комментарием «зп/аванс/фот»
+    const cp = cashPayrollOf(r)
+    cashPayroll += cp.advances + cp.techStaff + cp.payout
     cashOther += sum(w.other)
-    cashWithdrawal += sum(w.cash_withdrawals)
+    cashWithdrawal += cp.otherCollected
   })
 
   v.cf_cash_suppliers_kitchen = -cashKitchen

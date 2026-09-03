@@ -6,6 +6,7 @@ import { getTxAmountForMonth } from '@/lib/pnl'
 import { isPnlCategory } from '@/lib/categories'
 import { yearsRange } from '@/lib/dates'
 import { ChevronDown, ChevronRight, Plus, Trash2, Info, FileText, Upload, ChevronsUpDown, Pencil, Save } from 'lucide-react'
+import { isTechStaff } from '@/lib/reconcile'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const CURRENT_MONTH = new Date().getMonth() + 1
@@ -41,7 +42,7 @@ const PNL_STRUCTURE = [
   { key: 'payroll_hookah', label: 'ФОТ Кальян', level: 3, section: 'expenses', source: 'bank:payroll_hookah' },
   { key: 'payroll_hall', label: 'ФОТ Зал', level: 3, section: 'expenses', source: 'bank:payroll_hall' },
   { key: 'payroll_transport', label: 'Развозка', level: 3, section: 'expenses', source: 'bank:payroll_transport' },
-  { key: 'payroll_other', label: 'ФОТ Прочее', level: 3, section: 'expenses', source: 'bank:payroll_other' },
+  { key: 'payroll_other', label: 'ФОТ Прочее', level: 3, section: 'expenses', source: 'both:payroll_other' },
 
   // Food Cost
   { key: 'foodcost', label: 'Food cost', level: 2, section: 'expenses', calc: 'sum_children', parent: 'opex' },
@@ -235,9 +236,11 @@ export default function PnLPage() {
       v.revenue = revK + revB + revH + revO
 
       // Cash expenses from daily reports
-      let cashKitchen = 0, cashBar = 0, cashHookah = 0, cashOther = 0, cashHookahCapex = 0
+      let cashKitchen = 0, cashBar = 0, cashHookah = 0, cashOther = 0, cashHookahCapex = 0, cashTech = 0
       monthReports.forEach(r => {
         const w = r.data?.withdrawals || {}
+        // Техперсонал платится ежедневно из кассы и в ведомости ЗП не участвует
+        ;(w.payroll || []).forEach(row => { if (isTechStaff(row.name)) cashTech += Number(row.amount) || 0 })
         ;(w.suppliers_kitchen || []).forEach(row => cashKitchen += Number(row.amount) || 0)
         ;(w.suppliers_bar || []).forEach(row => cashBar += Number(row.amount) || 0)
         ;(w.tobacco || []).forEach(row => {
@@ -272,6 +275,7 @@ export default function PnLPage() {
           if (line.key === 'fc_kitchen') v[line.key] = cashKitchen + bk(cat)
           else if (line.key === 'fc_bar') v[line.key] = cashBar + bk(cat)
           else if (line.key === 'fc_hookah') v[line.key] = cashHookah + bk(cat)
+          else if (line.key === 'payroll_other') v[line.key] = cashTech + bk(cat)
           else if (line.key === 'opex_household') v[line.key] = cashOther + bk(cat)
           else v[line.key] = bk(cat)
         }

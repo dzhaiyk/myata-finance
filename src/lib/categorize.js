@@ -93,6 +93,13 @@ export const KEYWORD_RULES = [
   { field: 'purpose', pattern: /возврат продаж/i, category: 'acquiring_settlement' },      // возврат покупателю по карте (дебет)
   { field: 'purpose', pattern: /продажи с kaspi/i, category: 'acquiring_settlement' },     // зачисление выручки Kaspi Pay
   { field: 'purpose', pattern: /расчеты по карточкам/i, category: 'acquiring_settlement' }, // зачисление эквайринга Halyk
+  { field: 'purpose', pattern: /перевод собственных средств на карту/i, category: 'cash_withdrawal' }, // обналичка через карту учредителя (ответ 03.09.2026)
+  { field: 'purpose', pattern: /ИПН с доходов, не облагаемых/i, category: 'tax_retail' },     // налог ИП с дохода — не ФОТ (ответ 03.09.2026)
+  { field: 'purpose', pattern: /страхован\S* жизни/i, category: 'tax_insurance' },           // Nomad Life — страхование сотрудников
+  { field: 'purpose', pattern: /строительно.монтажн|услуги дизайнера/i, category: 'capex_repair' },
+  { field: 'purpose', pattern: /мебел/i, category: 'capex_furniture' },
+  { field: 'purpose', pattern: /бесконтактн\S* меню/i, category: 'opex_menu' },
+  { field: 'purpose', pattern: /крафт.пакет/i, category: 'household' },
   // Purpose-based keywords (бухгалтер пишет в Назначение)
   { field: 'purpose', pattern: /кухня/i, category: 'cogs_kitchen' },
   { field: 'purpose', pattern: /бар/i, category: 'cogs_bar' },
@@ -126,6 +133,9 @@ export const KEYWORD_RULES = [
 
   // Beneficiary-based rules
   { field: 'beneficiary', pattern: /Бақыт Әділет/i, category: 'dividends' },
+  { field: 'beneficiary', pattern: /Nomad Life/i, category: 'tax_insurance' },
+  // «Фин помощь» от учредителя — возврат выведенных средств в оборот, не доход (ответ 03.09.2026)
+  { field: 'beneficiary', pattern: /Ахметқали Алмаз/i, isDebit: false, category: 'internal' },
   // Kaspi Pay: направление решает — кредит = зачисление выручки с терминалов
   // (нужно для сверки «терминалы ↔ зачисления»), дебет = комиссия эквайринга
   { field: 'beneficiary', pattern: /Kaspi Pay/i, isDebit: false, category: 'acquiring_settlement' },
