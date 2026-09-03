@@ -9,6 +9,7 @@ export const NON_PNL_CATEGORIES = new Set([
   'uncategorized',
   'internal',
   'acquiring_settlement',
+  'cash_withdrawal',   // снятие наличных со счёта: перемещение денег, не расход
 ])
 
 export const isPnlCategory = (category) => !!category && !NON_PNL_CATEGORIES.has(category)

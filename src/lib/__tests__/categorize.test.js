@@ -30,6 +30,17 @@ describe('categorizeTransaction', () => {
     assert.equal(r.category, 'internal')
   })
 
+  it('движение денег банк ↔ касса ↔ эквайринг не путается с комиссией', () => {
+    const kb = 'АО "KASPI BANK"'
+    assert.equal(categorizeTransaction({ purpose: 'Снятия наличных в Kaspi Банкомат', beneficiary: kb, debit: 500000 }).category, 'cash_withdrawal')
+    assert.equal(categorizeTransaction({ purpose: 'Комиссия за снятия наличных в Kaspi Банкомат', beneficiary: kb, debit: 4750 }).category, 'bank_fee')
+    assert.equal(categorizeTransaction({ purpose: 'Взнос наличных в Kaspi Business', beneficiary: kb, credit: 200000 }).category, 'internal')
+    assert.equal(categorizeTransaction({ purpose: 'Продажи с Kaspi.kz за 30/01/2026', beneficiary: kb, credit: 583989 }).category, 'acquiring_settlement')
+    assert.equal(categorizeTransaction({ purpose: 'Возврат продаж с Kaspi.kz за 16/01/2026', beneficiary: kb, debit: 280000 }).category, 'acquiring_settlement')
+    assert.equal(categorizeTransaction({ purpose: 'Оплата за услуги операций по картам Kaspi Gold', beneficiary: kb, debit: 3327 }).category, 'bank_fee')
+    assert.equal(categorizeTransaction({ purpose: 'Расчеты по карточкам за 20/12/22', beneficiary: 'НАРОДНЫЙ СБЕРЕГАТЕЛЬНЫЙ БАНК', credit: 90000 }).category, 'acquiring_settlement')
+  })
+
   it('ничего не совпало → uncategorized/low', () => {
     const r = categorizeTransaction({ purpose: 'xyzzy', beneficiary: 'qwerty' })
     assert.equal(r.category, 'uncategorized')

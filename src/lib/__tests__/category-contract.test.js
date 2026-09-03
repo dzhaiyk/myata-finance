@@ -18,6 +18,7 @@ const read = (p) => readFileSync(resolve(root, p), 'utf8')
 const CATEGORY_MIGRATIONS = [
   'supabase/migrations/008_dynamic_categories.sql',
   'supabase/migrations/021_closed_loop_bank.sql',
+  'supabase/migrations/022_cash_withdrawal_category.sql',
 ]
 const dbCodes = new Set(
   CATEGORY_MIGRATIONS.flatMap(f => {

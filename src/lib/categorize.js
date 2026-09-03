@@ -78,12 +78,21 @@ export const CATEGORIES = {
   dividends: { label: 'Дивиденды', group: 'dividends', pnl: null },
   internal: { label: 'Внутренний перевод', group: 'internal', pnl: null },
   acquiring_settlement: { label: 'Зачисление эквайринга', group: 'acquiring', pnl: null },
+  cash_withdrawal: { label: 'Снятие наличных со счёта', group: 'internal', pnl: null },
   uncategorized: { label: '❓ Не распознано', group: 'uncategorized', pnl: null },
 }
 
 // Keyword rules: check purpose field first, then beneficiary
 // Order matters — first match wins
 export const KEYWORD_RULES = [
+  // Движение денег банк ↔ касса ↔ эквайринг — раньше эти строки попадали в «комиссию банка»
+  // или в «зачисление эквайринга» и искажали P&L/CF. Проверяются первыми.
+  { field: 'purpose', pattern: /взнос наличных/i, category: 'internal' },                 // касса → счёт
+  { field: 'purpose', pattern: /комисси\S* за снят/i, category: 'bank_fee' },             // раньше самого снятия!
+  { field: 'purpose', pattern: /снят\S* наличных/i, category: 'cash_withdrawal' },       // счёт → наличные (куда — решает пользователь)
+  { field: 'purpose', pattern: /возврат продаж/i, category: 'acquiring_settlement' },      // возврат покупателю по карте (дебет)
+  { field: 'purpose', pattern: /продажи с kaspi/i, category: 'acquiring_settlement' },     // зачисление выручки Kaspi Pay
+  { field: 'purpose', pattern: /расчеты по карточкам/i, category: 'acquiring_settlement' }, // зачисление эквайринга Halyk
   // Purpose-based keywords (бухгалтер пишет в Назначение)
   { field: 'purpose', pattern: /кухня/i, category: 'cogs_kitchen' },
   { field: 'purpose', pattern: /бар/i, category: 'cogs_bar' },
