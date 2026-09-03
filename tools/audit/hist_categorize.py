@@ -34,7 +34,7 @@ EXTRA=[ # (field, regex, category) — applied only when base category is weak
  ("beneficiary", r"Komvent|Аэроклимат|Aeroclimate|Торговый Дизайн|БУЙРАКУЛОВ|Атамкулова|Рахметбекова|Байкин|Doorman|RESTOMAG", "capex_other"),
  ("beneficiary", r"Fresh-Decision|Euro Food|Аноли|Aas-food|Семь Морей|Barush|Local beef|Red Beef|PELAGIA|Resto-Bro|Глазурь|KAZROX|Frozen Fruit", "cogs_kitchen"),
  ("beneficiary", r"Lirumax|Almatytrade|Exclusive Union|Бридж Тим|Рэд Тим|Trade Line|Пивная|Вайн|CARAVAN|ESKOBAR|Smart Distribution|Euro Truck|Бар Сервис|Prime Food", "cogs_bar"),
- ("beneficiary", r"Дюсебекова", "services_unknown"),
+ ("beneficiary", r"Дюсебекова", "payroll_mgmt"),
  ("beneficiary", r"Kaspi Pay|KASPI BANK", "bank_fee"),
 ]
 WEAK={"uncategorized","bank_fee","mkt_other","rent_warehouse"}

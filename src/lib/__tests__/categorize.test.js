@@ -150,3 +150,10 @@ describe('решения аудита 03.09.2026', () => {
     assert.equal(categorizeTransaction({ purpose: 'За товары. Оплата по счету#7 от 18.06.26г Крафт пакеты.', beneficiary: 'ИП МҰХАМЕТЖАН', debit: 66000 }).category, 'household')
   })
 })
+
+describe('ответы учредителя 03.09.2026 (вечер)', () => {
+  it('ИП Дюсебекова — бухгалтер → payroll_mgmt', () => {
+    const r = categorizeTransaction({ purpose: 'За профессиональные, научные и технические услуги. Оплата за оказание услуг', beneficiary: 'ИП Дюсебекова А.А.', debit: 150000 })
+    assert.equal(r.category, 'payroll_mgmt')
+  })
+})

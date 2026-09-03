@@ -132,6 +132,7 @@ export const KEYWORD_RULES = [
   { field: 'purpose', pattern: /kaspi ?pay.*депозит|депозит.*kaspi ?pay|со счета.*на.*счет/i, category: 'internal' },
 
   // Beneficiary-based rules
+  { field: 'beneficiary', pattern: /Дюсебекова/i, category: 'payroll_mgmt' }, // бухгалтер (ответ учредителя 03.09.2026)
   { field: 'beneficiary', pattern: /Бақыт Әділет/i, category: 'dividends' },
   { field: 'beneficiary', pattern: /Nomad Life/i, category: 'tax_insurance' },
   // «Фин помощь» от учредителя — возврат выведенных средств в оборот, не доход (ответ 03.09.2026)
