@@ -111,7 +111,12 @@ export const KEYWORD_RULES = [
   { field: 'purpose', pattern: /кальян|дымн/i, category: 'cogs_hookah' },
   { field: 'purpose', pattern: /хоз\s*товар/i, category: 'household' },
   { field: 'purpose', pattern: /хозка/i, category: 'household' },                         // сленг бухгалтера в назначении
-  { field: 'purpose', pattern: /аренд/i, category: 'rent_premises' },
+  // Налог на имущество арендодатель перевыставляет нам раз в год, и в назначении
+  // стоит «За аренду/лизинг…» — правило обязано стоять выше правила аренды
+  { field: 'purpose', pattern: /налог\S*\s+(на\s+)?(имуществ|недвижим)/i, category: 'rent_property_tax' },
+  { field: 'purpose', pattern: /аренд\S*\s+(лайтбокс|склад|кровл)/i, category: 'rent_warehouse' },
+  // Аренда помещения — только платежи арендодателю (условие учредителя 04.09.2026)
+  { field: 'purpose', pattern: /аренд/i, beneficiary: /Абласанов/i, category: 'rent_premises' },
   { field: 'purpose', pattern: /отопление|горяч/i, category: 'util_heating' },
   { field: 'purpose', pattern: /коммунальн/i, category: 'util_other' },
   { field: 'purpose', pattern: /электри/i, category: 'util_electric' },
@@ -160,7 +165,7 @@ export const KEYWORD_RULES = [
   { field: 'beneficiary', pattern: /RIM PARTNERS/i, category: 'internal' },
   { field: 'beneficiary', pattern: /Izdeu|Jarnama/i, category: 'mkt_other' },
   { field: 'beneficiary', pattern: /ЖК 4YOU/i, category: 'rent_premises' },
-  { field: 'beneficiary', pattern: /Абласанов/i, category: 'rent_warehouse' },
+  { field: 'beneficiary', pattern: /Абласанов/i, category: 'rent_premises' },   // арендодатель помещения
   { field: 'beneficiary', pattern: /УГД|налоговое/i, category: 'tax_payroll' },
   { field: 'beneficiary', pattern: /Государственная корпораци/i, category: 'tax_payroll' },
 ]
@@ -178,12 +183,16 @@ export function categorizeTransaction(tx) {
     // Правило с isDebit применяется только к своему направлению (дебет/кредит)
     if (rule.isDebit !== undefined && rule.isDebit !== txIsDebit) continue
     const text = rule.field === 'purpose' ? purpose : beneficiary
-    if (rule.pattern.test(text)) {
-      return {
-        category: rule.category,
-        confidence: rule.field === 'purpose' ? 'high' : 'medium',
-        matchedRule: `${rule.field}: ${rule.pattern.source}`
-      }
+    if (!rule.pattern.test(text)) continue
+    // Дополнительные условия правила: получатель и/или назначение (логика «и»)
+    if (rule.beneficiary && !rule.beneficiary.test(beneficiary)) continue
+    if (rule.purpose && !rule.purpose.test(purpose)) continue
+    const extra = [rule.beneficiary && `beneficiary: ${rule.beneficiary.source}`, rule.purpose && `purpose: ${rule.purpose.source}`]
+      .filter(Boolean).join(' + ')
+    return {
+      category: rule.category,
+      confidence: rule.field === 'purpose' ? 'high' : 'medium',
+      matchedRule: `${rule.field}: ${rule.pattern.source}${extra ? ` + ${extra}` : ''}`,
     }
   }
 

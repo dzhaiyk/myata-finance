@@ -16,7 +16,8 @@ describe('categorizeTransaction', () => {
   })
 
   it('аренда → rent_premises (новый код, не rent_main)', () => {
-    const r = categorizeTransaction({ purpose: 'Аренда помещения за март', beneficiary: 'ИП Арендодатель' })
+    // с 04.09.2026 правило требует и получателя-арендодателя
+    const r = categorizeTransaction({ purpose: 'Аренда помещения за март', beneficiary: 'ИП Абласанов Ж.Б.' })
     assert.equal(r.category, 'rent_premises')
   })
 
@@ -172,5 +173,31 @@ describe('прочий доход на счёт (04.09.2026)', () => {
       purpose: 'Оплата по Договору №523 за аренду оборудования', beneficiary: 'ЧК PowerBNK Ltd.', debit: 50307,
     })
     assert.notEqual(r.category, 'income_other')
+  })
+})
+
+describe('аренда и налог на имущество (04.09.2026)', () => {
+  it('аренда засчитывается только платежам арендодателю', () => {
+    assert.equal(categorizeTransaction({
+      purpose: 'За аренду/лизинг. Аренда за Август 2026.', beneficiary: 'ИП Абласанов Ж. Б.', debit: 2200000,
+    }).category, 'rent_premises')
+    // тот же текст, но другой получатель — в аренду помещения не попадает
+    assert.notEqual(categorizeTransaction({
+      purpose: 'Оплата за аренду оборудования', beneficiary: 'ТОО Прокат', debit: 100000,
+    }).category, 'rent_premises')
+  })
+
+  it('возмещение налога на имущество не уходит в аренду', () => {
+    const r = categorizeTransaction({
+      purpose: 'За аренду/лизинг. Возмещение налога на имущество за 2024 год.',
+      beneficiary: 'ИП Абласанов Ж.Б.', debit: 530691,
+    })
+    assert.equal(r.category, 'rent_property_tax')
+  })
+
+  it('аренда лайтбокса — склад/кровля, а не помещение', () => {
+    assert.equal(categorizeTransaction({
+      purpose: 'Оплата по счету#84 от 03.07.26г. Аренда лайтбокса июль.', beneficiary: 'ОСИ "ЖК 4YOU"', debit: 20000,
+    }).category, 'rent_warehouse')
   })
 })
