@@ -98,6 +98,7 @@ export const KEYWORD_RULES = [
   { field: 'purpose', pattern: /бар/i, category: 'cogs_bar' },
   { field: 'purpose', pattern: /кальян|дымн/i, category: 'cogs_hookah' },
   { field: 'purpose', pattern: /хоз\s*товар/i, category: 'household' },
+  { field: 'purpose', pattern: /хозка/i, category: 'household' },                         // сленг бухгалтера в назначении
   { field: 'purpose', pattern: /аренд/i, category: 'rent_premises' },
   { field: 'purpose', pattern: /отопление|горяч/i, category: 'util_heating' },
   { field: 'purpose', pattern: /коммунальн/i, category: 'util_other' },
@@ -121,7 +122,7 @@ export const KEYWORD_RULES = [
   { field: 'purpose', pattern: /СММ|smm/i, category: 'mkt_smm' },
   { field: 'purpose', pattern: /таргет/i, category: 'mkt_target' },
   { field: 'purpose', pattern: /роялти/i, category: 'opex_royalty' },
-  { field: 'purpose', pattern: /KaspiPay.*Депозит|со счета.*на.*счет/i, category: 'internal' },
+  { field: 'purpose', pattern: /kaspi ?pay.*депозит|депозит.*kaspi ?pay|со счета.*на.*счет/i, category: 'internal' },
 
   // Beneficiary-based rules
   { field: 'beneficiary', pattern: /Бақыт Әділет/i, category: 'dividends' },

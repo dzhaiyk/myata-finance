@@ -113,3 +113,16 @@ describe('parseBankStatement', () => {
     assert.equal(noShift.find(t => t.number === '94779731').date, '2026-01-31')
   })
 })
+
+describe('новые формулировки Kaspi (2026)', () => {
+  it('перевод депозит ↔ Kaspi Pay без «интернет отделения» → internal', () => {
+    const kb = 'ИП AHMETKALI'
+    assert.equal(categorizeTransaction({ purpose: 'Перевод с Депозита U34948588-002 от 31/05/2026 на счет Kaspi Pay', beneficiary: kb, credit: 2700000 }).category, 'internal')
+    assert.equal(categorizeTransaction({ purpose: 'Перевод со счета Kaspi Pay на Депозит U34948588-002 от 31/05/2026', beneficiary: kb, debit: 2000000 }).category, 'internal')
+  })
+
+  it('«Хозка» в назначении → household', () => {
+    const r = categorizeTransaction({ purpose: 'За товары. Оплата за 04.05. Хозка.', beneficiary: 'ИП Tiger Sharks', debit: 155095 })
+    assert.equal(r.category, 'household')
+  })
+})
