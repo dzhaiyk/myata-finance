@@ -4,11 +4,11 @@
 const PROXY_URL = import.meta.env?.VITE_IIKO_PROXY_URL || '/api/iiko'
 const PROXY_KEY = import.meta.env?.VITE_IIKO_PROXY_KEY || ''
 
-export async function iikoRequest(action, body = {}) {
+export async function iikoRequest(action, body = {}, query = undefined) {
   const res = await fetch(PROXY_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(PROXY_KEY ? { 'x-proxy-key': PROXY_KEY } : {}) },
-    body: JSON.stringify({ action, body }),
+    body: JSON.stringify({ action, body, ...(query ? { query } : {}) }),
   })
   const text = await res.text()
   let data = null
@@ -17,7 +17,15 @@ export async function iikoRequest(action, body = {}) {
   return data
 }
 
-export const getOrganizations = () => iikoRequest('organizations', { returnAdditionalInfo: false })
+// iikoServer отдаёт подразделения, iikoCloud — организации: пробуем по очереди
+export async function getDepartments() {
+  try { return await iikoRequest('departments') }
+  catch { return await iikoRequest('organizations', { returnAdditionalInfo: false }) }
+}
+
+// Список доступных полей OLAP — нужен, если названия колонок в вашем iiko другие
+export const getOlapColumns = (reportType = 'SALES') =>
+  iikoRequest('olap_columns', {}, { reportType })
 
 // Поля OLAP-отчёта вынесены в константы: если в iiko они называются иначе,
 // правится одно место (и можно передать свои через параметр fields).
