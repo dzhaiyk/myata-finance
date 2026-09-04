@@ -1,7 +1,10 @@
 // Клиент к iiko Cloud API через Netlify-функцию /api/iiko.
 // Ключ хранится на стороне функции; здесь только состав запроса и разбор ответа.
 
-import { departmentCode, DEPARTMENT_LABELS } from './config.js'
+import {
+  departmentCode, departmentCodeByIikoStore, departmentsFor,
+  departmentLabel, FALLBACK_DEPARTMENT_CODE,
+} from './config.js'
 
 const PROXY_URL = import.meta.env?.VITE_IIKO_PROXY_URL || '/api/iiko'
 const PROXY_KEY = import.meta.env?.VITE_IIKO_PROXY_KEY || ''
@@ -60,21 +63,19 @@ export function buildSalesRequest({ organizationIds, from, to, fields = OLAP_FIE
 
 // --- нормализация справочников iiko под справочники приложения -----------
 
-export const DEPARTMENTS = ['Кухня', 'Бар', 'Кальян', 'Прочее']
 export const PAYMENT_TYPES = ['Наличные', 'Kaspi', 'Halyk', 'Wolt', 'Glovo', 'Yandex Eda', 'Прочее']
 
-export function normalizeDepartment(name) {
-  // Точное совпадение по справочнику — единственное место сопоставления (ADR-0010)
-  const code = departmentCode(name)
-  if (code) return DEPARTMENT_LABELS[code]
-  // Запасной разбор по смыслу названия: на случай, если в iiko настроят
-  // другие склады или понадобится разобрать категорию блюда
-  const s = String(name || '').toLowerCase()
-  if (/кальян|дым|табак|hookah/.test(s)) return 'Кальян'
-  if (/бар|напит|коктейл|алкогол|пиво|вино|чай|кофе|лимонад|bar/.test(s)) return 'Бар'
-  if (/кухн|кух|блюд|горяч|салат|десерт|завтрак|пицц|суш|kitchen|food/.test(s)) return 'Кухня'
-  return 'Прочее'
+/**
+ * Код отдела по значению из выгрузки iiko: сначала по складу списания
+ * (BR-SHF-019), затем по названию — на случай, если поле настроят иначе.
+ * Нераспознанное уходит в запасной отдел, а не теряется.
+ */
+export function departmentCodeOf(value) {
+  return departmentCodeByIikoStore(value) || departmentCode(value) || FALLBACK_DEPARTMENT_CODE
 }
+
+/** Подпись отдела для показа. */
+export const normalizeDepartment = (value) => departmentLabel(departmentCodeOf(value))
 
 export function normalizePaymentType(name) {
   const s = String(name || '').toLowerCase()
@@ -101,11 +102,14 @@ export function mapOlapRows(rows, fields = OLAP_FIELDS) {
     if (!date) continue
     const sum = num(row[fields.sum])
     const day = byDate[date] || (byDate[date] = {
-      departments: Object.fromEntries(DEPARTMENTS.map(d => [d, 0])),
+      // ключи — коды отделов из справочника, не отображаемые названия
+      departments: Object.fromEntries(departmentsFor('revenue').map(d => [d.code, 0])),
       payments: Object.fromEntries(PAYMENT_TYPES.map(p => [p, 0])),
       checks: 0, total: 0,
     })
-    day.departments[normalizeDepartment(row[fields.department])] += sum
+    const code = departmentCodeOf(row[fields.department])
+    if (day.departments[code] === undefined) day.departments[code] = 0
+    day.departments[code] += sum
     day.payments[normalizePaymentType(row[fields.payType])] += sum
     day.checks += num(row[fields.orders])
     day.total += sum
@@ -134,7 +138,9 @@ export async function fetchSales({ from, to, organizationIds }) {
 export function toDailyReportShape(day) {
   if (!day) return null
   return {
-    departments: DEPARTMENTS.map(name => ({ name, amount: String(day.departments[name] || 0) })),
+    departments: departmentsFor('revenue').map(d => ({
+      code: d.code, name: d.name, amount: String(day.departments[d.code] || 0),
+    })),
     revenue: PAYMENT_TYPES.map(type => ({ type, amount: String(day.payments[type] || 0), checks: '' })),
     checks: day.checks,
     total: day.total,

@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { sendTelegramNotification, saveNotifications, maskedBotToken, telegramChatId } from '@/lib/telegram'
 import { getNotifications, THRESHOLDS } from '@/lib/config'
 import { getCutoffHour, saveCutoffHour } from '@/lib/dates'
+import { useAuthStore } from '@/lib/store'
+import DepartmentsSettings from '@/components/DepartmentsSettings'
 import { Save, Send, Bell, Bot, Moon } from 'lucide-react'
 
 // Только те типы, которые приложение действительно умеет отправлять.
@@ -13,6 +15,8 @@ const NOTIFICATION_LABELS = [
 ]
 
 export default function SettingsPage() {
+  const { hasPermission } = useAuthStore()
+  const canEdit = hasPermission('settings.edit')
   const [testResult, setTestResult] = useState('')
   const [notifications, setNotificationsState] = useState(getNotifications())
   const [notifSaved, setNotifSaved] = useState('')
@@ -82,6 +86,8 @@ export default function SettingsPage() {
           Закрываетесь в 02:00 — оставьте запас, например «до 06:00».
         </p>
       </div>
+
+      <DepartmentsSettings canEdit={canEdit} />
 
       {/* Telegram Bot */}
       <div className="card space-y-5">

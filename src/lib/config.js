@@ -8,44 +8,77 @@
 // Когда отделы и строки станут справочниками с кодом (TASK-018), меняется
 // только этот файл. См. ADR-0010.
 
-// --- Отделы выручки -------------------------------------------------------
+// --- Отделы -------------------------------------------------------------
+//
+// Справочник приходит из таблицы `departments` (миграция 025) и кешируется здесь;
+// загружается при старте приложения. Набора отделов в коде нет: он свой у каждого
+// заведения (ADR-0010). Пока справочник не загружен, он пуст — форма честно
+// покажет, что отделы не подгрузились, вместо того чтобы предлагать чужие.
 
-export const DEPARTMENT_CODES = ['kitchen', 'bar', 'hookah']
+const USAGE_FIELD = { revenue: 'for_revenue', staff: 'for_staff', supply: 'for_supply' }
 
-// Названия, под которыми отдел приходит из отчёта смены и из iiko.
-// Склады — источник отдела в выгрузке iiko (BR-SHF-019): категория блюда
-// заполнена не у всех позиций, склад — у всех.
-// Сравнение регистронезависимое и без учёта пробелов по краям.
-const DEPARTMENT_NAMES = {
-  kitchen: ['кухня', 'склад кухня мята'],
-  bar: ['бар', 'склад бар мята'],
-  hookah: ['кальян', 'склад кальян мята'],
-}
-
-/** Подпись отдела для форм и отчётов. */
-export const DEPARTMENT_LABELS = {
-  kitchen: 'Кухня',
-  bar: 'Бар',
-  hookah: 'Кальян',
-}
-
-/** Куда попадает выручка с нераспознанным отделом. */
-export const OTHER_DEPARTMENT_LABEL = 'Прочее'
+let departments = []
 
 const normalize = (name) => String(name ?? '').trim().toLowerCase()
 
+export const getDepartments = () => departments.map(d => ({ ...d }))
+
+export function setDepartments(rows) {
+  departments = (rows || [])
+    .map(r => ({
+      code: String(r.code || ''),
+      name: String(r.name || ''),
+      for_revenue: r.for_revenue === true,
+      for_staff: r.for_staff === true,
+      for_supply: r.for_supply === true,
+      iiko_store: r.iiko_store || null,
+      sort_order: Number(r.sort_order) || 0,
+      is_active: r.is_active !== false,
+    }))
+    .filter(d => d.code)
+    .sort((a, b) => a.sort_order - b.sort_order || a.code.localeCompare(b.code))
+  return getDepartments()
+}
+
+/** Отделы, предлагаемые в конкретном месте: 'revenue' | 'staff' | 'supply'. */
+export function departmentsFor(usage) {
+  const field = USAGE_FIELD[usage]
+  if (!field) return []
+  return getDepartments().filter(d => d.is_active && d[field])
+}
+
+export const departmentByCode = (code) =>
+  departments.find(d => d.code === String(code || '')) || null
+
+/** Подпись отдела; для неизвестного кода — сам код, чтобы не показывать пустоту. */
+export const departmentLabel = (code) => departmentByCode(code)?.name || String(code || '')
+
 /**
- * Код отдела по его названию.
- * @returns {'kitchen'|'bar'|'hookah'|null} null — название не распознано;
- * вызывающий сам решает, куда его отнести (обычно «Прочее»), и может предупредить.
+ * Код отдела по коду или отображаемому названию.
+ * Название принимается ради старых записей, где кода ещё нет.
+ * @returns {string|null} null — не распознано; вызывающий решает, куда отнести.
  */
-export function departmentCode(name) {
-  const n = normalize(name)
-  if (!n) return null
-  for (const code of DEPARTMENT_CODES) {
-    if (DEPARTMENT_NAMES[code].includes(n)) return code
-  }
-  return null
+export function departmentCode(value) {
+  const v = normalize(value)
+  if (!v) return null
+  const byCode = departments.find(d => normalize(d.code) === v)
+  if (byCode) return byCode.code
+  const byName = departments.find(d => normalize(d.name) === v)
+  return byName ? byName.code : null
+}
+
+// Код, куда попадает выручка с нераспознанным отделом. Это системное понятие,
+// а не значение заведения: справочник клиента должен содержать такой отдел
+// (в seed миграции 025 это «Прочее»). Если его нет, сумма не теряется —
+// она видна отдельно как unassigned.
+export const FALLBACK_DEPARTMENT_CODE = 'other'
+
+/** Код отдела по названию склада в iiko (BR-SHF-019). */
+export function departmentCodeByIikoStore(store) {
+  const v = normalize(store)
+  if (!v) return null
+  const found = departments.find(d => d.iiko_store && normalize(d.iiko_store) === v)
+  return found ? found.code : null
 }
 
 // --- Строки формы, попадающие в CapEx вместо Food Cost --------------------

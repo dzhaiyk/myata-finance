@@ -8,7 +8,7 @@ import { getBusinessDate } from '@/lib/dates'
 import StatementUploadCard from '@/components/StatementUploadCard'
 import { Save, Send, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Plus, Trash2, Calendar, ArrowLeft, FileText, Eye, Clock, Check, Pencil, Download } from 'lucide-react'
 import jsPDF from 'jspdf'
-import { CAPEX_ROW_LABEL, THRESHOLDS } from '@/lib/config'
+import { CAPEX_ROW_LABEL, THRESHOLDS, departmentsFor, departmentCode } from '@/lib/config'
 
 const MoneyInput = ({ value, onChange, className = '', disabled = false }) => (
   <input type="text" inputMode="decimal" value={value} disabled={disabled}
@@ -43,8 +43,8 @@ const NameInput = ({ value, onChange, suggestions, placeholder, disabled = false
 }
 
 const SECTIONS = [
-  { key: 'suppliers_kitchen', label: 'Закуп Кухня', color: 'green', icon: '🍽', supplierCat: 'Кухня' },
-  { key: 'suppliers_bar', label: 'Закуп Бар', color: 'blue', icon: '🍸', supplierCat: 'Бар' },
+  { key: 'suppliers_kitchen', label: 'Закуп Кухня', color: 'green', icon: '🍽', supplierCode: 'kitchen' },
+  { key: 'suppliers_bar', label: 'Закуп Бар', color: 'blue', icon: '🍸', supplierCode: 'bar' },
   { key: 'tobacco', label: 'Закуп Кальян', color: 'amber', icon: '💨', fixed: true },
   { key: 'payroll', label: 'Авансы персоналу', color: 'indigo', icon: '👥', isPayroll: true },
   { key: 'other', label: 'Прочие расходы', color: 'rose', icon: '📦', fixed: true },
@@ -55,7 +55,12 @@ const FIXED_ROWS = {
   other: ['Хозтовары', 'Мелкий ремонт', 'Доставка (Яндекс)', 'Канцтовары', 'Прочее'],
 }
 const PAYMENT_TYPES = ['Наличные', 'Kaspi', 'Halyk', 'Wolt', 'Glovo', 'Yandex Eda', 'Прочее']
-const DEPARTMENTS = ['Кухня', 'Бар', 'Кальян', 'Прочее']
+// Отделы выручки берутся из справочника (миграция 025), а не из списка в коде.
+// В строке хранится код: переименование отдела не должно менять расчёты.
+const emptyDepartments = () => departmentsFor('revenue').map(d => ({ code: d.code, name: d.name, amount: '' }))
+
+// У отчётов до миграции 025 кода нет — проставляем его по названию
+const withDepartmentCodes = (rows) => (rows || []).map(d => ({ ...d, code: d.code || departmentCode(d.name) || undefined }))
 
 const JournalPagination = ({ page, total, pageSize, onChange }) => {
   const totalPages = Math.ceil(total / pageSize)
@@ -127,7 +132,7 @@ export default function DailyReportPage() {
   const [saving, setSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState(null)
   const [expanded, setExpanded] = useState({ suppliers_kitchen: true, suppliers_bar: true, tobacco: true, payroll: true, other: true, cash_withdrawals: true })
-  const [savedSuppliers, setSavedSuppliers] = useState({ Кухня: [], Бар: [], Кальян: [], Хозтовары: [], Прочее: [] })
+  const [savedSuppliers, setSavedSuppliers] = useState({})
   const [savedStaff, setSavedStaff] = useState([])
   const [cashStart, setCashStart] = useState('')
   const [cashEnd, setCashEnd] = useState('')
@@ -143,7 +148,7 @@ export default function DailyReportPage() {
   const [iikoLoading, setIikoLoading] = useState(false)
   const [iikoError, setIikoError] = useState('')
   const [revenue, setRevenue] = useState(PAYMENT_TYPES.map(t => ({ type: t, amount: '', checks: '' })))
-  const [departments, setDepartments] = useState(DEPARTMENTS.map(d => ({ name: d, amount: '' })))
+  const [departments, setDepartments] = useState(emptyDepartments)
   const [allAccounts, setAllAccounts] = useState([]) // all accounts for parent lookup
   const [terminalAccounts, setTerminalAccounts] = useState([]) // sub-accounts (have parent_account_id)
   const [terminals, setTerminals] = useState({}) // { accountId: amount }
@@ -203,8 +208,9 @@ export default function DailyReportPage() {
       supabase.from('accounts').select('*').eq('is_active', true).order('sort_order, id'),
     ])
     if (supRes.data) {
-      const grouped = { Кухня: [], Бар: [], Кальян: [], Хозтовары: [], Прочее: [] }
-      supRes.data.forEach(s => { if (grouped[s.category]) grouped[s.category].push(s) })
+      // ключ — код отдела: у поставщиков category хранит код (миграция 025)
+      const grouped = Object.fromEntries(departmentsFor('supply').map(d => [d.code, []]))
+      supRes.data.forEach(s => { (grouped[s.category] = grouped[s.category] || []).push(s) })
       setSavedSuppliers(grouped)
     }
     if (staffRes.data) setSavedStaff(staffRes.data)
@@ -250,7 +256,7 @@ export default function DailyReportPage() {
       })
     }
     if (d.revenue) setRevenue(d.revenue)
-    if (d.departments) setDepartments(d.departments)
+    if (d.departments) setDepartments(withDepartmentCodes(d.departments))
     setTerminals(d.terminals || {})
     setMode('form')
     // Для черновиков cashStart пересчитает эффект по [date, mode, status]
@@ -263,7 +269,7 @@ export default function DailyReportPage() {
     setCashStart(''); setCashEnd('')
     setWithdrawals(emptyWithdrawals())
     setRevenue(PAYMENT_TYPES.map(t => ({ type: t, amount: '', checks: '' })))
-    setDepartments(DEPARTMENTS.map(d => ({ name: d, amount: '' })))
+    setDepartments(emptyDepartments())
     setTerminals({})
     setLastSaved(null)
     setMode('form')
@@ -442,7 +448,7 @@ export default function DailyReportPage() {
         await sendTelegramNotification(formatDailyReportNotification({
           date, manager: profile?.full_name, revenue: totalRevenue, withdrawals: totalWithdrawals,
           cashExpected, cashActual: num(cashEnd), discrepancy,
-          departments: { kitchen: num(departments[0]?.amount), bar: num(departments[1]?.amount), hookah: num(departments[2]?.amount) }
+          departments: Object.fromEntries(departments.map(d => [d.code || departmentCode(d.name), num(d.amount)]))
         }), 'daily_report')
         if (Math.abs(discrepancy) > THRESHOLDS.cashDiscrepancyAlert) {
           await sendTelegramNotification(formatCashDiscrepancyAlert(date, profile?.full_name, discrepancy), 'cash_discrepancy')
@@ -758,7 +764,7 @@ export default function DailyReportPage() {
               setCashStart(''); setCashEnd('')
               setWithdrawals(emptyWithdrawals())
               setRevenue(PAYMENT_TYPES.map(t => ({ type: t, amount: '', checks: '' })))
-              setDepartments(DEPARTMENTS.map(d => ({ name: d, amount: '' })))
+              setDepartments(emptyDepartments())
               setTerminals({}); setLastSaved(null)
               setDate(pickedDate)
               setMode('form')
@@ -1043,7 +1049,7 @@ export default function DailyReportPage() {
           const isFixed = sec.fixed; const isPayroll = sec.isPayroll
           const isCashW = sec.key === 'cash_withdrawals'
           let suggestions = []
-          if (sec.supplierCat) suggestions = savedSuppliers[sec.supplierCat] || []
+          if (sec.supplierCode) suggestions = savedSuppliers[sec.supplierCode] || []
           if (isPayroll) suggestions = savedStaff
           return (
             <div key={sec.key} className={cn('card border overflow-visible', colorMap[sec.color])}>

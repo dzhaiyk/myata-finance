@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { supabase } from './supabase'
 import { loadCutoffHour } from './dates'
 import { loadNotifications } from './telegram'
+import { loadDepartments } from './departments'
 
 const SESSION_KEY = 'myata_session'
 
@@ -14,6 +15,7 @@ export const useAuthStore = create((set, get) => ({
   initialize: async () => {
     await loadCutoffHour()
     await loadNotifications()
+    await loadDepartments()
     const saved = localStorage.getItem(SESSION_KEY)
     if (saved) {
       try {

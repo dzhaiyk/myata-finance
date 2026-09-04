@@ -4,17 +4,26 @@ import {
   normalizeDepartment, normalizePaymentType, mapOlapRows, buildSalesRequest,
   toDailyReportShape, OLAP_FIELDS,
 } from '../iiko.js'
+import { setDepartments } from '../config.js'
+import { FIXTURE_DEPARTMENTS } from './fixtures.js'
+
+// Справочник отделов приходит из базы — подставляем набор заведения
+setDepartments(FIXTURE_DEPARTMENTS)
 
 describe('iiko — справочники под отчёт смены', () => {
-  it('категории блюд раскладываются по четырём отделам', () => {
-    assert.equal(normalizeDepartment('Кухня'), 'Кухня')
-    assert.equal(normalizeDepartment('Горячие блюда'), 'Кухня')
-    assert.equal(normalizeDepartment('Десерты'), 'Кухня')
-    assert.equal(normalizeDepartment('Барная карта'), 'Бар')
-    assert.equal(normalizeDepartment('Коктейли'), 'Бар')
-    assert.equal(normalizeDepartment('Кальяны'), 'Кальян')
-    assert.equal(normalizeDepartment('Дымный коктейль'), 'Кальян')
-    assert.equal(normalizeDepartment('Сувениры'), 'Прочее')
+  // Отдел определяется складом из справочника, а не угадыванием по названию:
+  // прежняя эвристика по словам («горячие», «коктейль») убрана вместе с
+  // переходом на Store.Name (BR-SHF-019) и справочник отделов (миграция 025).
+  it('отдел берётся из справочника: по складу, коду или названию', () => {
+    assert.equal(normalizeDepartment('СКЛАД КУХНЯ МЯТА'), 'Кухня')
+    assert.equal(normalizeDepartment('СКЛАД БАР МЯТА'), 'Бар')
+    assert.equal(normalizeDepartment('kitchen'), 'Кухня')
+    assert.equal(normalizeDepartment('Кальян'), 'Кальян')
+  })
+
+  it('незнакомый склад не теряется, а уходит в запасной отдел', () => {
+    assert.equal(normalizeDepartment('СКЛАД БАНКЕТ'), 'Прочее')
+    assert.equal(normalizeDepartment('Горячие блюда'), 'Прочее')
     assert.equal(normalizeDepartment(null), 'Прочее')
   })
 
@@ -53,9 +62,10 @@ describe('iiko — разбор OLAP-ответа', () => {
     const days = mapOlapRows(rows)
     assert.deepEqual(Object.keys(days).sort(), ['2026-09-01', '2026-09-02'])
     const d1 = days['2026-09-01']
-    assert.equal(d1.departments['Кухня'], 100000)
-    assert.equal(d1.departments['Бар'], 80000.5)
-    assert.equal(d1.departments['Кальян'], 70000)
+    // ключи — коды отделов из справочника
+    assert.equal(d1.departments.kitchen, 100000)
+    assert.equal(d1.departments.bar, 80000.5)
+    assert.equal(d1.departments.hookah, 70000)
     assert.equal(d1.payments['Наличные'], 100000)
     assert.equal(d1.payments['Kaspi'], 80000.5)
     assert.equal(d1.payments['Halyk'], 70000)

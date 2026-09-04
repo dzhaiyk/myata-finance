@@ -1,6 +1,12 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { PNL_STRUCTURE, computeMonthValues, sumMonths } from '../pnlCompute.js'
+import { setDepartments } from '../config.js'
+import { FIXTURE_DEPARTMENTS } from './fixtures.js'
+
+// Справочник отделов приходит из базы — подставляем набор заведения
+setDepartments(FIXTURE_DEPARTMENTS)
+
 
 const report = (date, over = {}) => ({
   report_date: date,

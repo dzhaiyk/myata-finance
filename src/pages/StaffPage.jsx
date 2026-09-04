@@ -4,8 +4,11 @@ import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
 import { formatLocalDate } from '@/lib/dates'
 import { Plus, Trash2, Edit3, Users, Briefcase } from 'lucide-react'
+import { departmentsFor, departmentLabel } from '@/lib/config'
 
-const DEPARTMENTS = ['Кухня', 'Бар', 'Кальян', 'Зал', 'Менеджмент', 'Прочее']
+
+// Отдел по умолчанию — первый в справочнике, а не название из кода
+const defaultStaffDept = () => departmentsFor('staff')[0]?.code || ''
 
 export default function StaffPage() {
   const { hasPermission } = useAuthStore()
@@ -35,7 +38,7 @@ export default function StaffPage() {
   const saveStaff = async () => {
     if (!form.full_name?.trim()) return alert('Введите имя')
     const payload = {
-      full_name: form.full_name, department: form.department || 'Кухня',
+      full_name: form.full_name, department: form.department || defaultStaffDept(),
       position_id: form.position_id || null, phone: form.phone || null,
       daily_rate_override: form.daily_rate_override || null,
       sales_pct_override: form.sales_pct_override || null,
@@ -49,7 +52,7 @@ export default function StaffPage() {
   const savePosition = async () => {
     if (!form.name?.trim()) return alert('Введите название')
     const payload = {
-      name: form.name, department: form.department || 'Кухня',
+      name: form.name, department: form.department || defaultStaffDept(),
       daily_rate: Number(form.daily_rate) || 0, sales_pct: Number(form.sales_pct) || 0,
       is_active: form.is_active !== false,
     }
@@ -97,7 +100,7 @@ export default function StaffPage() {
           <p className="text-sm text-slate-500 mt-0.5">Сотрудники и должности</p>
         </div>
         {canManage && (
-          <button onClick={() => { resetForm(); setShowForm(true); setForm(tab === 'staff' ? { department: 'Кухня' } : { department: 'Кухня' }) }}
+          <button onClick={() => { resetForm(); setShowForm(true); setForm({ department: defaultStaffDept() }) }}
             className="btn-primary text-sm flex items-center gap-2">
             <Plus className="w-4 h-4" /> Добавить
           </button>
@@ -128,12 +131,12 @@ export default function StaffPage() {
               <div><label className="label">Имя *</label>
                 <input value={form.full_name || ''} onChange={e => setForm(f => ({...f, full_name: e.target.value}))} className="input text-sm w-full" placeholder="Алия Ермекова" /></div>
               <div><label className="label">Отдел</label>
-                <select value={form.department || 'Кухня'} onChange={e => setForm(f => ({...f, department: e.target.value}))} className="input text-sm w-full">
-                  {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}</select></div>
+                <select value={form.department || defaultStaffDept()} onChange={e => setForm(f => ({...f, department: e.target.value}))} className="input text-sm w-full">
+                  {departmentsFor('staff').map(d => <option key={d.code} value={d.code}>{d.name}</option>)}</select></div>
               <div><label className="label">Должность</label>
                 <select value={form.position_id || ''} onChange={e => setForm(f => ({...f, position_id: e.target.value ? Number(e.target.value) : null}))} className="input text-sm w-full">
                   <option value="">— Нет —</option>
-                  {positions.filter(p => p.is_active).map(p => <option key={p.id} value={p.id}>{p.name} ({p.department})</option>)}</select></div>
+                  {positions.filter(p => p.is_active).map(p => <option key={p.id} value={p.id}>{p.name} ({departmentLabel(p.department)})</option>)}</select></div>
               <div><label className="label">Телефон</label>
                 <input value={form.phone || ''} onChange={e => setForm(f => ({...f, phone: e.target.value}))} className="input text-sm w-full" placeholder="+7..." /></div>
               <div><label className="label">Ставка/день (если отл. от должности)</label>
@@ -147,8 +150,8 @@ export default function StaffPage() {
               <div><label className="label">Название *</label>
                 <input value={form.name || ''} onChange={e => setForm(f => ({...f, name: e.target.value}))} className="input text-sm w-full" placeholder="Су-шеф" /></div>
               <div><label className="label">Отдел</label>
-                <select value={form.department || 'Кухня'} onChange={e => setForm(f => ({...f, department: e.target.value}))} className="input text-sm w-full">
-                  {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}</select></div>
+                <select value={form.department || defaultStaffDept()} onChange={e => setForm(f => ({...f, department: e.target.value}))} className="input text-sm w-full">
+                  {departmentsFor('staff').map(d => <option key={d.code} value={d.code}>{d.name}</option>)}</select></div>
               <div><label className="label">Ставка/день (₸)</label>
                 <input type="number" value={form.daily_rate || ''} onChange={e => setForm(f => ({...f, daily_rate: e.target.value}))} className="input text-sm w-full" placeholder="15000" /></div>
               <div><label className="label">% от продаж</label>
@@ -195,7 +198,7 @@ export default function StaffPage() {
                       <div className="font-medium">{s.full_name}</div>
                       {s.terminated_at && <div className="text-[10px] text-red-400">Уволен: {s.terminated_at}{s.termination_reason ? ` — ${s.termination_reason}` : ''}</div>}
                     </td>
-                    <td className="table-cell text-slate-400">{s.department}</td>
+                    <td className="table-cell text-slate-400">{departmentLabel(s.department)}</td>
                     <td className="table-cell text-slate-400">{pos?.name || '—'}</td>
                     <td className="table-cell text-right font-mono">{rate > 0 ? fmt(rate) + ' ₸' : '—'}</td>
                     <td className="table-cell text-right font-mono">{pct > 0 ? pct + '%' : '—'}</td>
@@ -238,7 +241,7 @@ export default function StaffPage() {
               {positions.map(p => (
                 <tr key={p.id} className={cn('hover:bg-slate-800/30', !p.is_active && 'opacity-50')}>
                   <td className="table-cell font-medium">{p.name}</td>
-                  <td className="table-cell text-slate-400">{p.department}</td>
+                  <td className="table-cell text-slate-400">{departmentLabel(p.department)}</td>
                   <td className="table-cell text-right font-mono">{p.daily_rate > 0 ? fmt(p.daily_rate) + ' ₸' : '—'}</td>
                   <td className="table-cell text-right font-mono">{p.sales_pct > 0 ? p.sales_pct + '%' : '—'}</td>
                   <td className="table-cell text-center">

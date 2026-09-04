@@ -139,7 +139,8 @@ export function computeMonthValues(targetYear, targetMonth, allDailyReports, all
       const depts = (r.data?.departments) || []
       depts.forEach(d => {
         const a = Number(d.amount) || 0
-        const code = departmentCode(d.name)
+        // в новых отчётах есть code; название читается ради записей до миграции 025
+        const code = departmentCode(d.code ?? d.name)
         if (code === 'kitchen') revK += a
         else if (code === 'bar') revB += a
         else if (code === 'hookah') revH += a

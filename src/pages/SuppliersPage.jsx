@@ -3,8 +3,17 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { Plus, Trash2, Edit3, Package } from 'lucide-react'
+import { departmentsFor, departmentLabel } from '@/lib/config'
 
-const CATEGORIES = ['Кухня', 'Бар', 'Кальян', 'Хозтовары', 'Прочее']
+
+// Цвет бейджа по коду отдела; для нового отдела — нейтральный синий
+const CATEGORY_BADGE = {
+  kitchen: 'badge-green', bar: 'badge-blue', hookah: 'badge-yellow',
+  household: 'bg-purple-500/15 text-purple-400',
+}
+
+// Категории закупа — те же отделы из справочника (миграция 025)
+const defaultCat = () => departmentsFor('supply')[0]?.code || ''
 
 export default function SuppliersPage() {
   const { hasPermission } = useAuthStore()
@@ -13,7 +22,7 @@ export default function SuppliersPage() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
-  const [form, setForm] = useState({ name: '', category: 'Кухня', contact: '' })
+  const [form, setForm] = useState({ name: '', category: defaultCat(), contact: '' })
   const [filterCat, setFilterCat] = useState('all')
 
   const load = async () => {
@@ -25,7 +34,7 @@ export default function SuppliersPage() {
 
   useEffect(() => { load() }, [])
 
-  const resetForm = () => { setShowForm(false); setEditId(null); setForm({ name: '', category: 'Кухня', contact: '' }) }
+  const resetForm = () => { setShowForm(false); setEditId(null); setForm({ name: '', category: defaultCat(), contact: '' }) }
 
   const save = async () => {
     if (!form.name.trim()) return alert('Введите название')
@@ -76,10 +85,10 @@ export default function SuppliersPage() {
           className={cn('px-3 py-1.5 rounded-lg text-xs font-medium transition-colors', filterCat === 'all' ? 'bg-brand-600/20 text-brand-400' : 'text-slate-500 hover:text-slate-300')}>
           Все ({suppliers.length})
         </button>
-        {CATEGORIES.map(c => (
+        {departmentsFor('supply').map(({ code: c, name: cName }) => (
           <button key={c} onClick={() => setFilterCat(c)}
             className={cn('px-3 py-1.5 rounded-lg text-xs font-medium transition-colors', filterCat === c ? 'bg-brand-600/20 text-brand-400' : 'text-slate-500 hover:text-slate-300')}>
-            {c} ({catCounts[c] || 0})
+            {cName} ({catCounts[c] || 0})
           </button>
         ))}
       </div>
@@ -93,7 +102,7 @@ export default function SuppliersPage() {
               <input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} className="input text-sm w-full" placeholder="ТОО Арай" /></div>
             <div><label className="label">Категория</label>
               <select value={form.category} onChange={e => setForm(f => ({...f, category: e.target.value}))} className="input text-sm w-full">
-                {CATEGORIES.map(c => <option key={c}>{c}</option>)}</select></div>
+                {departmentsFor('supply').map(d => <option key={d.code} value={d.code}>{d.name}</option>)}</select></div>
             <div><label className="label">Контакт</label>
               <input value={form.contact || ''} onChange={e => setForm(f => ({...f, contact: e.target.value}))} className="input text-sm w-full" placeholder="+7... / email" /></div>
           </div>
@@ -126,12 +135,7 @@ export default function SuppliersPage() {
                   </div>
                 </td>
                 <td className="table-cell">
-                  <span className={cn('badge', {
-                    'badge-green': s.category === 'Кухня',
-                    'badge-blue': s.category === 'Бар',
-                    'badge-yellow': s.category === 'Кальян',
-                    'bg-purple-500/15 text-purple-400': s.category === 'Хозтовары',
-                  }[s.category] || 'badge-blue')}>{s.category}</span>
+                  <span className={cn('badge', CATEGORY_BADGE[s.category] || 'badge-blue')}>{departmentLabel(s.category)}</span>
                 </td>
                 <td className="table-cell text-xs text-slate-400">{s.contact || '—'}</td>
                 <td className="table-cell text-center">

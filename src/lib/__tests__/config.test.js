@@ -4,7 +4,11 @@ import {
   departmentCode,
   isCapexRow,
   CAPEX_ROW_LABEL,
-  DEPARTMENT_CODES,
+  departmentsFor,
+  departmentLabel,
+  departmentCodeByIikoStore,
+  setDepartments,
+  getDepartments,
   THRESHOLDS,
   FOOD_COST_BANDS,
   MARGIN_BANDS,
@@ -18,31 +22,54 @@ import {
   setNotifications,
   isNotificationEnabled,
 } from '../config.js'
+import { FIXTURE_DEPARTMENTS } from './fixtures.js'
 
-describe('config — сопоставление названий со смыслом (ADR-0010)', () => {
-  it('узнаёт текущие названия отделов', () => {
-    assert.equal(departmentCode('Кухня'), 'kitchen')
-    assert.equal(departmentCode('Бар'), 'bar')
-    assert.equal(departmentCode('Кальян'), 'hookah')
+describe('config — справочник отделов (ADR-0010)', () => {
+  it('без загруженного справочника ничего не выдумывает', () => {
+    setDepartments([])
+    assert.deepEqual(getDepartments(), [])
+    assert.deepEqual(departmentsFor('revenue'), [])
+    assert.equal(departmentCode('Кухня'), null)
+    setDepartments(FIXTURE_DEPARTMENTS)
   })
 
-  it('не зависит от регистра и пробелов по краям', () => {
-    assert.equal(departmentCode('  кухня '), 'kitchen')
-    assert.equal(departmentCode('БАР'), 'bar')
+  it('узнаёт отдел по коду и по названию', () => {
+    setDepartments(FIXTURE_DEPARTMENTS)
+    assert.equal(departmentCode('kitchen'), 'kitchen')
+    assert.equal(departmentCode('Кухня'), 'kitchen')
+    assert.equal(departmentCode('  бар '), 'bar')
+    assert.equal(departmentCode('КАЛЬЯН'), 'hookah')
   })
 
   it('неизвестное название возвращает null, а не молча чужой отдел', () => {
-    assert.equal(departmentCode('Прочее'), null)
     assert.equal(departmentCode('Пекарня'), null)
     assert.equal(departmentCode(''), null)
     assert.equal(departmentCode(null), null)
-    assert.equal(departmentCode(undefined), null)
   })
 
-  it('коды отделов не пересекаются и покрывают все названия', () => {
-    assert.deepEqual(DEPARTMENT_CODES, ['kitchen', 'bar', 'hookah'])
-    const codes = DEPARTMENT_CODES.map(c => departmentCode({ kitchen: 'Кухня', bar: 'Бар', hookah: 'Кальян' }[c]))
-    assert.deepEqual(codes, DEPARTMENT_CODES)
+  it('отделы предлагаются по назначению, отключённые не показываются', () => {
+    assert.deepEqual(departmentsFor('revenue').map(d => d.code), ['kitchen', 'bar', 'hookah', 'other'])
+    assert.deepEqual(departmentsFor('staff').map(d => d.code), ['kitchen', 'bar', 'hookah', 'hall', 'other'])
+    assert.deepEqual(departmentsFor('supply').map(d => d.code), ['kitchen', 'bar', 'hookah', 'household', 'other'])
+    assert.deepEqual(departmentsFor('чего-то'), [])
+  })
+
+  it('склад iiko сопоставляется с отделом', () => {
+    assert.equal(departmentCodeByIikoStore('СКЛАД БАР МЯТА'), 'bar')
+    assert.equal(departmentCodeByIikoStore('  склад кухня мята '), 'kitchen')
+    assert.equal(departmentCodeByIikoStore('СКЛАД БАНКЕТ'), null)
+    assert.equal(departmentCodeByIikoStore(null), null)
+  })
+
+  it('подпись по коду, для незнакомого — сам код', () => {
+    assert.equal(departmentLabel('hookah'), 'Кальян')
+    assert.equal(departmentLabel('bakery'), 'bakery')
+  })
+
+  it('справочник отсортирован по порядку, а не по приходу из базы', () => {
+    setDepartments([...FIXTURE_DEPARTMENTS].reverse())
+    assert.deepEqual(getDepartments().map(d => d.code).slice(0, 3), ['kitchen', 'bar', 'hookah'])
+    setDepartments(FIXTURE_DEPARTMENTS)
   })
 
   it('строка CapEx узнаётся по подписи из этого же модуля', () => {

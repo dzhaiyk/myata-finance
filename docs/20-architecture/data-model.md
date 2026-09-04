@@ -4,7 +4,7 @@ summary: карта таблиц Supabase: таблица → домен → н�
 read_when: пишешь запрос или миграцию, ищешь, где хранится цифра, или сомневаешься, откуда P&L берёт строку
 domain: -
 status: inferred
-updated: 2026-09-04
+updated: 2026-09-05
 ---
 
 # Модель данных
@@ -15,8 +15,9 @@ updated: 2026-09-04
 | Таблица | Домен | Назначение | Ключевые ограничения |
 |---|---|---|---|
 | `daily_reports` | shift | отчёт смены; всё содержимое в JSONB `data` | `report_date` UNIQUE; status draft/submitted (CHECK из 001 допускает ещё `approved`, 007 его не снял) |
-| `suppliers` | shift | справочник поставщиков для автоподсказок | category IN (Кухня/Бар/Кальян/Хозтовары/Прочее) |
-| `settings` | shift/control/access | key → JSONB: `shift.cutoff_hour`, `closures`, `owner_cash_opening`, `telegram` (не читается кодом), `general` | key PK |
+| `departments` | — | справочник отделов: код, название, где предлагается (выручка/персонал/закуп), склад в iiko | code UNIQUE; на него ссылаются `positions`, `staff`, `suppliers`; создан миграцией 025 |
+| `suppliers` | shift | справочник поставщиков для автоподсказок | `category` → `departments.code` (до 025 был CHECK со списком названий) |
+| `settings` | shift/control/access | key → JSONB: `shift.cutoff_hour`, `closures`, `owner_cash_opening`, `telegram.notifications`, `general` | key PK |
 | `bank_transactions` | bank | строка выписки; `transaction_date` — TEXT операционной даты | `tx_hash` UNIQUE (дедуп); `period_from/to` (P&L по периодам); `account_id` → accounts; `review_note` (к проверке) |
 | `bank_rules`, `bank_rule_conditions` | bank | правила категоризации из UI; первое совпавшее выигрывает | logic and/or; action categorize/hide; field/operator CHECK |
 | `categories` | bank/reporting | план счетов: код → тип (income/cogs/opex/below_ebitda/other), группа P&L | code UNIQUE; канон кодов = миграция 008 (тест `category-contract.test.js`) |
@@ -25,7 +26,7 @@ updated: 2026-09-04
 | `account_balances` | accounts | сверка остатка на дату; `discrepancy` — GENERATED = actual − expected | UNIQUE(account_id, balance_date) |
 | `pnl_data` | reporting | `type='historical'` — импорт Excel 2022–2025 (заменяет расчёт); иначе ручная корректировка (прибавляется) | UNIQUE снят в 020: historical и корректировка сосуществуют |
 | `cashflow_data` | reporting | создана в 001, кодом не используется | UNIQUE(year, month, category) |
-| `positions`, `staff` | payroll | должности (ставка, %), сотрудники (override, увольнение) | department CHECK |
+| `positions`, `staff` | payroll | должности (ставка, %), сотрудники (override, увольнение) | `department` → `departments.code` (до 025 был CHECK со списком названий) |
 | `payroll_periods`, `payroll_details` | payroll | ведомость за половину месяца; строки по сотрудникам | period IN (1,2); status draft/calculated/paid; UNIQUE(period_id, staff_id) |
 | `investors`, `investor_transactions` | investors | учредители, доли; операции investment/dividend/share_purchase/share_sale | status active/exited |
 | `roles`, `permissions`, `app_users` | access | роли, права (role_id × key), пользователи с паролем в открытом виде | username UNIQUE; UNIQUE(role_id, permission_key) |
@@ -36,7 +37,7 @@ updated: 2026-09-04
 
 | Источник | Что даёт | Ключевые поля |
 |---|---|---|
-| `daily_reports.data` | выручка по отделам и типам оплат, наличные расходы, касса | `departments[]`, `revenue[]`, `terminals{}`, `withdrawals{suppliers_kitchen, suppliers_bar, tobacco, payroll, other, cash_withdrawals}`, `cash_start`, `cash_end`, `discrepancy` |
+| `daily_reports.data` | выручка по отделам и типам оплат, наличные расходы, касса | `departments[]` (с 025 каждый элемент несёт `code`), `revenue[]`, `terminals{}`, `withdrawals{suppliers_kitchen, suppliers_bar, tobacco, payroll, other, cash_withdrawals}`, `cash_start`, `cash_end`, `discrepancy` |
 | `bank_transactions` | все безналичные расходы и прочие поступления | `category`, `is_debit`, `period_from/to` |
 | `pnl_data` | история 2022–2025 (`historical`) и ручные правки | `year`, `month`, `category`, `amount`, `type` |
 
