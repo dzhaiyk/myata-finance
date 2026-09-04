@@ -1,190 +1,48 @@
-# Мята Finance — Контекст проекта
+# Myata Finance — CLAUDE.md
 
 ## Что это
+Финансовый учёт заведения «Мята | Platinum 4YOU»: отчёты смен и касса, выписки банков, P&L и Cash Flow, зарплаты, счета, контроль замкнутого контура денег. Цель владельца — довести на своём заведении и продавать как SaaS. Подробно: `docs/00-project/overview.md`.
 
-Веб-приложение для финансового учёта заведения «Мята | Platinum 4YOU» (Казахстан). Управление ежедневными отчётами смен, импорт банковских выписок, P&L, расчёт зарплат, контроль остатков наличных и счетов.
+## Стек и команды
+- Стек: React 18 + Vite 6 + Tailwind, Zustand, Supabase (PostgreSQL/PostgREST, RLS открыт), Netlify (SPA + функция `/api/iiko`), тесты `node:test`.
+- Запуск: `npm run dev` · Сборка: `npm run build` · Тесты: `npm test` · Типы/линт: нет · Миграции: вручную в SQL-редакторе Supabase
+- Полное описание окружения: `docs/50-ops/setup.md`
 
-## Стек
+## Жёсткие правила
+1. Бизнес-логика пишется только по правилам `BR-*` со статусом CONFIRMED из `docs/10-business/`. Нет правила — вопрос владельцу, не догадка.
+2. `docs/` целиком не читать. Маршрут: `docs/INDEX.md` → нужный документ → нужная секция.
+3. Задача начинается с `/task` (план, «ок» владельца) и заканчивается `/handoff`.
+4. Изменил поведение — обновил документ, тест и `docs/INDEX.md` в том же коммите.
+5. `.claude/settings.json`, `settings.local.json`, `launch.json` и hooks не менять.
+6. Секреты только в `.env` и панели Netlify; `.env` не читать; в документах — имена переменных.
+7. Язык документов — русский; код, идентификаторы, имена файлов, коммиты — английский (описание коммита может быть русским).
+8. Новые npm-зависимости не добавлять без согласования (`npm install` у владельца заблокирован).
+9. Выборки, которые могут превысить 1000 строк, — только через `fetchAll` (`src/lib/fetchAll.js`).
+10. Расчёты — чистые функции в `src/lib` с тестом по id правила; страницы только вызывают.
 
-- **Frontend:** React 18, React Router 7, Zustand, Recharts, Lucide React
-- **Стилизация:** Tailwind CSS 3 + кастомные компонентные классы в `src/index.css`
-- **Сборка:** Vite 6, PostCSS, Autoprefixer
-- **Backend:** Supabase (PostgreSQL + JS-клиент). Вся логика на фронте, бэкенда нет
-- **Деплой:** Netlify (SPA-режим, Node 22). Папка `dist/`
-- **Уведомления:** Telegram Bot API (lib/telegram.js)
-- **Экспорт:** jsPDF (PDF-отчёты), xlsx (импорт выписок), html2canvas
+## Куда смотреть
+- Состояние проекта и что в работе → `docs/STATUS.md`
+- Карта всех документов → `docs/INDEX.md`
+- Бизнес-правила домена X → `docs/10-business/X/rules.md`; процесс → `process.md`; сущности и статусы → `entities.md`; права → `permissions.md`; нерешённое → `open-questions.md`
+- Список доменов и их границы → `docs/10-business/_domains.md`
+- Термины → `docs/00-project/glossary.md`; кто решает → `docs/00-project/stakeholders.md`
+- Архитектура, модель данных, интеграции, безопасность, конвенции → `docs/20-architecture/`
+- Почему сделано именно так → `docs/30-decisions/_index.md`
+- Спецификации фич → `docs/40-features/_index.md`
+- Известные проблемы и симптомы → `docs/50-ops/runbook.md`
+- Задачи → `tasks/BACKLOG.md`, `tasks/active/`
+- Исторический аудит финансов 2022–2025 → `docs/Аудит-финансов-2022-2025.md` (читать только по прямой необходимости)
 
-## Структура каталогов
+## Алгоритм задачи
+`/start` → задача → классификация (bug | feature | process-change | refactor | question) → `docs/INDEX.md` → 1–3 документа → проверка правил → вопросы (≤7, с вариантами и дефолтом) → ответы в docs → TASK-файл с планом → «ок» → код + тесты по BR → документы → `/handoff`.
 
-```
-src/
-├── main.jsx              # Точка входа
-├── App.jsx               # Роутер + ProtectedRoute
-├── index.css             # Tailwind + кастомные классы (.card, .btn-primary, .input, .badge, .table-header)
-├── components/
-│   └── Layout.jsx        # Боковая навигация, mobile-меню, проверка прав
-├── lib/
-│   ├── store.js          # Zustand: авторизация, профиль, права (24 permission_key)
-│   ├── supabase.js       # Инициализация Supabase-клиента
-│   ├── telegram.js       # Отправка уведомлений в Telegram
-│   ├── utils.js          # fmt, fmtK, fmtPct, fmtDate, MONTHS_RU, cn
-│   └── categorize.js     # Парсинг Excel Kaspi, авто-категоризация (31 regex-правило)
-├── pages/
-│   ├── LoginPage.jsx     # Вход по логину/паролю
-│   ├── DashboardPage.jsx # KPI-карточки, графики выручки
-│   ├── DailyReportPage.jsx  # Ежедневные отчёты (самый большой файл ~860 строк)
-│   ├── PnLPage.jsx       # P&L с period allocation и ручными корректировками
-│   ├── CashFlowPage.jsx  # Cash Flow (прямой метод, 3 секции CF)
-│   ├── AnalyticsPage.jsx # Аналитика: тренды, аномалии, сезонность
-│   ├── BankImportPage.jsx # Импорт банковских выписок Kaspi
-│   ├── AccountsPage.jsx  # Счета: остатки, переводы, сверка
-│   ├── StaffPage.jsx     # Сотрудники и должности
-│   ├── PayrollPage.jsx   # Расчёт зарплат (авансы из daily_reports)
-│   ├── SuppliersPage.jsx # Справочник поставщиков
-│   ├── UsersPage.jsx     # Управление пользователями
-│   ├── RolesPage.jsx     # RBAC: матрица прав
-│   └── SettingsPage.jsx  # Настройки Telegram-бота
-netlify/
-└── functions/
-    └── iiko.js           # Прокси к iiko Cloud API (ключ в env Netlify, не во фронтенде)
-supabase/
-└── migrations/           # 11 миграций (001–011)
-```
+## Идентификаторы и статусы
+`BR-<DOM>-NNN` правило · `ADR-NNNN` решение · `FEAT-NNN` фича · `TASK-NNN` задача.
+Статусы фактов: CONFIRMED · INFERRED · ASSUMED · OPEN. INFERRED/ASSUMED ≠ CONFIRMED. Владелец продукта и единственный, кто подтверждает, — Жайык.
 
-## База данных (Supabase PostgreSQL)
+## Скиллы
+`/start` · `/task <описание>` · `/discover <домен>` · `/handoff` · `/audit-docs` · `/adr <решение>`
+Контекстные скиллы по коду: `bank-import`, `daily-report`, `pnl-structure`, `supabase-migration`, `myata-component`.
 
-### Ключевые таблицы
-
-| Таблица | Назначение |
-|---------|-----------|
-| `app_users` | Пользователи (username/password, role_id) |
-| `roles` / `permissions` | RBAC: роли + 24 permission_key |
-| `daily_reports` | Ежедневные отчёты смен (JSONB data, revenue, withdrawals, discrepancy) |
-| `bank_transactions` | Импортированные банковские транзакции (tx_hash для дедупликации) |
-| `bank_rules` / `bank_rule_conditions` | Правила авто-категоризации |
-| `categories` | 60+ категорий для P&L (income, cogs, opex, below_ebitda, other) |
-| `pnl_data` | Ручные корректировки P&L |
-| `accounts` | Счета (cash, bank, deposit, terminal) |
-| `account_transactions` | Движения по счетам (income/expense/transfer_in/transfer_out) |
-| `account_balances` | Ежедневная сверка остатков |
-| `staff` / `positions` | Сотрудники и должности |
-| `payroll_periods` / `payroll_details` | Расчёт зарплат по периодам |
-| `suppliers` | Справочник поставщиков |
-| `settings` | Системные настройки (JSONB) |
-
-### RLS
-
-Все таблицы используют RLS с полным доступом для anon-роли (`USING (true)`). Авторизация реализована на уровне фронтенда через Zustand store.
-
-## Авторизация
-
-- Кастомная (НЕ Supabase Auth). Таблица `app_users` с plain-text паролями
-- Сессия хранится в `localStorage` как `myata_session` (только userId)
-- При загрузке приложения store.initialize() проверяет наличие и активность пользователя
-- Права загружаются из таблицы `permissions`, кешируются в Zustand
-- Роль «Админ» (id=1) всегда имеет все права
-
-### Роли по умолчанию
-
-Админ, Учредитель, Управляющий, Менеджер, Бухгалтер
-
-### Группы прав (24 ключа)
-
-daily_report (view/create/edit/delete/submit/reopen), pnl (view/edit), cashflow (view/edit), dashboard (view/kpi), bank_import (view/upload/categorize), staff (view/manage), suppliers (view/manage), payroll (view/manage), investments (view/edit/manage), users (view/manage), roles (view/manage), settings (view/edit), telegram (manage)
-
-Аналитика использует `dashboard.view` для доступа.
-
-## Бизнес-логика
-
-### Ежедневный отчёт (DailyReportPage)
-- Выручка по отделам: Кухня, Бар, Кальян, Прочее
-- Выручка по типу оплаты: Наличные, Kaspi, Halyk, Wolt, Glovo и др.
-- Расходы: поставщики, зарплаты, табак, прочие, инкассация
-- Сверка кассы: opening → expected (+ наличные продажи − выдачи) → actual → discrepancy
-- При |discrepancy| > 500₸ — красный флаг, > 1000₸ — Telegram-алерт
-- Статусы: draft → submitted. Переоткрытие только для админа
-
-### P&L (PnLPage)
-- Источники: daily_reports (выручка, кэш-расходы) + bank_transactions (безнал) + pnl_data (ручные)
-- Period allocation: транзакции с period_from/period_to разделяются по месяцам пропорционально
-- 33-строчная иерархическая структура P&L
-- Режим: месяц или YTD
-
-### Импорт выписок (BankImportPage)
-- Форматы: Excel из Kaspi Business и PDF из приложения Halyk (`lib/pdfText.js` + `lib/halykStatement.js`, без внешних библиотек)
-- Парсинг через categorize.js (regex-правила по полям: purpose → beneficiary → КНП)
-- Дедупликация через SHA-256 хеш (tx_hash)
-- Ручная перекатегоризация
-
-### Cash Flow (CashFlowPage)
-- Прямой метод: фактическое движение денежных средств
-- 3 секции: Операционная деятельность (наличная выручка, кассовые расходы, банковские OpEx), Инвестиционная (CapEx), Финансовая (дивиденды, взносы учредителей)
-- Источники: daily_reports (наличные), bank_transactions (безнал, period allocation), investor_transactions (дивиденды/взносы), pnl_data (исторические данные)
-- Режимы: Месяц / YTD / Год (горизонтальная таблица)
-- KPI карточки: Операционный CF, Инвестиционный CF, Финансовый CF, Чистое изменение
-
-### Аналитика (AnalyticsPage)
-- Тренды выручки (90 дней) с 7-дневным скользящим средним и линейной регрессией
-- Выручка по дням недели (всё время / 90 дней / 30 дней)
-- Food Cost % тренд помесячно с бенчмарками (30%, 35%, 40%)
-- ФОТ % тренд с бенчмарком 30%
-- Детекция аномалий расходов (mean + 1.5σ)
-- Расхождения кассы: месячный трекер + топ-10 худших дней
-- Сезонность выручки: хитмап по месяцам × годам
-- Права доступа: dashboard.view
-
-### Инвестиции (InvestmentsPage) — дополнения
-- Таблица «Средние дивиденды в месяц по годам» в Dashboard-табе
-- InvestorCard: средние дивиденды текущего и прошлого года
-
-### Зарплаты (PayrollPage)
-- Периоды: 1–15 и 16–конец месяца
-- Авансы автоматически подтягиваются из daily_reports (по имени сотрудника)
-- Формула: Итого = (Дни × Ставка) + (Продажи × %) − Авансы − Удержания
-
-## Переменные окружения
-
-```
-VITE_SUPABASE_URL=https://xxx.supabase.co
-VITE_SUPABASE_ANON_KEY=xxx
-VITE_TELEGRAM_BOT_TOKEN=xxx
-VITE_TELEGRAM_CHAT_ID=xxx
-VITE_IIKO_PROXY_KEY=xxx        # необязательно, парный ключ к IIKO_PROXY_KEY
-```
-
-Серверные (только в панели Netlify, во фронтенд не попадают): `IIKO_API_LOGIN`, `IIKO_PROXY_KEY`, `IIKO_API_HOST`. См. `docs/Интеграции.md`.
-
-## Команды
-
-```bash
-npm run dev      # Vite dev-server
-npm run build    # Production build → dist/
-npm run preview  # Превью production build
-```
-
-## Алиас путей
-
-`@` → `./src` (настроен в vite.config.js)
-
-## Валюта
-
-Тенге (₸ / KZT). Форматирование через `fmt()` в `lib/utils.js` (русская локаль, без копеек).
-
-## Шрифты
-
-DM Sans (основной), Plus Jakarta Sans (заголовки), JetBrains Mono (цифры). Подключены через Google Fonts.
-
-## Тема
-
-Тёмная. Фон: slate-925 (#0d1520). Акцент: brand-500 (#22c55e) / mint. Кастомные оттенки slate (750, 850, 925, 950) в tailwind.config.js.
-
-## Важные особенности
-
-- Весь UI на русском языке
-- Все вычисления выполняются на клиенте (нет серверной логики)
-- Пароли хранятся в plain text (известная проблема безопасности)
-- RLS открыт для всех — авторизация только на фронте
-- CashFlowPage — реализован (прямой метод CF)
-- AnalyticsPage — аналитика с графиками и детекцией аномалий
-- profiles — legacy-таблица от Supabase Auth, не используется активно
-- daily_reports.manager_id — FK удалён (миграция 009), связь по имени
+## Контекст
+Разведка кода — через субагента Explore, в основной контекст — выжимка с путями. Одна задача — одна сессия. Перед `/compact` — обновить `docs/STATUS.md` и TASK-файл; после — перечитать TASK-файл. Данные в Supabase менять только по явному решению владельца; `DELETE` — отдельным SQL-запросом.
