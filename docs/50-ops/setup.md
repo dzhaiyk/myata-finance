@@ -23,7 +23,7 @@ updated: 2026-09-04
 Фронтенд (`.env`, шаблон `.env.example`; всё с `VITE_` попадает в бандл):
 `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_TELEGRAM_BOT_TOKEN`, `VITE_TELEGRAM_CHAT_ID`, `VITE_IIKO_PROXY_KEY` (необязательно), `VITE_IIKO_PROXY_URL` (по умолчанию `/api/iiko`).
 
-Только в панели Netlify (во фронтенд не попадают): `IIKO_SERVER_URL`, `IIKO_LOGIN`, `IIKO_PASSWORD` или `IIKO_PASS_SHA1`; для iikoCloud `IIKO_API_LOGIN`, `IIKO_API_HOST`; `IIKO_PROXY_KEY`. Значения вводит владелец; в репозитории и переписке их быть не должно. `.env` не читать и не коммитить.
+Только в панели Netlify (во фронтенд не попадают): `IIKO_SERVER_URL` (подтверждён поддержкой: `https://too-rim-partners.iiko.it`, без `/resto`), `IIKO_LOGIN`, `IIKO_PASSWORD` (SHA1 функция считает сама — вручную и через онлайн-сервисы не хешировать) или `IIKO_PASS_SHA1`; для iikoCloud `IIKO_API_LOGIN`, `IIKO_API_HOST`; `IIKO_PROXY_KEY`. Значения вводит владелец; в репозитории и переписке их быть не должно. `.env` не читать и не коммитить.
 
 Без Supabase-переменных приложение стартует с заглушкой `placeholder.supabase.co` и ничего не грузит.
 
