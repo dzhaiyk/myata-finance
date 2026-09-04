@@ -140,7 +140,10 @@ export function checkPayroll(payrollDetails, cashAdvances, bankPayroll, toleranc
  * Пропущенные смены: дни без отчёта между первой и последней датой периода.
  * Сегодняшний операционный день не считается пропуском (смена ещё идёт).
  */
-export function findMissingShifts(reports, fromDate, toDate, now = new Date()) {
+/** Дни, когда заведение не работало (settings.closures: [{from, to, reason}]). */
+export const isClosedDay = (iso, closures = []) => closures.some(c => c.from <= iso && iso <= (c.to || c.from))
+
+export function findMissingShifts(reports, fromDate, toDate, now = new Date(), closures = []) {
   const have = new Set(reports.map(r => r.report_date))
   const today = getBusinessDate(now)
   const missing = []
@@ -148,7 +151,7 @@ export function findMissingShifts(reports, fromDate, toDate, now = new Date()) {
   const end = new Date(toDate + 'T12:00:00')
   while (d <= end) {
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    if (!have.has(iso) && iso < today) missing.push(iso)
+    if (!have.has(iso) && iso < today && !isClosedDay(iso, closures)) missing.push(iso)
     d.setDate(d.getDate() + 1)
   }
   return missing
@@ -236,10 +239,18 @@ export function checkPayrollLoop({ accrued, cash, bankPayroll = 0, tolerance = 1
 }
 
 /**
- * Необъяснённые наличные у учредителей: снято со счетов − возвращено − ушло на ЗП.
+ * Дивиденды, выплаченные наличными: журнал инвестиций минус то, что ушло по банку.
+ * Отрицательным быть не может — если по банку ушло больше, чем в журнале, наличных не было.
+ */
+export function cashDividends(journalDividends, bankDividends) {
+  return Math.max(0, num(journalDividends) - num(bankDividends))
+}
+
+/**
+ * Необъяснённые наличные у учредителей: снято со счетов − возвращено − ушло на ЗП − дивиденды наличными.
  * Положительный остаток выше допуска = деньги вне контура.
  */
-export function unexplainedOwnerCash(transitNet, fromOwnersTotal, tolerance = 500000) {
-  const unexplained = num(transitNet) - Math.max(0, num(fromOwnersTotal))
+export function unexplainedOwnerCash(transitNet, fromOwnersTotal, cashDividendsTotal = 0, tolerance = 500000) {
+  const unexplained = num(transitNet) - Math.max(0, num(fromOwnersTotal)) - Math.max(0, num(cashDividendsTotal))
   return { unexplained, ok: unexplained <= tolerance }
 }

@@ -1,4 +1,4 @@
-import { cashPayrollOf, sumCashPayroll, cashTransit, checkPayrollLoop, unexplainedOwnerCash, isPayrollComment } from '../reconcile.js'
+import { cashPayrollOf, sumCashPayroll, cashTransit, checkPayrollLoop, unexplainedOwnerCash, isPayrollComment, cashDividends, isClosedDay } from '../reconcile.js'
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
@@ -164,6 +164,32 @@ describe('Пропущенные смены', () => {
     const now = new Date(2026, 7, 25, 3, 0) // операционный день ещё 2026-08-24
     const missing = findMissingShifts([mkReport('2026-08-23')], '2026-08-23', '2026-08-25', now)
     assert.deepEqual(missing, [])
+  })
+})
+
+describe('Дни закрытия (ремонт) — не пропущенные смены (04.09.2026)', () => {
+  const now = new Date('2026-09-04T12:00:00')
+  const closures = [{ from: '2026-08-11', to: '2026-08-15', reason: 'Ремонт' }]
+  it('дни ремонта исключаются, остальные пропуски остаются', () => {
+    const missing = findMissingShifts([mkReport('2026-08-10'), mkReport('2026-08-16')], '2026-08-10', '2026-08-17', now, closures)
+    assert.deepEqual(missing, ['2026-08-17'])
+  })
+  it('закрытие на один день без поля to', () => {
+    assert.equal(isClosedDay('2026-03-03', [{ from: '2026-03-03' }]), true)
+    assert.equal(isClosedDay('2026-03-04', [{ from: '2026-03-03' }]), false)
+  })
+})
+
+describe('Дивиденды наличными (04.09.2026)', () => {
+  it('журнал минус выплаченное по банку, не ниже нуля', () => {
+    assert.equal(cashDividends(4890000, 3250000), 1640000)
+    assert.equal(cashDividends(1500000, 0), 1500000)
+    assert.equal(cashDividends(1000000, 3000000), 0)
+  })
+  it('необъяснённый остаток уменьшается на дивиденды наличными', () => {
+    assert.equal(unexplainedOwnerCash(25406476, 15337770, 9140000).unexplained, 928706)
+    assert.equal(unexplainedOwnerCash(25406476, 15337770, 9140000).ok, false)
+    assert.equal(unexplainedOwnerCash(25406476, 15337770, 9140000 + 3000000).ok, true)
   })
 })
 

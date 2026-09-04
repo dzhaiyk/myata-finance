@@ -7,7 +7,7 @@ import { yearsRange } from '@/lib/dates'
 import {
   checkRevenueConsistency, checkCashDiscrepancies, checkAcquiring, checkAccountBalance,
   findMissingShifts, checkStatementFreshness, countOpenIssues, num,
-  sumCashPayroll, cashTransit, checkPayrollLoop, unexplainedOwnerCash,
+  sumCashPayroll, cashTransit, checkPayrollLoop, unexplainedOwnerCash, cashDividends,
 } from '@/lib/reconcile'
 import { ShieldCheck, AlertTriangle, CheckCircle2, XCircle, MinusCircle, CalendarX, Upload } from 'lucide-react'
 
@@ -49,6 +49,8 @@ export default function ControlPage() {
   const [pnlRows, setPnlRows] = useState([])       // ФОТ по ведомости (pnl_data payroll_*) с начала года
   const [ytdReports, setYtdReports] = useState([]) // отчёты смен с начала года — для транзита наличных
   const [transitTx, setTransitTx] = useState([])   // снятия/возвраты наличных и безнал ЗП с начала года
+  const [dividendsYtd, setDividendsYtd] = useState([]) // журнал инвестиций: дивиденды с начала года
+  const [closures, setClosures] = useState([])         // дни закрытия (ремонт) — не считаются пропущенными сменами
   const [loading, setLoading] = useState(true)
 
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`
@@ -58,7 +60,7 @@ export default function ControlPage() {
     const load = async () => {
       setLoading(true)
       const yearStart = `${year}-01-01`
-      const [repRes, btRes, accRes, atRes, balRes, pnlRes, trRes] = await Promise.all([
+      const [repRes, btRes, accRes, atRes, balRes, pnlRes, trRes, divRes, setRes] = await Promise.all([
         fetchAll(() => supabase.from('daily_reports').select('*').gte('report_date', yearStart).lte('report_date', endDate).order('id')),
         fetchAll(() => supabase.from('bank_transactions').select('*').gte('transaction_date', startDate).lte('transaction_date', endDate).order('id')),
         fetchAll(() => supabase.from('accounts').select('*').eq('is_active', true).order('id')),
@@ -67,7 +69,10 @@ export default function ControlPage() {
         fetchAll(() => supabase.from('pnl_data').select('month, category, amount, type').eq('year', year).lte('month', month).order('id')),
         fetchAll(() => supabase.from('bank_transactions').select('transaction_date, amount, is_debit, category, purpose')
           .gte('transaction_date', yearStart).lte('transaction_date', endDate)
-          .in('category', ['cash_withdrawal', 'internal', ...PAYROLL_CATS]).order('id')),
+          .in('category', ['cash_withdrawal', 'internal', 'dividends', ...PAYROLL_CATS]).order('id')),
+        fetchAll(() => supabase.from('investor_transactions').select('transaction_date, amount').eq('type', 'dividend')
+          .gte('transaction_date', yearStart).lte('transaction_date', endDate).order('id')),
+        supabase.from('settings').select('value').eq('key', 'closures').maybeSingle(),
       ])
       const allReports = repRes
       setYtdReports(allReports)
@@ -78,6 +83,8 @@ export default function ControlPage() {
       setBalances(balRes)
       setPnlRows(pnlRes)
       setTransitTx(trRes)
+      setDividendsYtd(divRes)
+      setClosures(Array.isArray(setRes.data?.value) ? setRes.data.value : [])
       setLoading(false)
     }
     load()
@@ -87,7 +94,7 @@ export default function ControlPage() {
 
   const checks = useMemo(() => {
     const open = countOpenIssues(reports, bankTx)
-    const missing = findMissingShifts(reports, startDate, endDate)
+    const missing = findMissingShifts(reports, startDate, endDate, new Date(), closures)
     const freshness = checkStatementFreshness(bankTx)
     const revenue = checkRevenueConsistency(submitted)
     const cashDisc = checkCashDiscrepancies(submitted)
@@ -106,7 +113,7 @@ export default function ControlPage() {
     // Транзит наличных учредителей помесячно с начала года:
     // снято со счетов → выдано на ЗП (остаток ведомости) / возвращено в оборот → остаток на руках
     const pad = (n) => String(n).padStart(2, '0')
-    let cumNet = 0, cumOwners = 0
+    let cumNet = 0, cumOwners = 0, cumDiv = 0
     const transitRows = Array.from({ length: month }, (_, i) => i + 1).map(m => {
       const mStart = `${year}-${pad(m)}-01`
       const mEnd = `${year}-${pad(m)}-${new Date(year, m, 0).getDate()}`
@@ -115,11 +122,15 @@ export default function ControlPage() {
       const reps = ytdReports.filter(r => r.status === 'submitted' && r.report_date >= mStart && r.report_date <= mEnd)
       const loop = checkPayrollLoop({ accrued: accruedOf(m), cash: sumCashPayroll(reps), bankPayroll: bankPayrollOf(tx) })
       const fromOwners = Math.max(0, loop.fromOwners)
-      cumNet += tr.net; cumOwners += fromOwners
-      return { month: m, withdrawn: tr.withdrawn, returned: tr.returned, net: tr.net, fromOwners, cumulative: cumNet - cumOwners }
+      // Дивиденды наличными: журнал инвестиций минус выплаченные по банку (только списания)
+      const journalDiv = dividendsYtd.filter(d => d.transaction_date >= mStart && d.transaction_date <= mEnd).reduce((a, d) => a + num(d.amount), 0)
+      const bankDiv = tx.filter(t => t.is_debit && t.category === 'dividends').reduce((a, t) => a + num(t.amount), 0)
+      const cashDiv = cashDividends(journalDiv, bankDiv)
+      cumNet += tr.net; cumOwners += fromOwners; cumDiv += cashDiv
+      return { month: m, withdrawn: tr.withdrawn, returned: tr.returned, net: tr.net, fromOwners, cashDiv, cumulative: cumNet - cumOwners - cumDiv }
     })
-    const owners = { ...unexplainedOwnerCash(cumNet, cumOwners), withdrawn: cumNet + transitRows.reduce((a, r) => a + r.returned, 0),
-      returned: transitRows.reduce((a, r) => a + r.returned, 0), fromOwners: cumOwners }
+    const owners = { ...unexplainedOwnerCash(cumNet, cumOwners, cumDiv), withdrawn: cumNet + transitRows.reduce((a, r) => a + r.returned, 0),
+      returned: transitRows.reduce((a, r) => a + r.returned, 0), fromOwners: cumOwners, cashDiv: cumDiv }
 
     // Остатки счетов: расчёт ↔ последняя сверка месяца
     const accountChecks = accounts.filter(a => !a.parent_account_id).map(a => {
@@ -140,7 +151,7 @@ export default function ControlPage() {
 
     const review = bankTx.filter(t => t.review_note)
     return { open, missing, freshness, revenue, cashDisc, acquiring, payroll, accountChecks, transitRows, owners, review }
-  }, [reports, submitted, bankTx, accounts, acctTx, balances, pnlRows, ytdReports, transitTx, year, month, startDate, endDate])
+  }, [reports, submitted, bankTx, accounts, acctTx, balances, pnlRows, ytdReports, transitTx, dividendsYtd, closures, year, month, startDate, endDate])
 
   if (!hasPermission('dashboard.view')) {
     return <div className="text-center text-slate-500 py-20">Нет доступа</div>
@@ -199,7 +210,10 @@ export default function ControlPage() {
           <Check title="Смены сданы" subtitle="Отчёт за каждый день месяца"
             state={missing.length === 0 ? 'ok' : 'fail'}
             value={missing.length === 0 ? `${submitted.length} смен` : `${missing.length} пропущено`}
-            detail={missing.length > 0 ? missing.slice(0, 5).join(', ') + (missing.length > 5 ? '…' : '') : null} />
+            detail={[
+              missing.length > 0 ? missing.slice(0, 5).join(', ') + (missing.length > 5 ? '…' : '') : null,
+              ...closures.filter(c => c.from <= endDate && (c.to || c.from) >= startDate).map(c => `закрыто ${c.from.slice(8)}–${(c.to || c.from).slice(8)}: ${c.reason || 'без причины'}`),
+            ].filter(Boolean).join(' · ') || null} />
           <Check title="Черновики закрыты" subtitle="Отчёты со статусом «черновик»"
             state={open.drafts === 0 ? 'ok' : 'fail'}
             value={open.drafts === 0 ? 'нет' : `${open.drafts} шт.`} />
@@ -250,17 +264,18 @@ export default function ControlPage() {
       <div>
         <h2 className="text-sm font-semibold text-slate-400 mb-3">Наличные у учредителей (с начала года)</h2>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-          <Check title="Необъяснённый остаток" subtitle="Снято со счетов − возвращено − выдано на ЗП"
+          <Check title="Необъяснённый остаток" subtitle="Снято − возвращено − выдано на ЗП − дивиденды наличными"
             state={owners.ok ? 'ok' : 'fail'}
             value={`${fmt(owners.unexplained)} ₸`}
-            detail={`снято ${fmt(owners.withdrawn)} · возвращено ${fmt(owners.returned)} · на ЗП ${fmt(owners.fromOwners)} ₸`} />
+            detail={`снято ${fmt(owners.withdrawn)} · возвращено ${fmt(owners.returned)} · на ЗП ${fmt(owners.fromOwners)} · дивиденды ${fmt(owners.cashDiv)} ₸`} />
           <div className="card p-0 overflow-x-auto lg:col-span-2">
-            <table className="w-full text-sm min-w-[560px]">
+            <table className="w-full text-sm min-w-[680px]">
               <thead><tr>
                 <th className="table-header text-left">Месяц</th>
                 <th className="table-header text-right">Снято со счетов</th>
                 <th className="table-header text-right">Возвращено в оборот</th>
                 <th className="table-header text-right">ЗП не из кассы</th>
+                <th className="table-header text-right">Дивиденды наличными</th>
                 <th className="table-header text-right">На руках (накопит.)</th>
               </tr></thead>
               <tbody>
@@ -270,6 +285,7 @@ export default function ControlPage() {
                     <td className="table-cell text-right font-mono text-xs">{fmt(r.withdrawn)}</td>
                     <td className="table-cell text-right font-mono text-xs">{fmt(r.returned)}</td>
                     <td className="table-cell text-right font-mono text-xs">{fmt(r.fromOwners)}</td>
+                    <td className="table-cell text-right font-mono text-xs">{fmt(r.cashDiv)}</td>
                     <td className={cn('table-cell text-right font-mono text-xs font-bold', r.cumulative > 500000 ? 'text-red-400' : 'text-green-400')}>{fmt(r.cumulative)}</td>
                   </tr>
                 ))}
