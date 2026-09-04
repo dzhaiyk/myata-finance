@@ -1,12 +1,21 @@
 import { useState } from 'react'
-import { sendTelegramNotification } from '@/lib/telegram'
+import { sendTelegramNotification, saveNotifications, maskedBotToken, telegramChatId } from '@/lib/telegram'
+import { getNotifications, THRESHOLDS } from '@/lib/config'
 import { getCutoffHour, saveCutoffHour } from '@/lib/dates'
 import { Save, Send, Bell, Bot, Moon } from 'lucide-react'
 
+// Только те типы, которые приложение действительно умеет отправлять.
+// Порог берётся из настроек, чтобы подпись не разошлась с логикой.
+const NOTIFICATION_LABELS = [
+  { key: 'cash_discrepancy', label: `Расхождение кассы > ${THRESHOLDS.cashDiscrepancyAlert.toLocaleString('ru-RU')} ₸`, desc: 'При отправке отчёта с расхождением' },
+  { key: 'daily_report', label: 'Ежедневный отчёт сдан', desc: 'При каждой отправке отчёта менеджером' },
+  { key: 'bank_import', label: 'Импорт банковской выписки', desc: 'При загрузке и обработке выписки' },
+]
+
 export default function SettingsPage() {
-  const [botToken, setBotToken] = useState(import.meta.env.VITE_TELEGRAM_BOT_TOKEN || '')
-  const [chatId, setChatId] = useState(import.meta.env.VITE_TELEGRAM_CHAT_ID || '')
   const [testResult, setTestResult] = useState('')
+  const [notifications, setNotificationsState] = useState(getNotifications())
+  const [notifSaved, setNotifSaved] = useState('')
   const [cutoffHour, setCutoffHourState] = useState(getCutoffHour())
   const [cutoffSaved, setCutoffSaved] = useState('')
 
@@ -16,18 +25,23 @@ export default function SettingsPage() {
     setCutoffSaved(error ? '❌ Ошибка: ' + error.message : '✅ Сохранено')
   }
 
+  const toggleNotification = (key) => setNotificationsState(n => ({ ...n, [key]: !n[key] }))
+
+  const handleSaveNotifications = async () => {
+    setNotifSaved('Сохранение...')
+    const { error } = await saveNotifications(notifications)
+    setNotifSaved(error ? '❌ Ошибка: ' + error.message : '✅ Сохранено')
+  }
+
   const testTelegram = async () => {
-    setTestResult('Отправка...')
-    try {
-      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text: '🍃 Тест: Мята Finance подключен!', parse_mode: 'HTML' }),
-      })
-      setTestResult('✅ Сообщение отправлено!')
-    } catch (e) {
-      setTestResult('❌ Ошибка: ' + e.message)
+    if (!maskedBotToken() || !telegramChatId()) {
+      setTestResult('❌ Не настроено: задайте переменные бота в панели Netlify')
+      return
     }
+    setTestResult('Отправка...')
+    // Без типа — тестовое сообщение уходит независимо от переключателей
+    await sendTelegramNotification('Тест: уведомления подключены')
+    setTestResult('✅ Отправлено — проверьте чат')
   }
 
   return (
@@ -84,12 +98,16 @@ export default function SettingsPage() {
         <div className="space-y-4">
           <div>
             <label className="label">Bot Token</label>
-            <input value={botToken} onChange={e => setBotToken(e.target.value)} className="input w-full font-mono text-xs" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" />
+            <div className="input w-full font-mono text-xs text-slate-400">{maskedBotToken() || 'не задан'}</div>
           </div>
           <div>
             <label className="label">Chat ID (группа или личный)</label>
-            <input value={chatId} onChange={e => setChatId(e.target.value)} className="input w-full font-mono text-xs" placeholder="-1001234567890" />
+            <div className="input w-full font-mono text-xs text-slate-400">{telegramChatId() || 'не задан'}</div>
           </div>
+          <p className="text-xs text-slate-500">
+            Токен и чат задаются переменными окружения в панели хостинга и применяются
+            при следующей сборке — отсюда их не изменить.
+          </p>
 
           <div className="flex items-center gap-3">
             <button onClick={testTelegram} className="btn-secondary text-sm flex items-center gap-2">
@@ -104,21 +122,22 @@ export default function SettingsPage() {
             <Bell className="w-3.5 h-3.5" /> Типы уведомлений
           </div>
           <div className="space-y-2">
-            {[
-              { label: 'Расхождение кассы > 1000₸', desc: 'Мгновенное уведомление при расхождении', default: true },
-              { label: 'Ежедневный отчёт сдан', desc: 'При каждой отправке отчёта менеджером', default: true },
-              { label: 'Импорт банковской выписки', desc: 'При загрузке и обработке выписки', default: true },
-              { label: 'Отчёт не сдан до 02:00', desc: 'Напоминание если менеджер не сдал отчёт', default: true },
-              { label: 'Food Cost > 35%', desc: 'Еженедельный алерт при превышении', default: false },
-            ].map((n, i) => (
-              <label key={i} className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-800/30 cursor-pointer transition-colors">
-                <input type="checkbox" defaultChecked={n.default} className="mt-0.5 accent-brand-500" />
+            {NOTIFICATION_LABELS.map(n => (
+              <label key={n.key} className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-800/30 cursor-pointer transition-colors">
+                <input type="checkbox" checked={notifications[n.key] !== false}
+                  onChange={() => toggleNotification(n.key)} className="mt-0.5 accent-brand-500" />
                 <div>
                   <div className="text-sm font-medium">{n.label}</div>
                   <div className="text-xs text-slate-500">{n.desc}</div>
                 </div>
               </label>
             ))}
+          </div>
+          <div className="flex items-center gap-3 mt-3">
+            <button onClick={handleSaveNotifications} className="btn-primary text-sm flex items-center gap-2">
+              <Save className="w-4 h-4" /> Сохранить
+            </button>
+            {notifSaved && <span className="text-xs text-slate-400">{notifSaved}</span>}
           </div>
         </div>
       </div>

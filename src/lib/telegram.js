@@ -1,9 +1,45 @@
 import { supabase } from './supabase'
+import { getNotifications, setNotifications, isNotificationEnabled } from './config.js'
 
 const TELEGRAM_BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN
 const TELEGRAM_CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID
 
-export async function sendTelegramNotification(message) {
+/** Токен для показа в настройках: целиком его светить незачем. */
+export const maskedBotToken = () => {
+  const t = String(TELEGRAM_BOT_TOKEN || '')
+  return t ? `${t.slice(0, 6)}…${t.slice(-4)}` : ''
+}
+export const telegramChatId = () => String(TELEGRAM_CHAT_ID || '')
+
+// Какие типы уведомлений включены — хранится в settings (key='telegram',
+// поле value.notifications), кешируется в config.js. Загружается при старте
+// приложения (store.initialize), как и час отсечки.
+export async function loadNotifications() {
+  try {
+    const { data } = await supabase.from('settings').select('value').eq('key', 'telegram').single()
+    if (data?.value?.notifications) setNotifications(data.value.notifications)
+  } catch (_) { /* нет записи — остаются значения по умолчанию */ }
+  return getNotifications()
+}
+
+export async function saveNotifications(value) {
+  setNotifications(value)
+  // остальные поля ключа telegram (bot_token, chat_id) не затираем
+  const { data } = await supabase.from('settings').select('value').eq('key', 'telegram').single()
+  const next = { ...(data?.value || {}), notifications: getNotifications() }
+  const { error } = await supabase.from('settings').upsert(
+    { key: 'telegram', value: next, updated_at: new Date().toISOString() },
+    { onConflict: 'key' }
+  )
+  return { error }
+}
+
+/**
+ * @param {string} message готовый HTML
+ * @param {string} [type] тип уведомления; выключенный в настройках не отправляется
+ */
+export async function sendTelegramNotification(message, type) {
+  if (type && !isNotificationEnabled(type)) return
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
     console.warn('Telegram not configured')
     return

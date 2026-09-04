@@ -443,9 +443,9 @@ export default function DailyReportPage() {
           date, manager: profile?.full_name, revenue: totalRevenue, withdrawals: totalWithdrawals,
           cashExpected, cashActual: num(cashEnd), discrepancy,
           departments: { kitchen: num(departments[0]?.amount), bar: num(departments[1]?.amount), hookah: num(departments[2]?.amount) }
-        }))
+        }), 'daily_report')
         if (Math.abs(discrepancy) > THRESHOLDS.cashDiscrepancyAlert) {
-          await sendTelegramNotification(formatCashDiscrepancyAlert(date, profile?.full_name, discrepancy))
+          await sendTelegramNotification(formatCashDiscrepancyAlert(date, profile?.full_name, discrepancy), 'cash_discrepancy')
         }
       } catch (_) {}
 

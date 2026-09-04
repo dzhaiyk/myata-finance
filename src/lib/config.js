@@ -123,3 +123,42 @@ export const PAYROLL_CATEGORIES = [
   'payroll_mgmt', 'payroll_kitchen', 'payroll_bar', 'payroll_hookah',
   'payroll_hall', 'payroll_transport', 'payroll_other',
 ]
+
+// --- Уведомления ----------------------------------------------------------
+//
+// Типы, которые приложение действительно умеет отправлять. Напоминание «отчёт не
+// сдан» и еженедельный алерт по food cost сюда не входят: без сервера выполнить их
+// некому, вернутся вместе с VPS (TASK-009). Подписи живут на экране настроек —
+// здесь только ключи и значения по умолчанию.
+
+export const NOTIFICATION_DEFAULTS = {
+  cash_discrepancy: true,
+  daily_report: true,
+  bank_import: true,
+}
+
+export const NOTIFICATION_KEYS = Object.keys(NOTIFICATION_DEFAULTS)
+
+/** Оставляет только известные типы: в базе могут лежать ключи от старых версий. */
+export function pickKnownNotifications(value) {
+  const out = { ...NOTIFICATION_DEFAULTS }
+  for (const key of NOTIFICATION_KEYS) {
+    if (typeof value?.[key] === 'boolean') out[key] = value[key]
+  }
+  return out
+}
+
+let notifications = { ...NOTIFICATION_DEFAULTS }
+
+export const getNotifications = () => ({ ...notifications })
+
+export function setNotifications(value) {
+  notifications = pickKnownNotifications(value)
+  return getNotifications()
+}
+
+/** Выключить можно только известный тип; незнакомый считается включённым. */
+export function isNotificationEnabled(key) {
+  if (!NOTIFICATION_KEYS.includes(key)) return true
+  return notifications[key] !== false
+}

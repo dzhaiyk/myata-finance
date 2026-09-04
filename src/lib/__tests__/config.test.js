@@ -12,6 +12,11 @@ import {
   isFoodCostAnomaly,
   marginLevel,
   PAYROLL_CATEGORIES,
+  NOTIFICATION_KEYS,
+  pickKnownNotifications,
+  getNotifications,
+  setNotifications,
+  isNotificationEnabled,
 } from '../config.js'
 
 describe('config — сопоставление названий со смыслом (ADR-0010)', () => {
@@ -97,5 +102,42 @@ describe('пороги и границы', () => {
     assert.equal(PAYROLL_CATEGORIES.length, 7)
     assert.ok(PAYROLL_CATEGORIES.every(c => c.startsWith('payroll_')))
     assert.equal(new Set(PAYROLL_CATEGORIES).size, PAYROLL_CATEGORIES.length)
+  })
+})
+
+// TASK-016: до этого переключатели в «Настройках» ничего не сохраняли
+describe('уведомления', () => {
+  it('по умолчанию включены все известные типы', () => {
+    setNotifications({})
+    assert.deepEqual(getNotifications(), {
+      cash_discrepancy: true, daily_report: true, bank_import: true,
+    })
+    for (const key of NOTIFICATION_KEYS) assert.equal(isNotificationEnabled(key), true)
+  })
+
+  it('выключенный тип не проходит проверку', () => {
+    setNotifications({ cash_discrepancy: false })
+    assert.equal(isNotificationEnabled('cash_discrepancy'), false)
+    assert.equal(isNotificationEnabled('daily_report'), true)
+    setNotifications({})
+  })
+
+  // В базе могут лежать ключи от старых версий: напоминание в 02:00 и
+  // еженедельный food cost убраны, потому что выполнить их некому
+  it('незнакомые ключи из базы не сохраняются', () => {
+    const picked = pickKnownNotifications({
+      cash_discrepancy: false, no_report_reminder: true, food_cost_alert: true, мусор: 1,
+    })
+    assert.deepEqual(Object.keys(picked).sort(), NOTIFICATION_KEYS.slice().sort())
+    assert.equal(picked.cash_discrepancy, false)
+  })
+
+  it('нестроковые значения игнорируются, остаётся значение по умолчанию', () => {
+    assert.equal(pickKnownNotifications({ daily_report: 'нет' }).daily_report, true)
+    assert.equal(pickKnownNotifications(null).bank_import, true)
+  })
+
+  it('незнакомый тип считается включённым', () => {
+    assert.equal(isNotificationEnabled('чего-то нового'), true)
   })
 })

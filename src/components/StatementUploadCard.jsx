@@ -81,7 +81,7 @@ export default function StatementUploadCard({ accounts, date, managerName, onFre
           accountName: staged.account.name, manager: managerName, from: s.from, to: s.to,
           total: inserted.length, duplicates: staged.duplicates, uncategorized: s.uncategorized,
           balanceOk: staged.balanceCheck ? staged.balanceCheck.ok : null,
-        }))
+        }), 'bank_import')
       } catch (_) {}
       setStaged(null)
       await refresh()
