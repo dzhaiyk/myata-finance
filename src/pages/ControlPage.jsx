@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchAll } from '@/lib/fetchAll'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, MONTHS_RU } from '@/lib/utils'
 import { yearsRange } from '@/lib/dates'
@@ -58,25 +59,25 @@ export default function ControlPage() {
       setLoading(true)
       const yearStart = `${year}-01-01`
       const [repRes, btRes, accRes, atRes, balRes, pnlRes, trRes] = await Promise.all([
-        supabase.from('daily_reports').select('*').gte('report_date', yearStart).lte('report_date', endDate).order('report_date'),
-        supabase.from('bank_transactions').select('*').gte('transaction_date', startDate).lte('transaction_date', endDate),
-        supabase.from('accounts').select('*').eq('is_active', true).order('sort_order, id'),
-        supabase.from('account_transactions').select('account_id, transaction_date, type, amount'),
-        supabase.from('account_balances').select('*').gte('balance_date', startDate).lte('balance_date', endDate),
-        supabase.from('pnl_data').select('month, category, amount, type').eq('year', year).lte('month', month),
-        supabase.from('bank_transactions').select('transaction_date, amount, is_debit, category, purpose')
+        fetchAll(() => supabase.from('daily_reports').select('*').gte('report_date', yearStart).lte('report_date', endDate).order('id')),
+        fetchAll(() => supabase.from('bank_transactions').select('*').gte('transaction_date', startDate).lte('transaction_date', endDate).order('id')),
+        fetchAll(() => supabase.from('accounts').select('*').eq('is_active', true).order('id')),
+        fetchAll(() => supabase.from('account_transactions').select('account_id, transaction_date, type, amount').order('id')),
+        fetchAll(() => supabase.from('account_balances').select('*').gte('balance_date', startDate).lte('balance_date', endDate).order('id')),
+        fetchAll(() => supabase.from('pnl_data').select('month, category, amount, type').eq('year', year).lte('month', month).order('id')),
+        fetchAll(() => supabase.from('bank_transactions').select('transaction_date, amount, is_debit, category, purpose')
           .gte('transaction_date', yearStart).lte('transaction_date', endDate)
-          .in('category', ['cash_withdrawal', 'internal', ...PAYROLL_CATS]),
+          .in('category', ['cash_withdrawal', 'internal', ...PAYROLL_CATS]).order('id')),
       ])
-      const allReports = repRes.data || []
+      const allReports = repRes
       setYtdReports(allReports)
       setReports(allReports.filter(r => r.report_date >= startDate))
-      setBankTx(btRes.data || [])
-      setAccounts(accRes.data || [])
-      setAcctTx(atRes.data || [])
-      setBalances(balRes.data || [])
-      setPnlRows(pnlRes.data || [])
-      setTransitTx(trRes.data || [])
+      setBankTx(btRes)
+      setAccounts(accRes)
+      setAcctTx(atRes)
+      setBalances(balRes)
+      setPnlRows(pnlRes)
+      setTransitTx(trRes)
       setLoading(false)
     }
     load()

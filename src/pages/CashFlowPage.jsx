@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchAll } from '@/lib/fetchAll'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, fmtK, MONTHS_RU } from '@/lib/utils'
 import { yearsRange } from '@/lib/dates'
@@ -270,15 +271,15 @@ export default function CashFlowPage() {
     if (viewMode === 'overall') {
       // Load everything
       const [drRes, btRes, pnlRes, invRes] = await Promise.all([
-        supabase.from('daily_reports').select('*').eq('status', 'submitted'),
-        supabase.from('bank_transactions').select('*'),
-        supabase.from('pnl_data').select('*'),
-        supabase.from('investor_transactions').select('*'),
+        fetchAll(() => supabase.from('daily_reports').select('*').eq('status', 'submitted').order('id')),
+        fetchAll(() => supabase.from('bank_transactions').select('*').order('id')),
+        fetchAll(() => supabase.from('pnl_data').select('*').order('id')),
+        fetchAll(() => supabase.from('investor_transactions').select('*').order('id')),
       ])
-      setDailyReports(drRes.data || [])
-      setBankTx(btRes.data || [])
-      setPnlData(pnlRes.data || [])
-      setInvestorTx(invRes.data || [])
+      setDailyReports(drRes)
+      setBankTx(btRes)
+      setPnlData(pnlRes)
+      setInvestorTx(invRes)
     } else {
       const isYearMode = viewMode === 'year'
       const startDate = isYearMode || viewMode === 'ytd' ? `${year}-01-01` : `${year}-${String(month).padStart(2, '0')}-01`
@@ -286,17 +287,17 @@ export default function CashFlowPage() {
       const endDate = `${year}-${String(endMonth).padStart(2, '0')}-${new Date(year, endMonth, 0).getDate()}`
 
       const [drRes, btRes, pnlRes, invRes] = await Promise.all([
-        supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted'),
-        supabase.from('bank_transactions').select('*').or(
+        fetchAll(() => supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted').order('id')),
+        fetchAll(() => supabase.from('bank_transactions').select('*').or(
           `and(transaction_date.gte.${startDate},transaction_date.lte.${endDate}),and(period_from.lte.${endDate},period_to.gte.${startDate})`
-        ),
-        supabase.from('pnl_data').select('*').eq('year', year),
-        supabase.from('investor_transactions').select('*').gte('transaction_date', startDate).lte('transaction_date', endDate),
+        ).order('id')),
+        fetchAll(() => supabase.from('pnl_data').select('*').eq('year', year).order('id')),
+        fetchAll(() => supabase.from('investor_transactions').select('*').gte('transaction_date', startDate).lte('transaction_date', endDate).order('id')),
       ])
-      setDailyReports(drRes.data || [])
-      setBankTx(btRes.data || [])
-      setPnlData(pnlRes.data || [])
-      setInvestorTx(invRes.data || [])
+      setDailyReports(drRes)
+      setBankTx(btRes)
+      setPnlData(pnlRes)
+      setInvestorTx(invRes)
     }
     setLoading(false)
   }

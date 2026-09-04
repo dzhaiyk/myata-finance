@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchAll } from '@/lib/fetchAll'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, fmtK, MONTHS_RU } from '@/lib/utils'
 import { isPnlCategory } from '@/lib/categories'
@@ -43,36 +44,36 @@ export default function PnLPage() {
       const startDate = `${year}-01-01`
       const endDate = `${year}-12-31`
       const [drRes, btRes, adjRes] = await Promise.all([
-        supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted'),
-        supabase.from('bank_transactions').select('*').or(`and(transaction_date.gte.${startDate},transaction_date.lte.${endDate}),and(period_from.lte.${endDate},period_to.gte.${startDate})`),
-        supabase.from('pnl_data').select('*').eq('year', year),
+        fetchAll(() => supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted').order('id')),
+        fetchAll(() => supabase.from('bank_transactions').select('*').or(`and(transaction_date.gte.${startDate},transaction_date.lte.${endDate}),and(period_from.lte.${endDate},period_to.gte.${startDate})`).order('id')),
+        fetchAll(() => supabase.from('pnl_data').select('*').eq('year', year).order('id')),
       ])
-      setDailyReports(drRes.data || [])
-      setBankTx(btRes.data || [])
-      setAdjustments(adjRes.data || [])
+      setDailyReports(drRes)
+      setBankTx(btRes)
+      setAdjustments(adjRes)
     } else if (viewMode === 'overall') {
       const [drRes, btRes, adjRes] = await Promise.all([
-        supabase.from('daily_reports').select('*').eq('status', 'submitted'),
-        supabase.from('bank_transactions').select('*'),
-        supabase.from('pnl_data').select('*'),
+        fetchAll(() => supabase.from('daily_reports').select('*').eq('status', 'submitted').order('id')),
+        fetchAll(() => supabase.from('bank_transactions').select('*').order('id')),
+        fetchAll(() => supabase.from('pnl_data').select('*').order('id')),
       ])
-      setDailyReports(drRes.data || [])
-      setBankTx(btRes.data || [])
-      setAdjustments(adjRes.data || [])
+      setDailyReports(drRes)
+      setBankTx(btRes)
+      setAdjustments(adjRes)
     } else {
       const startDate = viewMode === 'ytd' ? `${year}-01-01` : `${year}-${String(month).padStart(2, '0')}-01`
       const endMonth = month // YTD — до выбранного месяца включительно, не до декабря
       const endDate = `${year}-${String(endMonth).padStart(2, '0')}-${new Date(year, endMonth, 0).getDate()}`
       const [drRes, btRes, adjRes] = await Promise.all([
-        supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted'),
-        supabase.from('bank_transactions').select('*').or(
+        fetchAll(() => supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted').order('id')),
+        fetchAll(() => supabase.from('bank_transactions').select('*').or(
           `and(transaction_date.gte.${startDate},transaction_date.lte.${endDate}),and(period_from.lte.${endDate},period_to.gte.${startDate})`
-        ),
-        supabase.from('pnl_data').select('*').eq('year', year).gte('month', viewMode === 'ytd' ? 1 : month).lte('month', endMonth),
+        ).order('id')),
+        fetchAll(() => supabase.from('pnl_data').select('*').eq('year', year).gte('month', viewMode === 'ytd' ? 1 : month).lte('month', endMonth).order('id')),
       ])
-      setDailyReports(drRes.data || [])
-      setBankTx(btRes.data || [])
-      setAdjustments(adjRes.data || [])
+      setDailyReports(drRes)
+      setBankTx(btRes)
+      setAdjustments(adjRes)
     }
     setLoading(false)
   }

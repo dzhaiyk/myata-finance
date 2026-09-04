@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchAll } from '@/lib/fetchAll'
 import { fmt, fmtK, fmtPct, MONTHS_RU } from '@/lib/utils'
 import { bankTxRangeFilter } from '@/lib/pnl'
 import { yearsRange } from '@/lib/dates'
@@ -75,18 +76,18 @@ export default function DashboardPage() {
     const endDate = `${year}-12-31`
 
     const [reportsRes, allReportsRes, bankRes, adjRes] = await Promise.all([
-      supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted').order('report_date'),
-      supabase.from('daily_reports').select('id, report_date, total_revenue, status').eq('status', 'submitted').order('report_date'),
+      fetchAll(() => supabase.from('daily_reports').select('*').gte('report_date', startDate).lte('report_date', endDate).eq('status', 'submitted').order('id')),
+      fetchAll(() => supabase.from('daily_reports').select('id, report_date, total_revenue, status').eq('status', 'submitted').order('id')),
       // Включая транзакции, распределённые на этот год периодом (period allocation)
-      supabase.from('bank_transactions').select('transaction_date, amount, is_debit, category, period_from, period_to')
-        .or(bankTxRangeFilter(startDate, endDate)),
-      supabase.from('pnl_data').select('*').eq('year', year),
+      fetchAll(() => supabase.from('bank_transactions').select('transaction_date, amount, is_debit, category, period_from, period_to')
+        .or(bankTxRangeFilter(startDate, endDate)).order('id')),
+      fetchAll(() => supabase.from('pnl_data').select('*').eq('year', year).order('id')),
     ])
 
-    setReports(reportsRes.data || [])
-    setAllReports(allReportsRes.data || [])
-    setBankTx(bankRes.data || [])
-    setAdjustments(adjRes.data || [])
+    setReports(reportsRes)
+    setAllReports(allReportsRes)
+    setBankTx(bankRes)
+    setAdjustments(adjRes)
     setLoading(false)
   }
 

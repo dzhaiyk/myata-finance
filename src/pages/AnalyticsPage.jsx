@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchAll } from '@/lib/fetchAll'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, fmtK, MONTHS_RU, linearRegression } from '@/lib/utils'
 import { getTxAmountForMonth } from '@/lib/pnl'
@@ -28,13 +29,13 @@ export default function AnalyticsPage() {
     const load = async () => {
       setLoading(true)
       const [drRes, pnlRes, btRes] = await Promise.all([
-        supabase.from('daily_reports').select('*').eq('status', 'submitted').order('report_date'),
-        supabase.from('pnl_data').select('*'),
-        supabase.from('bank_transactions').select('*'),
+        fetchAll(() => supabase.from('daily_reports').select('*').eq('status', 'submitted').order('id')),
+        fetchAll(() => supabase.from('pnl_data').select('*').order('id')),
+        fetchAll(() => supabase.from('bank_transactions').select('*').order('id')),
       ])
-      setAllReports(drRes.data || [])
-      setPnlData(pnlRes.data || [])
-      setBankTx(btRes.data || [])
+      setAllReports(drRes)
+      setPnlData(pnlRes)
+      setBankTx(btRes)
       setLoading(false)
     }
     load()

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchAll } from '@/lib/fetchAll'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
 import { getBusinessDate } from '@/lib/dates'
@@ -39,7 +40,7 @@ export default function AccountsPage() {
     setLoading(true)
     const [accRes, txRes, balRes, reportsRes] = await Promise.all([
       supabase.from('accounts').select('*').order('sort_order, id'),
-      supabase.from('account_transactions').select('*').order('transaction_date', { ascending: false }),
+      fetchAll(() => supabase.from('account_transactions').select('*').order('id')),
       supabase.from('account_balances').select('*').order('balance_date', { ascending: false }).limit(50),
       // Остатки кассы по всем закрытым сменам — для баланса кассы НА ДАТУ (сверка задним числом)
       supabase.from('daily_reports')
@@ -47,7 +48,7 @@ export default function AccountsPage() {
         .eq('status', 'submitted').order('report_date', { ascending: false }),
     ])
     setAccounts(accRes.data || [])
-    setTransactions(txRes.data || [])
+    setTransactions(txRes)
     setBalances(balRes.data || [])
     setCashReports(reportsRes.data || [])
     setLoading(false)
