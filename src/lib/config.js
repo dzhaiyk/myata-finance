@@ -13,12 +13,24 @@
 export const DEPARTMENT_CODES = ['kitchen', 'bar', 'hookah']
 
 // Названия, под которыми отдел приходит из отчёта смены и из iiko.
+// Склады — источник отдела в выгрузке iiko (BR-SHF-019): категория блюда
+// заполнена не у всех позиций, склад — у всех.
 // Сравнение регистронезависимое и без учёта пробелов по краям.
 const DEPARTMENT_NAMES = {
-  kitchen: ['кухня'],
-  bar: ['бар'],
-  hookah: ['кальян'],
+  kitchen: ['кухня', 'склад кухня мята'],
+  bar: ['бар', 'склад бар мята'],
+  hookah: ['кальян', 'склад кальян мята'],
 }
+
+/** Подпись отдела для форм и отчётов. */
+export const DEPARTMENT_LABELS = {
+  kitchen: 'Кухня',
+  bar: 'Бар',
+  hookah: 'Кальян',
+}
+
+/** Куда попадает выручка с нераспознанным отделом. */
+export const OTHER_DEPARTMENT_LABEL = 'Прочее'
 
 const normalize = (name) => String(name ?? '').trim().toLowerCase()
 

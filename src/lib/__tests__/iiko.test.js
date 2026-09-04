@@ -18,6 +18,15 @@ describe('iiko — справочники под отчёт смены', () => {
     assert.equal(normalizeDepartment(null), 'Прочее')
   })
 
+  // BR-SHF-019: отдел берётся из склада списания, а не из категории блюда
+  it('склады iiko раскладываются по отделам', () => {
+    assert.equal(normalizeDepartment('СКЛАД КУХНЯ МЯТА'), 'Кухня')
+    assert.equal(normalizeDepartment('СКЛАД БАР МЯТА'), 'Бар')
+    assert.equal(normalizeDepartment('СКЛАД КАЛЬЯН МЯТА'), 'Кальян')
+    assert.equal(normalizeDepartment('  склад бар мята  '), 'Бар')
+    assert.equal(normalizeDepartment('СКЛАД БАНКЕТ'), 'Прочее')
+  })
+
   it('типы оплат приводятся к типам приложения', () => {
     assert.equal(normalizePaymentType('Наличные'), 'Наличные')
     assert.equal(normalizePaymentType('CASH'), 'Наличные')
@@ -32,11 +41,12 @@ describe('iiko — справочники под отчёт смены', () => {
 })
 
 describe('iiko — разбор OLAP-ответа', () => {
+  // Отдел приходит складом списания (BR-SHF-019)
   const rows = [
-    { 'OpenDate.Typed': '2026-09-01', DishCategory: 'Кухня', 'PayTypes.Combo': 'Наличные', DishDiscountSumInt: 100000, 'UniqOrderId.OrdersCount': 10 },
-    { 'OpenDate.Typed': '2026-09-01', DishCategory: 'Барная карта', 'PayTypes.Combo': 'Kaspi QR', DishDiscountSumInt: 80000.5, 'UniqOrderId.OrdersCount': 8 },
-    { 'OpenDate.Typed': '2026-09-01', DishCategory: 'Кальяны', 'PayTypes.Combo': 'Halyk POS', DishDiscountSumInt: 70000, 'UniqOrderId.OrdersCount': 7 },
-    { 'OpenDate.Typed': '2026-09-02', DishCategory: 'Кухня', 'PayTypes.Combo': 'Наличные', DishDiscountSumInt: 50000, 'UniqOrderId.OrdersCount': 5 },
+    { 'OpenDate.Typed': '2026-09-01', 'Store.Name': 'СКЛАД КУХНЯ МЯТА', 'PayTypes.Combo': 'Наличные', DishDiscountSumInt: 100000, 'UniqOrderId.OrdersCount': 10 },
+    { 'OpenDate.Typed': '2026-09-01', 'Store.Name': 'СКЛАД БАР МЯТА', 'PayTypes.Combo': 'Kaspi QR', DishDiscountSumInt: 80000.5, 'UniqOrderId.OrdersCount': 8 },
+    { 'OpenDate.Typed': '2026-09-01', 'Store.Name': 'СКЛАД КАЛЬЯН МЯТА', 'PayTypes.Combo': 'Halyk POS', DishDiscountSumInt: 70000, 'UniqOrderId.OrdersCount': 7 },
+    { 'OpenDate.Typed': '2026-09-02', 'Store.Name': 'СКЛАД КУХНЯ МЯТА', 'PayTypes.Combo': 'Наличные', DishDiscountSumInt: 50000, 'UniqOrderId.OrdersCount': 5 },
   ]
 
   it('складывает выручку по дням, отделам и оплатам', () => {
@@ -85,7 +95,7 @@ describe('iiko — тело запроса OLAP', () => {
   it('фильтр по датам и группировки соответствуют полям отчёта', () => {
     const body = buildSalesRequest({ from: '2026-09-01', to: '2026-09-02', organizationIds: ['org-1'] })
     assert.equal(body.reportType, 'SALES')
-    assert.deepEqual(body.groupByRowFields, [OLAP_FIELDS.date, OLAP_FIELDS.category, OLAP_FIELDS.payType])
+    assert.deepEqual(body.groupByRowFields, [OLAP_FIELDS.date, OLAP_FIELDS.department, OLAP_FIELDS.payType])
     assert.deepEqual(body.aggregateFields, [OLAP_FIELDS.sum, OLAP_FIELDS.orders])
     assert.equal(body.filters[OLAP_FIELDS.date].from, '2026-09-01')
     assert.equal(body.filters[OLAP_FIELDS.date].to, '2026-09-02')

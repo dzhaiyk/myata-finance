@@ -1,6 +1,8 @@
 // Клиент к iiko Cloud API через Netlify-функцию /api/iiko.
 // Ключ хранится на стороне функции; здесь только состав запроса и разбор ответа.
 
+import { departmentCode, DEPARTMENT_LABELS } from './config.js'
+
 const PROXY_URL = import.meta.env?.VITE_IIKO_PROXY_URL || '/api/iiko'
 const PROXY_KEY = import.meta.env?.VITE_IIKO_PROXY_KEY || ''
 
@@ -29,9 +31,12 @@ export const getOlapColumns = (reportType = 'SALES') =>
 
 // Поля OLAP-отчёта вынесены в константы: если в iiko они называются иначе,
 // правится одно место (и можно передать свои через параметр fields).
+//
+// Отдел берётся из склада списания, а не из категории блюда (BR-SHF-019):
+// за июнь–4 сентября 2026 склад заполнен у 100 % выручки, категория — у 82,7 %.
 export const OLAP_FIELDS = {
   date: 'OpenDate.Typed',
-  category: 'DishCategory',
+  department: 'Store.Name',
   payType: 'PayTypes.Combo',
   sum: 'DishDiscountSumInt',
   orders: 'UniqOrderId.OrdersCount',
@@ -41,7 +46,7 @@ export function buildSalesRequest({ organizationIds, from, to, fields = OLAP_FIE
   return {
     reportType: 'SALES',
     buildSummary: false,
-    groupByRowFields: [fields.date, fields.category, fields.payType],
+    groupByRowFields: [fields.date, fields.department, fields.payType],
     groupByColFields: [],
     aggregateFields: [fields.sum, fields.orders],
     filters: {
@@ -59,6 +64,11 @@ export const DEPARTMENTS = ['Кухня', 'Бар', 'Кальян', 'Проче�
 export const PAYMENT_TYPES = ['Наличные', 'Kaspi', 'Halyk', 'Wolt', 'Glovo', 'Yandex Eda', 'Прочее']
 
 export function normalizeDepartment(name) {
+  // Точное совпадение по справочнику — единственное место сопоставления (ADR-0010)
+  const code = departmentCode(name)
+  if (code) return DEPARTMENT_LABELS[code]
+  // Запасной разбор по смыслу названия: на случай, если в iiko настроят
+  // другие склады или понадобится разобрать категорию блюда
   const s = String(name || '').toLowerCase()
   if (/кальян|дым|табак|hookah/.test(s)) return 'Кальян'
   if (/бар|напит|коктейл|алкогол|пиво|вино|чай|кофе|лимонад|bar/.test(s)) return 'Бар'
@@ -95,7 +105,7 @@ export function mapOlapRows(rows, fields = OLAP_FIELDS) {
       payments: Object.fromEntries(PAYMENT_TYPES.map(p => [p, 0])),
       checks: 0, total: 0,
     })
-    day.departments[normalizeDepartment(row[fields.category])] += sum
+    day.departments[normalizeDepartment(row[fields.department])] += sum
     day.payments[normalizePaymentType(row[fields.payType])] += sum
     day.checks += num(row[fields.orders])
     day.total += sum
