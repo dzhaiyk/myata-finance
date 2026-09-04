@@ -41,7 +41,7 @@
 Статусы фактов: CONFIRMED · INFERRED · ASSUMED · OPEN. INFERRED/ASSUMED ≠ CONFIRMED. Владелец продукта и единственный, кто подтверждает, — Жайык.
 
 ## Скиллы
-`/start` · `/task <описание>` · `/discover <домен>` · `/handoff` · `/audit-docs` · `/adr <решение>`
+`/start` · `/task <описание>` · `/discover <домен | all>` · `/handoff` · `/audit-docs` · `/adr <решение>`
 Контекстные скиллы по коду: `bank-import`, `daily-report`, `pnl-structure`, `supabase-migration`, `myata-component`.
 
 ## Контекст
