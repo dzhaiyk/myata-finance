@@ -6,6 +6,7 @@ import { cn, fmt, fmtK, MONTHS_RU } from '@/lib/utils'
 import { yearsRange } from '@/lib/dates'
 import { ChevronDown, ChevronRight, ChevronsUpDown, Info, FileText, Upload, Wallet } from 'lucide-react'
 import { cashPayrollOf } from '@/lib/reconcile'
+import { isCapexRow } from '@/lib/config'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const CURRENT_MONTH = new Date().getMonth() + 1
@@ -97,7 +98,7 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
     cashBar += sum(w.suppliers_bar)
     ;(w.tobacco || []).forEach(row => {
       const amt = parseNum(row.amount)
-      if (row.name !== 'Аппараты') cashTobacco += amt
+      if (!isCapexRow(row.name)) cashTobacco += amt
     })
     // Выдача ЗП из кассы проводится менеджерами как инкассация с комментарием «зп/аванс/фот»
     const cp = cashPayrollOf(r)
@@ -186,7 +187,7 @@ function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, 
   let cashHookahCapex = 0
   monthReports.forEach(r => {
     ;(r.data?.withdrawals?.tobacco || []).forEach(row => {
-      if (row.name === 'Аппараты') cashHookahCapex += parseNum(row.amount)
+      if (isCapexRow(row.name)) cashHookahCapex += parseNum(row.amount)
     })
   })
   v.cf_capex_hookah = -cashHookahCapex

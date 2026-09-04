@@ -4,6 +4,7 @@
 import { getTxAmountForMonth } from './pnl.js'
 import { isPnlCategory } from './categories.js'
 import { isTechStaff } from './reconcile.js'
+import { departmentCode, isCapexRow } from './config.js'
 
 // P&L structure matching the restaurant's actual format
 // Each line: { key, label, level (0=header,1=group,2=sub), source, calc }
@@ -133,16 +134,24 @@ export function computeMonthValues(targetYear, targetMonth, allDailyReports, all
   } else {
     // Use live data (daily reports + bank transactions)
     let revK = 0, revB = 0, revH = 0, revO = 0
+    const unknownDepartments = new Set()
     monthReports.forEach(r => {
       const depts = (r.data?.departments) || []
       depts.forEach(d => {
         const a = Number(d.amount) || 0
-        if (d.name === 'Кухня') revK += a
-        else if (d.name === 'Бар') revB += a
-        else if (d.name === 'Кальян') revH += a
-        else revO += a
+        const code = departmentCode(d.name)
+        if (code === 'kitchen') revK += a
+        else if (code === 'bar') revB += a
+        else if (code === 'hookah') revH += a
+        else {
+          revO += a
+          // Нераспознанное название не должно тонуть молча: сумма попадает
+          // в «Прочее», но вызывающий видит, из-за чего (ADR-0010).
+          if (a !== 0) unknownDepartments.add(String(d.name ?? ''))
+        }
       })
     })
+    v.unknown_departments = [...unknownDepartments]
     v.rev_kitchen = revK; v.rev_bar = revB; v.rev_hookah = revH; v.rev_other = revO
     v.revenue = revK + revB + revH + revO
 
@@ -156,7 +165,7 @@ export function computeMonthValues(targetYear, targetMonth, allDailyReports, all
       ;(w.suppliers_bar || []).forEach(row => cashBar += Number(row.amount) || 0)
       ;(w.tobacco || []).forEach(row => {
         const amt = Number(row.amount) || 0
-        if (row.name === 'Аппараты') cashHookahCapex += amt
+        if (isCapexRow(row.name)) cashHookahCapex += amt
         else cashHookah += amt
       })
       ;(w.other || []).forEach(row => cashOther += Number(row.amount) || 0)

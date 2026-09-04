@@ -33,11 +33,10 @@ export default function RolesPage() {
         if (m[p.role_id]) m[p.role_id][p.permission_key] = p.allowed
       })
     }
-    // Admin always has all
-    const adminRole = r.find(x => x.name === 'Админ')
-    if (adminRole) {
-      Object.keys(ALL_PERMISSIONS).forEach(k => { m[adminRole.id] = { ...m[adminRole.id], [k]: true } })
-    }
+    // Суперроль всегда имеет всё — по флагу is_superuser, а не по названию (ADR-0010)
+    r.filter(x => x.is_superuser).forEach(su => {
+      Object.keys(ALL_PERMISSIONS).forEach(k => { m[su.id] = { ...m[su.id], [k]: true } })
+    })
     setPermsMatrix(m)
     setLoading(false)
   }
@@ -45,7 +44,7 @@ export default function RolesPage() {
   const togglePerm = (roleId, permKey) => {
     if (!canManage) return
     const role = roles.find(r => r.id === roleId)
-    if (role?.name === 'Админ') return
+    if (role?.is_superuser) return
     setPermsMatrix(prev => ({
       ...prev,
       [roleId]: { ...prev[roleId], [permKey]: !prev[roleId]?.[permKey] }
@@ -78,7 +77,7 @@ export default function RolesPage() {
     setSaving(true)
     try {
       for (const role of roles) {
-        if (role.name === 'Админ') continue // Skip admin
+        if (role.is_superuser) continue // права суперроли не хранятся построчно
         const perms = Object.entries(permsMatrix[role.id] || {})
         // Delete old and insert new
         await supabase.from('permissions').delete().eq('role_id', role.id)
@@ -176,7 +175,7 @@ export default function RolesPage() {
                       <div className="text-[10px] text-slate-600 font-mono">{perm.key}</div>
                     </td>
                     {roles.map(role => {
-                      const isAdmin = role.name === 'Админ'
+                      const isAdmin = role.is_superuser === true
                       const allowed = isAdmin || permsMatrix[role.id]?.[perm.key]
                       return (
                         <td key={role.id} className="border-t border-slate-800/50 text-center">

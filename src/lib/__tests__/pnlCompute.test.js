@@ -136,3 +136,39 @@ describe('P&L — распределение по периодам и сумми
     assert.equal(v.net_profit, 0)
   })
 })
+
+describe('P&L — сопоставление отделов и строк через config (ADR-0010, TASK-015)', () => {
+  it('нераспознанный отдел попадает в «Прочее» и виден в unknown_departments', () => {
+    const r = report('2026-05-10', {
+      departments: [{ name: 'Кухня', amount: '100000' }, { name: 'Пекарня', amount: '40000' }],
+    })
+    const v = computeMonthValues(2026, 5, [r], [], [])
+    assert.equal(v.rev_kitchen, 100000)
+    assert.equal(v.rev_other, 40000)
+    assert.deepEqual(v.unknown_departments, ['Пекарня'])
+  })
+
+  it('переименование отдела не тонет молча: сумма уходит в «Прочее», но название названо', () => {
+    const r = report('2026-05-10', {
+      departments: [{ name: 'Кухня Мята', amount: '100000' }],
+    })
+    const v = computeMonthValues(2026, 5, [r], [], [])
+    assert.equal(v.rev_kitchen, 0)
+    assert.equal(v.rev_other, 100000)
+    assert.deepEqual(v.unknown_departments, ['Кухня Мята'])
+  })
+
+  it('известные отделы не помечаются нераспознанными, пустые суммы не шумят', () => {
+    const v = computeMonthValues(2026, 5, [report('2026-05-10')], [], [])
+    assert.deepEqual(v.unknown_departments, [])
+  })
+
+  it('строка CapEx узнаётся без учёта регистра и не попадает в закуп кальяна', () => {
+    const r = report('2026-05-10', {
+      withdrawals: { tobacco: [{ name: 'Табак', amount: '3000' }, { name: 'аппараты', amount: '25000' }] },
+    })
+    const v = computeMonthValues(2026, 5, [r], [], [])
+    assert.equal(v.fc_hookah, 3000)
+    assert.equal(v.capex_other, 25000)   // аппараты идут в «CapEx прочее» (pnlCompute.js:207)
+  })
+})

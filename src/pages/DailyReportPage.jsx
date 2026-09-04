@@ -8,6 +8,7 @@ import { getBusinessDate } from '@/lib/dates'
 import StatementUploadCard from '@/components/StatementUploadCard'
 import { Save, Send, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Plus, Trash2, Calendar, ArrowLeft, FileText, Eye, Clock, Check, Pencil, Download } from 'lucide-react'
 import jsPDF from 'jspdf'
+import { CAPEX_ROW_LABEL } from '@/lib/config'
 
 const MoneyInput = ({ value, onChange, className = '', disabled = false }) => (
   <input type="text" inputMode="decimal" value={value} disabled={disabled}
@@ -50,7 +51,7 @@ const SECTIONS = [
   { key: 'cash_withdrawals', label: 'Изъятия из кассы', color: 'red', icon: '💸' },
 ]
 const FIXED_ROWS = {
-  tobacco: ['Табак', 'Угли', 'Расходники кальян', 'Аппараты', 'Доставка'],
+  tobacco: ['Табак', 'Угли', 'Расходники кальян', CAPEX_ROW_LABEL, 'Доставка'],
   other: ['Хозтовары', 'Мелкий ремонт', 'Доставка (Яндекс)', 'Канцтовары', 'Прочее'],
 }
 const PAYMENT_TYPES = ['Наличные', 'Kaspi', 'Halyk', 'Wolt', 'Glovo', 'Yandex Eda', 'Прочее']

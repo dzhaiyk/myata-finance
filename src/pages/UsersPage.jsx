@@ -4,7 +4,6 @@ import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { UserPlus, Trash2, Edit3, Check, X, Eye, EyeOff } from 'lucide-react'
 
-const ROLES = ['Админ', 'Учредитель', 'Управляющий', 'Менеджер']
 
 export default function UsersPage() {
   const { hasPermission } = useAuthStore()
@@ -17,7 +16,9 @@ export default function UsersPage() {
   const [showPasswords, setShowPasswords] = useState({})
 
   // New user form
-  const [form, setForm] = useState({ username: '', password: '', full_name: '', role_id: 4 })
+  // Роль не подставляется по умолчанию: раньше здесь стоял role_id: 4, и смысл
+  // зависел от порядка строк в таблице roles (ADR-0010, TASK-015).
+  const [form, setForm] = useState({ username: '', password: '', full_name: '', role_id: '' })
 
   const loadUsers = async () => {
     const { data } = await supabase.from('app_users').select('*').order('created_at')
@@ -32,6 +33,7 @@ export default function UsersPage() {
   const handleAdd = async () => {
     if (!form.username || !form.password || !form.full_name) return alert('Заполните все поля')
     if (form.username.length < 3) return alert('Логин минимум 3 символа')
+    if (!form.role_id) return alert('Выберите роль')
     
     const { error } = await supabase.from('app_users').insert({
       username: form.username.toLowerCase().trim(),
@@ -43,7 +45,7 @@ export default function UsersPage() {
       if (error.code === '23505') return alert('Логин уже занят')
       return alert('Ошибка: ' + error.message)
     }
-    setForm({ username: '', password: '', full_name: '', role_id: 4 })
+    setForm({ username: '', password: '', full_name: '', role_id: '' })
     setShowAdd(false)
     loadUsers()
   }
@@ -118,7 +120,8 @@ export default function UsersPage() {
             </div>
             <div>
               <label className="label">Роль</label>
-              <select value={form.role_id} onChange={e => setForm(f => ({...f, role_id: Number(e.target.value)}))} className="input text-sm w-full">
+              <select value={form.role_id} onChange={e => setForm(f => ({...f, role_id: e.target.value ? Number(e.target.value) : ''}))} className="input text-sm w-full">
+                <option value="">Выберите роль</option>
                 {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
             </div>

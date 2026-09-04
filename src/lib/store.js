@@ -36,10 +36,17 @@ export const useAuthStore = create((set, get) => ({
       return
     }
 
-    let roleName = 'Менеджер'
+    // Название роли — только для показа. Полные права даёт флаг is_superuser,
+    // а не совпадение имени: переименование роли не должно снимать доступ
+    // (ADR-0010, миграция 024).
+    let roleName = null
+    let isSuperuser = false
     if (user.role_id) {
-      const { data: role } = await supabase.from('roles').select('name').eq('id', user.role_id).single()
-      if (role) roleName = role.name
+      const { data: role } = await supabase.from('roles').select('name, is_superuser').eq('id', user.role_id).single()
+      if (role) {
+        roleName = role.name
+        isSuperuser = role.is_superuser === true
+      }
     }
 
     const perms = {}
@@ -47,7 +54,7 @@ export const useAuthStore = create((set, get) => ({
       const { data: permRows } = await supabase.from('permissions').select('permission_key, allowed').eq('role_id', user.role_id)
       if (permRows) permRows.forEach(p => { perms[p.permission_key] = p.allowed })
     }
-    if (roleName === 'Админ') {
+    if (isSuperuser) {
       Object.keys(ALL_PERMISSIONS).forEach(k => { perms[k] = true })
     }
 
@@ -55,14 +62,14 @@ export const useAuthStore = create((set, get) => ({
 
     set({
       user: { id: user.id },
-      profile: { ...user, roles: { name: roleName } },
+      profile: { ...user, roles: { name: roleName, is_superuser: isSuperuser } },
       permissions: perms,
     })
   },
 
   hasPermission: (key) => {
     const { permissions, profile } = get()
-    if (profile?.roles?.name === 'Админ') return true
+    if (profile?.roles?.is_superuser) return true
     return permissions[key] === true
   },
 

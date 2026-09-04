@@ -10,6 +10,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ReferenceLine, Legend, ComposedChart, Area
 } from 'recharts'
+import { isCapexRow } from '@/lib/config'
 
 const WEEKDAYS_RU = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
 const WEEKDAYS_ORDER = [1, 2, 3, 4, 5, 6, 0] // Mon–Sun
@@ -134,7 +135,7 @@ export default function AnalyticsPage() {
             const sum = (arr) => (arr || []).reduce((s, row) => s + (Number(row.amount) || 0), 0)
             fcK += sum(w.suppliers_kitchen)
             fcB += sum(w.suppliers_bar)
-            ;(w.tobacco || []).forEach(row => { if (row.name !== 'Аппараты') fcH += Number(row.amount) || 0 })
+            ;(w.tobacco || []).forEach(row => { if (!isCapexRow(row.name)) fcH += Number(row.amount) || 0 })
           })
           // Add bank cogs (кредиты-возвраты уменьшают закуп)
           bankTx.forEach(tx => {
