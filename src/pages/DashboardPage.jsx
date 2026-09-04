@@ -5,6 +5,7 @@ import { fmt, fmtK, fmtPct, MONTHS_RU } from '@/lib/utils'
 import { bankTxRangeFilter } from '@/lib/pnl'
 import { yearsRange } from '@/lib/dates'
 import { sumMonths } from '@/lib/pnlCompute'
+import { foodCostLevel, marginLevel, THRESHOLDS } from '@/lib/config'
 import { DollarSign, TrendingDown, ShoppingCart, CirclePercent, AlertTriangle, FileText, Trophy, CalendarDays } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts'
 
@@ -136,7 +137,7 @@ export default function DashboardPage() {
   ].filter(d => d.value > 0)
   const fcTotal = fcData.reduce((s, d) => s + d.value, 0)
   const fcPct = pnl.revenue > 0 ? fcTotal / pnl.revenue : 0
-  const fcColor = fcPct < 0.35 ? 'green' : fcPct < 0.45 ? 'yellow' : 'red'
+  const fcColor = foodCostLevel(fcPct)
 
   // Expense categories
   const expData = [
@@ -152,10 +153,10 @@ export default function DashboardPage() {
 
   // Margin
   const opMargin = pnl.revenue > 0 ? pnl.op_profit / pnl.revenue : 0
-  const marginColor = opMargin >= 0.30 ? 'green' : opMargin >= 0.15 ? 'yellow' : 'red'
+  const marginColor = marginLevel(opMargin)
 
   const completedMonthNames = [...monthsWithBank].sort((a, b) => a - b).map(m => MONTHS_RU[m].slice(0, 3))
-  const discrepancies = reports.filter(r => Math.abs(r.cash_discrepancy || 0) > 500)
+  const discrepancies = reports.filter(r => Math.abs(r.cash_discrepancy || 0) > THRESHOLDS.cashDiscrepancyFlag)
 
   // === RECORDS (all time) ===
   const WEEKDAYS_RU = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']

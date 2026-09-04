@@ -2,6 +2,7 @@
 // независимыми источниками. Функции чистые (данные приходят параметрами) —
 // покрыты юнит-тестами в __tests__/reconcile.test.js
 import { getBusinessDate } from './dates.js'
+import { THRESHOLDS } from './config.js'
 
 export const num = (v) => Number(String(v ?? '').replace(/\s/g, '').replace(',', '.')) || 0
 
@@ -43,7 +44,7 @@ export function checkRevenueConsistency(reports, tolerance = 1) {
 /**
  * Сверка №2 — касса: расхождения при пересчёте наличных.
  */
-export function checkCashDiscrepancies(reports, threshold = 500) {
+export function checkCashDiscrepancies(reports, threshold = THRESHOLDS.cashDiscrepancyFlag) {
   return reports.map(reportTotals)
     .filter(t => Math.abs(t.discrepancy) > threshold)
     .sort((a, b) => Math.abs(b.discrepancy) - Math.abs(a.discrepancy))
@@ -120,7 +121,7 @@ export function checkAcquiring(reports, bankTx, { feePct = 1.5, tolerancePct = 1
 /**
  * Сверка №5 — полнота выписки: расчётный остаток счёта ↔ фактическая сверка.
  */
-export function checkAccountBalance(expected, actual, tolerance = 100) {
+export function checkAccountBalance(expected, actual, tolerance = THRESHOLDS.accountBalanceTolerance) {
   if (actual == null) return { ok: null, delta: null }
   const delta = num(actual) - num(expected)
   return { ok: Math.abs(delta) <= tolerance, delta }
@@ -129,7 +130,7 @@ export function checkAccountBalance(expected, actual, tolerance = 100) {
 /**
  * Сверка №7 — ФОТ: начислено (расчёт зарплат) ↔ выплачено (нал авансы + безнал).
  */
-export function checkPayroll(payrollDetails, cashAdvances, bankPayroll, tolerance = 1000) {
+export function checkPayroll(payrollDetails, cashAdvances, bankPayroll, tolerance = THRESHOLDS.payrollTolerance) {
   const accrued = (payrollDetails || []).reduce((s, d) => s + num(d.total_earned), 0)
   const paid = num(cashAdvances) + num(bankPayroll)
   const delta = paid - accrued
@@ -232,7 +233,7 @@ export function cashTransit(bankTx) {
  * cash — sumCashPayroll(отчёты), bankPayroll — безнал ЗП по выписке.
  * fromOwners — то, что должно было выдаться из наличных учредителей.
  */
-export function checkPayrollLoop({ accrued, cash, bankPayroll = 0, tolerance = 1000 }) {
+export function checkPayrollLoop({ accrued, cash, bankPayroll = 0, tolerance = THRESHOLDS.payrollTolerance }) {
   const trackedPaid = num(cash?.advances) + num(cash?.payout) + num(bankPayroll)
   const fromOwners = num(accrued) - trackedPaid
   return { accrued: num(accrued), trackedPaid, fromOwners, ok: num(accrued) === 0 || fromOwners <= tolerance }
@@ -250,7 +251,7 @@ export function cashDividends(journalDividends, bankDividends) {
  * Необъяснённые наличные у учредителей: снято со счетов − возвращено − ушло на ЗП − дивиденды наличными.
  * Положительный остаток выше допуска = деньги вне контура.
  */
-export function unexplainedOwnerCash(transitNet, fromOwnersTotal, cashDividendsTotal = 0, tolerance = 500000, opening = 0) {
+export function unexplainedOwnerCash(transitNet, fromOwnersTotal, cashDividendsTotal = 0, tolerance = THRESHOLDS.ownerCashTolerance, opening = 0) {
   // opening — наличные у учредителей на 1 января (снятые в конце прошлого года, settings.owner_cash_opening)
   const unexplained = num(opening) + num(transitNet) - Math.max(0, num(fromOwnersTotal)) - Math.max(0, num(cashDividendsTotal))
   return { unexplained, ok: Math.abs(unexplained) <= tolerance }

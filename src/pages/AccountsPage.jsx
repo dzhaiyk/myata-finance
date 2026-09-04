@@ -4,6 +4,7 @@ import { fetchAll } from '@/lib/fetchAll'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
 import { getBusinessDate } from '@/lib/dates'
+import { THRESHOLDS } from '@/lib/config'
 import { Plus, Edit3, Trash2, ArrowRightLeft, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Save, RefreshCw, Eye, Power, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
 const TYPES = { cash: 'Касса', bank: 'Банк. счёт', deposit: 'Депозит', terminal: 'Терминал' }
@@ -377,7 +378,7 @@ export default function AccountsPage() {
             {activeAccounts.filter(a => !a.parent_account_id).map(acct => {
               const bal = calcBalance(acct.id)
               const lastBalance = balances.find(b => b.account_id === acct.id)
-              const hasDisc = lastBalance && lastBalance.discrepancy && Math.abs(lastBalance.discrepancy) > 100
+              const hasDisc = lastBalance && lastBalance.discrepancy && Math.abs(lastBalance.discrepancy) > THRESHOLDS.accountBalanceTolerance
               const children = activeAccounts.filter(c => c.parent_account_id === acct.id)
               return (
                 <div key={acct.id} className={cn('card-hover', hasDisc && 'border-red-500/30')}>
@@ -471,7 +472,7 @@ export default function AccountsPage() {
                 const actual = reconcileInputs[acct.id] !== undefined ? reconcileInputs[acct.id] : (existingBal?.actual_balance ?? '')
                 const disc = actual !== '' ? Number(String(actual).replace(',', '.')) - expected : null
                 return (
-                  <div key={acct.id} className={cn('bg-slate-900 rounded-xl p-4', acct.parent_account_id && 'ml-6 border-l-2 border-slate-800', disc !== null && Math.abs(disc) > 100 && 'ring-1 ring-red-500/30')}>
+                  <div key={acct.id} className={cn('bg-slate-900 rounded-xl p-4', acct.parent_account_id && 'ml-6 border-l-2 border-slate-800', disc !== null && Math.abs(disc) > THRESHOLDS.accountBalanceTolerance && 'ring-1 ring-red-500/30')}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span>{acct.icon}</span>
@@ -493,7 +494,7 @@ export default function AccountsPage() {
                       <div>
                         <div className="text-[10px] text-slate-500 uppercase mb-1">Расхождение</div>
                         {disc !== null ? (
-                          <div className={cn('font-mono text-sm font-bold', Math.abs(disc) > 100 ? 'text-red-400' : 'text-green-400')}>
+                          <div className={cn('font-mono text-sm font-bold', Math.abs(disc) > THRESHOLDS.accountBalanceTolerance ? 'text-red-400' : 'text-green-400')}>
                             {disc > 0 ? '+' : ''}{fmt(disc)} ₸
                           </div>
                         ) : <div className="text-sm text-slate-600">—</div>}
@@ -513,7 +514,7 @@ export default function AccountsPage() {
             <div className="divide-y divide-slate-800/50">
               {[...new Set(balances.map(b => b.balance_date))].slice(0, 7).map(date => {
                 const dayBals = balances.filter(b => b.balance_date === date)
-                const hasDisc = dayBals.some(b => b.discrepancy && Math.abs(b.discrepancy) > 100)
+                const hasDisc = dayBals.some(b => b.discrepancy && Math.abs(b.discrepancy) > THRESHOLDS.accountBalanceTolerance)
                 return (
                   <div key={date} className="px-4 py-3">
                     <div className="flex items-center justify-between mb-1">
@@ -525,7 +526,7 @@ export default function AccountsPage() {
                         const acct = accounts.find(a => a.id === b.account_id)
                         return (
                           <div key={b.id} className="text-[10px] text-slate-500">
-                            {acct?.icon} {acct?.name}: <span className={cn('font-mono', b.discrepancy && Math.abs(b.discrepancy) > 100 ? 'text-red-400' : 'text-green-400')}>
+                            {acct?.icon} {acct?.name}: <span className={cn('font-mono', b.discrepancy && Math.abs(b.discrepancy) > THRESHOLDS.accountBalanceTolerance ? 'text-red-400' : 'text-green-400')}>
                               {b.discrepancy != null ? (b.discrepancy > 0 ? '+' : '') + fmt(b.discrepancy) + ' ₸' : '✓'}
                             </span>
                           </div>

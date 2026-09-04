@@ -6,7 +6,11 @@ import { cn, fmt, fmtK, MONTHS_RU } from '@/lib/utils'
 import { isPnlCategory } from '@/lib/categories'
 import { yearsRange } from '@/lib/dates'
 import { PNL_STRUCTURE, computeMonthValues, sumMonths } from '@/lib/pnlCompute'
+import { foodCostLevel, marginLevel } from '@/lib/config'
 import { ChevronDown, ChevronRight, Plus, Trash2, Info, FileText, Upload, ChevronsUpDown, Pencil, Save, AlertCircle } from 'lucide-react'
+
+// Цвет показателя по уровню из config: зелёный / жёлтый / красный (BR-RPT-018)
+const LEVEL_CLASS = { green: 'text-green-400', yellow: 'text-yellow-400', red: 'text-red-400' }
 
 const CURRENT_YEAR = new Date().getFullYear()
 const CURRENT_MONTH = new Date().getMonth() + 1
@@ -315,12 +319,12 @@ export default function PnLPage() {
           : values
         const fmtM = (v) => (v / 1e6).toFixed(1) + 'М ₸'
         const marginPct = kpiValues.revenue > 0 ? (kpiValues.op_profit / kpiValues.revenue * 100).toFixed(1) : 0
-        const marginColor = marginPct >= 30 ? 'text-green-400' : marginPct >= 15 ? 'text-yellow-400' : 'text-red-400'
+        const marginColor = LEVEL_CLASS[marginLevel(marginPct / 100)]
         return (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <div className="card-hover text-center"><div className="stat-label">Выручка</div><div className="stat-value text-lg text-green-400">{fmtM(kpiValues.revenue || 0)}</div></div>
             <div className="card-hover text-center"><div className="stat-label">Food Cost</div>
-              <div className={cn('stat-value text-lg', (kpiValues.fc_pct || 0) > 0.32 ? 'text-red-400' : 'text-yellow-400')}>{fmtPct(kpiValues.fc_pct || 0)}</div></div>
+              <div className={cn('stat-value text-lg', LEVEL_CLASS[foodCostLevel(kpiValues.fc_pct || 0)])}>{fmtPct(kpiValues.fc_pct || 0)}</div></div>
             <div className="card-hover text-center"><div className="stat-label">ФОТ</div><div className="stat-value text-lg text-blue-400">{kpiValues.revenue > 0 ? (((kpiValues.payroll || 0) / kpiValues.revenue) * 100).toFixed(1) + '%' : '—'}</div></div>
             <div className="card-hover text-center"><div className="stat-label">Маржа</div>
               <div className={cn('stat-value text-lg', marginColor)}>{marginPct}%</div></div>
@@ -363,7 +367,7 @@ export default function PnLPage() {
             return (
               <div key={line.key} className={cn('flex items-center justify-between px-4 py-2', line.level === 2 && 'pl-10')}>
                 <span className={cn('text-sm', line.level === 0 ? 'font-bold' : 'text-slate-400')}>{line.label}</span>
-                <span className={cn('font-mono text-sm', val > 0.32 && line.key.includes('fc') ? 'text-red-400' : 'text-slate-300')}>{fmtPct(val)}</span>
+                <span className={cn('font-mono text-sm', line.key.includes('fc') ? LEVEL_CLASS[foodCostLevel(val)] : 'text-slate-300')}>{fmtPct(val)}</span>
               </div>
             )
           }

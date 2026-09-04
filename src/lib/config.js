@@ -61,3 +61,65 @@ const CAPEX_ROW_NAMES = [normalize(CAPEX_ROW_LABEL)]
 export function isCapexRow(name) {
   return CAPEX_ROW_NAMES.includes(normalize(name))
 }
+
+// --- Пороги ---------------------------------------------------------------
+//
+// Значения заведения. Пока они здесь — чтобы не расходиться по экранам, как было
+// до 05.09.2026: порог расхождения кассы был скопирован в пять мест, допуск
+// остатка счёта в пять, допуск наличных учредителей в три. Следующий шаг —
+// таблица settings и экран настроек (TASK-021, ADR-0010).
+
+export const THRESHOLDS = {
+  // Расхождение кассы: с какой суммы подсветить и с какой слать в Telegram.
+  // Почему два разных числа — открытый вопрос #3 домена shift.
+  cashDiscrepancyFlag: 500,
+  cashDiscrepancyAlert: 1000,
+  // Допуск при сверке остатка счёта с выпиской
+  accountBalanceTolerance: 100,
+  // Допуск необъяснённых наличных у учредителей
+  ownerCashTolerance: 500000,
+  // Допуск сверки ФОТ: ведомость против выдач
+  payrollTolerance: 1000,
+  // Доля ФОТ в выручке, выше которой аналитика поднимает тревогу
+  payrollShareAlert: 0.35,
+  // Ориентир доли ФОТ на графике
+  payrollShareTarget: 0.30,
+}
+
+// --- Границы показателей --------------------------------------------------
+
+// Единая норма food cost для всех экранов (BR-RPT-018, решение владельца 05.09.2026):
+// до warn — зелёный, между warn и critical — жёлтый, от critical — красный.
+// Тот же critical служит признаком аномалии в аналитике.
+// target — ориентир на графике, к нему стремимся; warn и critical красят цифры.
+export const FOOD_COST_BANDS = { target: 0.30, warn: 0.35, critical: 0.40 }
+
+// Границы операционной маржи, в долях. Выше good — зелёный, выше warn — жёлтый.
+export const MARGIN_BANDS = { good: 0.30, warn: 0.15 }
+
+/** @returns {'green'|'yellow'|'red'} уровень food cost по доле (0.37 = 37 %). */
+export function foodCostLevel(pct) {
+  const v = Number(pct) || 0
+  if (v < FOOD_COST_BANDS.warn) return 'green'
+  if (v < FOOD_COST_BANDS.critical) return 'yellow'
+  return 'red'
+}
+
+/** Food cost дошёл до красной зоны — аналитика считает это аномалией. */
+export const isFoodCostAnomaly = (pct) => (Number(pct) || 0) >= FOOD_COST_BANDS.critical
+
+/** @returns {'green'|'yellow'|'red'} уровень маржи по доле. */
+export function marginLevel(pct) {
+  const v = Number(pct) || 0
+  if (v >= MARGIN_BANDS.good) return 'green'
+  if (v >= MARGIN_BANDS.warn) return 'yellow'
+  return 'red'
+}
+
+// --- Списки категорий -----------------------------------------------------
+
+// Статьи ФОТ в P&L. До 05.09.2026 список был скопирован в четыре места.
+export const PAYROLL_CATEGORIES = [
+  'payroll_mgmt', 'payroll_kitchen', 'payroll_bar', 'payroll_hookah',
+  'payroll_hall', 'payroll_transport', 'payroll_other',
+]

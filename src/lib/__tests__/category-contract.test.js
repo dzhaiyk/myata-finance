@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { resolve, dirname } from 'node:path'
 import { CATEGORIES, KEYWORD_RULES } from '../categorize.js'
+import { PAYROLL_CATEGORIES } from '../config.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const read = (p) => readFileSync(resolve(root, p), 'utf8')
@@ -70,10 +71,15 @@ describe('PNL_STRUCTURE ↔ таблица categories', () => {
 describe('CashFlowPage группы категорий ↔ таблица categories', () => {
   const cfSrc = read('src/pages/CashFlowPage.jsx')
   const catArrays = [...cfSrc.matchAll(/const [A-Z_]+_CATS = \[([^\]]+)\]/g)]
-  const cfCodes = catArrays.flatMap(m => [...m[1].matchAll(/'([a-z0-9_]+)'/g)].map(x => x[1]))
+  // PAYROLL_CATS переехал в config.js (TASK-017): в исходнике страницы его больше
+  // нет литералом, поэтому коды ФОТ берём из общего списка
+  const cfCodes = [
+    ...catArrays.flatMap(m => [...m[1].matchAll(/'([a-z0-9_]+)'/g)].map(x => x[1])),
+    ...PAYROLL_CATEGORIES,
+  ]
 
   it('CF-группы извлеклись', () => {
-    assert.equal(catArrays.length, 8)
+    assert.equal(catArrays.length, 7)
     assert.ok(cfCodes.length > 30)
   })
 

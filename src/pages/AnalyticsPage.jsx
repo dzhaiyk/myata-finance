@@ -10,7 +10,10 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ReferenceLine, Legend, ComposedChart, Area
 } from 'recharts'
-import { isCapexRow } from '@/lib/config'
+import { isCapexRow, isFoodCostAnomaly, FOOD_COST_BANDS, THRESHOLDS, PAYROLL_CATEGORIES } from '@/lib/config'
+
+// Доля в подпись графика: 0.35 → «35%»
+const pctLabel = (v) => `${Math.round(v * 100)}%`
 
 const WEEKDAYS_RU = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
 const WEEKDAYS_ORDER = [1, 2, 3, 4, 5, 6, 0] // Mon–Sun
@@ -174,7 +177,7 @@ export default function AnalyticsPage() {
           fcKitchen: revK > 0 ? (fcK / revK * 100) : 0,
           fcBar: revB > 0 ? (fcB / revB * 100) : 0,
           fcHookah: revH > 0 ? (fcH / revH * 100) : 0,
-          anomaly: revenue > 0 && (totalFC / revenue) > 0.40,
+          anomaly: revenue > 0 && isFoodCostAnomaly(totalFC / revenue),
         })
       }
     }
@@ -183,7 +186,7 @@ export default function AnalyticsPage() {
 
   // ====== 3.4 Payroll % Trend ======
   const payrollTrend = useMemo(() => {
-    const payrollCats = ['payroll_mgmt', 'payroll_kitchen', 'payroll_bar', 'payroll_hookah', 'payroll_hall', 'payroll_transport', 'payroll_other']
+    const payrollCats = PAYROLL_CATEGORIES
     const months = []
     for (const y of yearsRange()) {
       for (let m = 1; m <= 12; m++) {
@@ -214,7 +217,7 @@ export default function AnalyticsPage() {
         months.push({
           label: `${MONTHS_RU[m - 1].slice(0, 3)} ${String(y).slice(2)}`,
           payrollPct: (payroll / revenue) * 100,
-          alert: (payroll / revenue) > 0.35,
+          alert: (payroll / revenue) > THRESHOLDS.payrollShareAlert,
         })
       }
     }
@@ -224,7 +227,7 @@ export default function AnalyticsPage() {
   // ====== 3.5 Expense Anomaly Detection ======
   const anomalies = useMemo(() => {
     const opexCategories = [
-      { key: 'payroll', label: 'ФОТ', cats: ['payroll_mgmt', 'payroll_kitchen', 'payroll_bar', 'payroll_hookah', 'payroll_hall', 'payroll_transport', 'payroll_other'] },
+      { key: 'payroll', label: 'ФОТ', cats: PAYROLL_CATEGORIES },
       { key: 'rent', label: 'Аренда', cats: ['rent_premises', 'rent_warehouse', 'rent_property_tax'] },
       { key: 'utilities', label: 'Коммунальные', cats: ['util_electric', 'util_water', 'util_heating', 'util_bi', 'util_internet', 'util_waste', 'util_other'] },
       { key: 'marketing', label: 'Маркетинг', cats: ['mkt_smm', 'mkt_target', 'mkt_2gis', 'mkt_yandex', 'mkt_google', 'mkt_other'] },
@@ -442,7 +445,7 @@ export default function AnalyticsPage() {
             <h2 className="text-sm font-semibold text-slate-300">Food Cost % (помесячно)</h2>
             {fcTrend.some(m => m.anomaly) && (
               <span className="badge bg-red-500/10 text-red-400 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" /> Аномалия (&gt;40%)
+                <AlertTriangle className="w-3 h-3" /> Аномалия (&gt;{pctLabel(FOOD_COST_BANDS.critical)})
               </span>
             )}
           </div>
@@ -452,9 +455,9 @@ export default function AnalyticsPage() {
               <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 9 }} interval={2} />
               <YAxis tick={{ fill: '#64748b', fontSize: 10 }} domain={[0, 60]} tickFormatter={v => v + '%'} />
               <Tooltip contentStyle={chartTooltipStyle} formatter={(v) => [v.toFixed(1) + '%']} labelStyle={{ color: '#94a3b8' }} />
-              <ReferenceLine y={30} stroke="#22c55e" strokeDasharray="5 5" label={{ value: '30%', fill: '#22c55e', fontSize: 10 }} />
-              <ReferenceLine y={35} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: '35%', fill: '#f59e0b', fontSize: 10 }} />
-              <ReferenceLine y={40} stroke="#ef4444" strokeDasharray="5 5" label={{ value: '40%', fill: '#ef4444', fontSize: 10 }} />
+              <ReferenceLine y={FOOD_COST_BANDS.target * 100} stroke="#22c55e" strokeDasharray="5 5" label={{ value: pctLabel(FOOD_COST_BANDS.target), fill: '#22c55e', fontSize: 10 }} />
+              <ReferenceLine y={FOOD_COST_BANDS.warn * 100} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: pctLabel(FOOD_COST_BANDS.warn), fill: '#f59e0b', fontSize: 10 }} />
+              <ReferenceLine y={FOOD_COST_BANDS.critical * 100} stroke="#ef4444" strokeDasharray="5 5" label={{ value: pctLabel(FOOD_COST_BANDS.critical), fill: '#ef4444', fontSize: 10 }} />
               <Line type="monotone" dataKey="fcTotal" stroke="#f59e0b" strokeWidth={2} dot={false} name="Итого FC%" />
               <Line type="monotone" dataKey="fcKitchen" stroke="#22c55e" strokeWidth={1.5} dot={false} name="Кухня" />
               <Line type="monotone" dataKey="fcBar" stroke="#3b82f6" strokeWidth={1.5} dot={false} name="Бар" />
@@ -472,7 +475,7 @@ export default function AnalyticsPage() {
             <h2 className="text-sm font-semibold text-slate-300">ФОТ % от выручки (помесячно)</h2>
             {payrollTrend.some(m => m.alert) && (
               <span className="badge bg-red-500/10 text-red-400 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" /> &gt;35%
+                <AlertTriangle className="w-3 h-3" /> &gt;{pctLabel(THRESHOLDS.payrollShareAlert)}
               </span>
             )}
           </div>
@@ -482,8 +485,8 @@ export default function AnalyticsPage() {
               <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 9 }} interval={2} />
               <YAxis tick={{ fill: '#64748b', fontSize: 10 }} domain={[0, 50]} tickFormatter={v => v + '%'} />
               <Tooltip contentStyle={chartTooltipStyle} formatter={(v) => [v.toFixed(1) + '%']} labelStyle={{ color: '#94a3b8' }} />
-              <ReferenceLine y={30} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: '30%', fill: '#f59e0b', fontSize: 10 }} />
-              <ReferenceLine y={35} stroke="#ef4444" strokeDasharray="5 5" label={{ value: '35%', fill: '#ef4444', fontSize: 10 }} />
+              <ReferenceLine y={THRESHOLDS.payrollShareTarget * 100} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: pctLabel(THRESHOLDS.payrollShareTarget), fill: '#f59e0b', fontSize: 10 }} />
+              <ReferenceLine y={THRESHOLDS.payrollShareAlert * 100} stroke="#ef4444" strokeDasharray="5 5" label={{ value: pctLabel(THRESHOLDS.payrollShareAlert), fill: '#ef4444', fontSize: 10 }} />
               <Line type="monotone" dataKey="payrollPct" stroke="#818cf8" strokeWidth={2} dot={false} name="ФОТ %" />
               <Legend wrapperStyle={{ fontSize: 11 }} />
             </LineChart>

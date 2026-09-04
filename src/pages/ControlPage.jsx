@@ -4,6 +4,7 @@ import { fetchAll } from '@/lib/fetchAll'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, MONTHS_RU } from '@/lib/utils'
 import { yearsRange } from '@/lib/dates'
+import { THRESHOLDS, PAYROLL_CATEGORIES } from '@/lib/config'
 import {
   checkRevenueConsistency, checkCashDiscrepancies, checkAcquiring, checkAccountBalance,
   findMissingShifts, checkStatementFreshness, countOpenIssues, num,
@@ -14,7 +15,7 @@ import { ShieldCheck, AlertTriangle, CheckCircle2, XCircle, MinusCircle, Calenda
 const CURRENT_YEAR = new Date().getFullYear()
 const CURRENT_MONTH = new Date().getMonth() + 1
 
-const PAYROLL_CATS = ['payroll_mgmt', 'payroll_kitchen', 'payroll_bar', 'payroll_hookah', 'payroll_hall', 'payroll_transport', 'payroll_other']
+const PAYROLL_CATS = PAYROLL_CATEGORIES
 
 // Карточка одной сверки: зелёный / красный / серый (нет данных)
 const Check = ({ title, subtitle, state, value, detail }) => {
@@ -132,7 +133,7 @@ export default function ControlPage() {
       cumNet += tr.net; cumOwners += fromOwners; cumDiv += cashDiv
       return { month: m, withdrawn: tr.withdrawn, returned: tr.returned, net: tr.net, fromOwners, cashDiv, cumulative: cumNet - cumOwners - cumDiv }
     })
-    const owners = { ...unexplainedOwnerCash(cumNet - ownerOpening, cumOwners, cumDiv, 500000, ownerOpening), opening: ownerOpening,
+    const owners = { ...unexplainedOwnerCash(cumNet - ownerOpening, cumOwners, cumDiv, THRESHOLDS.ownerCashTolerance, ownerOpening), opening: ownerOpening,
       withdrawn: cumNet - ownerOpening + transitRows.reduce((a, r) => a + r.returned, 0),
       returned: transitRows.reduce((a, r) => a + r.returned, 0), fromOwners: cumOwners, cashDiv: cumDiv }
 

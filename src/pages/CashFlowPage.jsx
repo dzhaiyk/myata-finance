@@ -6,7 +6,7 @@ import { cn, fmt, fmtK, MONTHS_RU } from '@/lib/utils'
 import { yearsRange } from '@/lib/dates'
 import { ChevronDown, ChevronRight, ChevronsUpDown, Info, FileText, Upload, Wallet } from 'lucide-react'
 import { cashPayrollOf } from '@/lib/reconcile'
-import { isCapexRow } from '@/lib/config'
+import { isCapexRow, PAYROLL_CATEGORIES } from '@/lib/config'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const CURRENT_MONTH = new Date().getMonth() + 1
@@ -56,7 +56,7 @@ const CF_STRUCTURE = [
 ]
 
 // Bank category groupings for CF
-const PAYROLL_CATS = ['payroll_mgmt', 'payroll_kitchen', 'payroll_bar', 'payroll_hookah', 'payroll_hall', 'payroll_transport', 'payroll_other']
+const PAYROLL_CATS = PAYROLL_CATEGORIES
 const COGS_CATS = ['cogs_kitchen', 'cogs_bar', 'cogs_hookah']
 const RENT_CATS = ['rent_premises', 'rent_warehouse', 'rent_property_tax']
 const UTIL_CATS = ['util_electric', 'util_water', 'util_heating', 'util_bi', 'util_internet', 'util_waste', 'util_other']
