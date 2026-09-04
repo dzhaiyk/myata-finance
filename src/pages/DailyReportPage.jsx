@@ -896,7 +896,7 @@ export default function DailyReportPage() {
 
       {/* Выписки банков: менеджер загружает файл, категории ставит учредитель или бухгалтер */}
       {hasPermission('bank_import.upload') && (
-        <StatementUploadCard accounts={allAccounts.filter(a => a.type === 'bank')} managerName={profile?.full_name} onFreshness={setStmtFreshness} />
+        <StatementUploadCard accounts={allAccounts.filter(a => a.type === 'bank')} date={date} managerName={profile?.full_name} onFreshness={setStmtFreshness} />
       )}
 
       {/* ══════════ БЛОК 1: ДОХОДЫ ══════════ */}

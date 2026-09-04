@@ -175,8 +175,10 @@ export async function stageStatement(supabase, file, { accountId, cutoffHour } =
  * категория влияет только на P&L и Cash Flow — поэтому движение по счёту
  * создаётся для всех строк, включая нераспознанные.
  */
-export async function commitImport(supabase, rows) {
+export async function commitImport(supabase, rows, { reviewNote = null } = {}) {
   if (!rows?.length) return { inserted: [], skipped: 0 }
+  // Пометка «к проверке» ставится на все строки файла: снять её можно на странице «Импорт выписки»
+  if (reviewNote) rows = rows.map(r => ({ ...r, review_note: reviewNote }))
   let inserted = []
   let skipped = 0
   const { data, error } = await supabase.from('bank_transactions').insert(rows).select()
@@ -205,6 +207,13 @@ export async function commitImport(supabase, rows) {
     if (e3) throw e3
   }
   return { inserted, skipped }
+}
+
+/** Текст пометки для файла, у которого не сошлись остатки; null, если всё в порядке. */
+export function balanceReviewNote(balanceCheck, fileName = '') {
+  if (!balanceCheck || balanceCheck.ok) return null
+  const delta = Math.round(balanceCheck.delta)
+  return `Остатки в файле не сошлись на ${delta.toLocaleString('ru-RU')} ₸ (${fileName || 'файл'})`
 }
 
 export function summarizeImport(rows) {

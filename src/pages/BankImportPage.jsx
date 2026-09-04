@@ -204,6 +204,7 @@ export default function BankImportPage() {
   const canManage = hasPermission('bank_import.categorize')
   const [transactions, setTransactions] = useState([])
   const [txCount, setTxCount] = useState(0)
+  const [onlyReview, setOnlyReview] = useState(false) // только строки с пометкой «к проверке»
   const [categories, setCategories] = useState([])
   const [rules, setRules] = useState([])
   const [ruleConditions, setRuleConditions] = useState([])
@@ -338,6 +339,12 @@ export default function BankImportPage() {
       .eq('reference_type', 'bank_import').eq('reference_id', String(tx.id))
   }
 
+  // Снять пометку «к проверке» после того, как файл сверен с банком
+  const clearReview = async (id) => {
+    await supabase.from('bank_transactions').update({ review_note: null }).eq('id', id)
+    setTransactions(prev => prev.map(t => t.id === id ? { ...t, review_note: null } : t))
+  }
+
   const updateCategory = async (id, category) => {
     await supabase.from('bank_transactions').update({ category, confidence: 'manual' }).eq('id', id)
     const tx = transactions.find(t => t.id === id)
@@ -447,7 +454,7 @@ export default function BankImportPage() {
     if (sortCol !== col) return <ArrowUpDown className="w-3 h-3 text-slate-600 inline ml-1" />
     return sortDir === 'asc' ? <ArrowUp className="w-3 h-3 text-brand-400 inline ml-1" /> : <ArrowDown className="w-3 h-3 text-brand-400 inline ml-1" />
   }
-  const sorted = [...transactions].sort((a, b) => {
+  const sorted = transactions.filter(t => !onlyReview || t.review_note).sort((a, b) => {
     const dir = sortDir === 'asc' ? 1 : -1
     if (sortCol === 'transaction_date') return dir * (new Date(a.transaction_date) - new Date(b.transaction_date))
     if (sortCol === 'beneficiary') return dir * (a.beneficiary || '').localeCompare(b.beneficiary || '', 'ru')
@@ -458,6 +465,7 @@ export default function BankImportPage() {
     return 0
   })
   const uncatCount = transactions.filter(t => t.category === 'uncategorized').length
+  const reviewCount = transactions.filter(t => t.review_note).length
   const toggleSelect = (id) => setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
 
   if (loading) return <div className="text-center text-slate-500 py-20">Загрузка...</div>
@@ -467,7 +475,13 @@ export default function BankImportPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-display font-bold tracking-tight">Импорт выписки</h1>
-          <p className="text-sm text-slate-500 mt-0.5">{txCount} записей за {MONTHS_SHORT[filterMonth - 1]} {filterYear}{uncatCount > 0 ? ` · ${uncatCount} не распознано` : ''}</p>
+          <p className="text-sm text-slate-500 mt-0.5">{txCount} записей за {MONTHS_SHORT[filterMonth - 1]} {filterYear}{uncatCount > 0 ? ` · ${uncatCount} не распознано` : ''}
+            {reviewCount > 0 && (
+              <button onClick={() => setOnlyReview(v => !v)} className={cn('ml-2 badge text-[10px] cursor-pointer', onlyReview ? 'badge-yellow' : 'badge-red')}>
+                ⚠ {reviewCount} к проверке{onlyReview ? ' · показать все' : ''}
+              </button>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="input text-sm">
@@ -741,7 +755,15 @@ export default function BankImportPage() {
                     <tr key={tx._idx} className={cn('hover:bg-slate-800/30', tx.category === 'uncategorized' && 'bg-yellow-500/5')}>
                       <td className="table-cell"><input type="checkbox" checked={stagedSelected.has(tx._idx)} onChange={() => toggleStagedSelect(tx._idx)} /></td>
                       <td className="table-cell text-xs text-slate-400 whitespace-nowrap">{tx.transaction_date}</td>
-                      <td className="table-cell text-xs max-w-[200px] truncate" title={tx.beneficiary}>{tx.beneficiary || '—'}</td>
+                      <td className="table-cell text-xs max-w-[200px]" title={tx.review_note || tx.beneficiary}>
+                  <div className="flex items-center gap-1.5">
+                    {tx.review_note && (
+                      <button onClick={() => canManage && clearReview(tx.id)} title={`${tx.review_note}. Нажмите, чтобы снять пометку`}
+                        className="badge badge-red text-[10px] shrink-0">⚠</button>
+                    )}
+                    <span className="truncate">{tx.beneficiary || '—'}</span>
+                  </div>
+                </td>
                       <td className="table-cell text-xs max-w-[200px] truncate text-slate-500" title={tx.purpose}>{tx.purpose || '—'}</td>
                       <td className={cn('table-cell text-right font-mono text-xs font-semibold', tx.is_debit ? 'text-red-400' : 'text-green-400')}>
                         {tx.is_debit ? '-' : '+'}{fmt(tx.amount)} ₸
@@ -796,7 +818,15 @@ export default function BankImportPage() {
               <tr key={tx.id} className={cn('hover:bg-slate-800/30', tx.category === 'uncategorized' && 'bg-yellow-500/5')}>
                 <td className="table-cell"><input type="checkbox" checked={selectedIds.has(tx.id)} onChange={() => toggleSelect(tx.id)} /></td>
                 <td className="table-cell text-xs text-slate-400 whitespace-nowrap">{tx.transaction_date}</td>
-                <td className="table-cell text-xs max-w-[200px] truncate" title={tx.beneficiary}>{tx.beneficiary || '—'}</td>
+                <td className="table-cell text-xs max-w-[200px]" title={tx.review_note || tx.beneficiary}>
+                  <div className="flex items-center gap-1.5">
+                    {tx.review_note && (
+                      <button onClick={() => canManage && clearReview(tx.id)} title={`${tx.review_note}. Нажмите, чтобы снять пометку`}
+                        className="badge badge-red text-[10px] shrink-0">⚠</button>
+                    )}
+                    <span className="truncate">{tx.beneficiary || '—'}</span>
+                  </div>
+                </td>
                 <td className="table-cell text-xs max-w-[200px] truncate text-slate-500" title={tx.purpose}>{tx.purpose || '—'}</td>
                 <td className={cn('table-cell text-right font-mono text-xs font-semibold', tx.is_debit ? 'text-red-400' : 'text-green-400')}>
                   {tx.is_debit ? '-' : '+'}{fmt(tx.amount)} ₸

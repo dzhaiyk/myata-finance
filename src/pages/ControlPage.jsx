@@ -138,7 +138,8 @@ export default function ControlPage() {
         date: last?.balance_date, ...checkAccountBalance(expected, last?.actual_balance ?? null) }
     })
 
-    return { open, missing, freshness, revenue, cashDisc, acquiring, payroll, accountChecks, transitRows, owners }
+    const review = bankTx.filter(t => t.review_note)
+    return { open, missing, freshness, revenue, cashDisc, acquiring, payroll, accountChecks, transitRows, owners, review }
   }, [reports, submitted, bankTx, accounts, acctTx, balances, pnlRows, ytdReports, transitTx, year, month, startDate, endDate])
 
   if (!hasPermission('dashboard.view')) {
@@ -146,9 +147,9 @@ export default function ControlPage() {
   }
   if (loading) return <div className="text-center text-slate-500 py-20">Загрузка сверок...</div>
 
-  const { open, missing, freshness, revenue, cashDisc, acquiring, payroll, accountChecks, transitRows, owners } = checks
+  const { open, missing, freshness, revenue, cashDisc, acquiring, payroll, accountChecks, transitRows, owners, review } = checks
   const blockers = [
-    missing.length > 0, open.drafts > 0, open.uncategorized > 0, !freshness.ok,
+    missing.length > 0, open.drafts > 0, open.uncategorized > 0, !freshness.ok, review.length > 0,
     revenue.length > 0, cashDisc.length > 0,
     acquiring.hasData && !acquiring.ok,
     payroll.accrued > 0 && !payroll.ok,
@@ -209,6 +210,10 @@ export default function ControlPage() {
           <Check title="Транзакции разнесены" subtitle="Нераспознанные строки выписки"
             state={open.uncategorized === 0 ? 'ok' : 'fail'}
             value={open.uncategorized === 0 ? 'все' : `${open.uncategorized} шт.`} />
+          <Check title="Выписки к проверке" subtitle="Файлы, у которых не сошлись остатки"
+            state={review.length === 0 ? 'ok' : 'fail'}
+            value={review.length === 0 ? 'нет' : `${review.length} стр.`}
+            detail={review.length > 0 ? [...new Set(review.map(t => t.review_note))].slice(0, 2).join('; ') : null} />
         </div>
       </div>
 

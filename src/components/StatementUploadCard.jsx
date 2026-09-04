@@ -4,7 +4,7 @@ import { cn, fmt } from '@/lib/utils'
 import { getCutoffHour } from '@/lib/dates'
 import {
   loadLastStatementDates, stageStatement, commitImport, summarizeImport,
-  statementFreshness, formatStatementUploadNotification,
+  statementFreshness, formatStatementUploadNotification, balanceReviewNote,
 } from '@/lib/bankImport'
 import { sendTelegramNotification } from '@/lib/telegram'
 import { Landmark, Upload, CheckCircle2, AlertTriangle, X } from 'lucide-react'
@@ -14,8 +14,9 @@ const shortDate = (iso) => (iso ? new Date(iso + 'T12:00:00').toLocaleDateString
 // Ежедневная загрузка выписок из отчёта смены. Менеджер только загружает файл:
 // категории ставит учредитель или бухгалтер на странице «Импорт выписки».
 // Счета без единой операции (депозиты) не показываются — по ним выписки не нужны.
-export default function StatementUploadCard({ accounts, managerName, onFreshness }) {
+export default function StatementUploadCard({ accounts, date, managerName, onFreshness }) {
   const [lastDates, setLastDates] = useState(null)
+  const [onDate, setOnDate] = useState({}) // { accountId: { n, debit, credit } } — операции за дату отчёта
   const [staged, setStaged] = useState(null)
   const [busyId, setBusyId] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -25,7 +26,22 @@ export default function StatementUploadCard({ accounts, managerName, onFreshness
   const ids = accounts.map(a => a.id).join(',')
   useEffect(() => { if (accounts.length) refresh() }, [ids])
 
-  const refresh = async () => setLastDates(await loadLastStatementDates(supabase, accounts))
+  const refresh = async () => {
+    const [dates, perDate] = await Promise.all([loadLastStatementDates(supabase, accounts), loadOnDate()])
+    setLastDates(dates); setOnDate(perDate)
+  }
+  // Что уже есть в базе за дату отчёта — чтобы после загрузки сразу было видно, что день закрыт
+  const loadOnDate = async () => {
+    if (!date) return {}
+    const { data } = await supabase.from('bank_transactions').select('account_id, amount, is_debit').eq('transaction_date', date)
+    const acc = {}
+    for (const t of data || []) {
+      const cur = acc[t.account_id] || (acc[t.account_id] = { n: 0, debit: 0, credit: 0 })
+      cur.n++; cur[t.is_debit ? 'debit' : 'credit'] += Number(t.amount)
+    }
+    return acc
+  }
+  useEffect(() => { if (accounts.length && lastDates) loadOnDate().then(setOnDate) }, [date])
 
   const operating = accounts.filter(a => lastDates && lastDates[a.id])
   const rows = operating.map(a => ({ account: a, ...statementFreshness(lastDates[a.id]) }))
@@ -57,7 +73,7 @@ export default function StatementUploadCard({ accounts, managerName, onFreshness
     if (!staged) return
     setSaving(true)
     try {
-      const { inserted, skipped } = await commitImport(supabase, staged.rows)
+      const { inserted, skipped } = await commitImport(supabase, staged.rows, { reviewNote: balanceReviewNote(staged.balanceCheck, staged.fileName) })
       const s = summarizeImport(inserted)
       setNotice({ ok: true, text: `${staged.account.name}: сохранено ${inserted.length} операций` + (skipped ? `, пропущено ${skipped}` : '') + (s.uncategorized ? `, без категории ${s.uncategorized}` : '') })
       try {
@@ -76,7 +92,6 @@ export default function StatementUploadCard({ accounts, managerName, onFreshness
   }
 
   if (!lastDates) return null
-  const blocked = staged?.balanceCheck && !staged.balanceCheck.ok
 
   return (
     <div className="card border-sky-500/20 bg-sky-500/5 space-y-3">
@@ -97,6 +112,11 @@ export default function StatementUploadCard({ accounts, managerName, onFreshness
             <span className={cn('text-xs', ok ? 'text-slate-500' : 'text-amber-400')}>
               {never ? 'выписки нет' : `до ${shortDate(lastDates[account.id])} · ${daysAgo === 0 ? 'сегодня' : `${daysAgo} дн. назад`}`}
             </span>
+            {date && (
+              <span className={cn('text-[11px] whitespace-nowrap', onDate[account.id] ? 'text-slate-400' : 'text-slate-600')}>
+                {onDate[account.id] ? `за ${shortDate(date)}: ${onDate[account.id].n} оп., −${fmt(onDate[account.id].debit)} / +${fmt(onDate[account.id].credit)}` : `за ${shortDate(date)}: нет операций`}
+              </span>
+            )}
           </div>
           <input type="file" accept=".xlsx,.xls,.pdf" className="hidden"
             ref={el => { inputs.current[account.id] = el }} onChange={e => handleFile(account, e)} />
@@ -121,13 +141,13 @@ export default function StatementUploadCard({ accounts, managerName, onFreshness
           </div>
           <div className="text-slate-400">Списания {fmt(staged.summary.debit)} ₸ · Поступления {fmt(staged.summary.credit)} ₸{staged.hidden ? ` · скрыто правилами ${staged.hidden}` : ''}</div>
           {staged.balanceCheck && (
-            <div className={cn('flex items-center gap-1.5', staged.balanceCheck.ok ? 'text-green-400' : 'text-red-400')}>
+            <div className={cn('flex items-center gap-1.5', staged.balanceCheck.ok ? 'text-green-400' : 'text-amber-400')}>
               {staged.balanceCheck.ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
-              {staged.balanceCheck.ok ? 'Остатки в файле сходятся' : `Файл неполный: остатки не сходятся на ${fmt(staged.balanceCheck.delta)} ₸. Выгрузите выписку заново.`}
+              {staged.balanceCheck.ok ? 'Остатки в файле сходятся' : `Остатки не сходятся на ${fmt(staged.balanceCheck.delta)} ₸ — сохраним с пометкой «к проверке», лучше выгрузить файл заново`}
             </div>
           )}
           {staged.parseIssues?.length > 0 && <div className="text-amber-400">{staged.parseIssues.slice(0, 3).join('; ')}</div>}
-          <button onClick={confirmImport} disabled={saving || blocked}
+          <button onClick={confirmImport} disabled={saving}
             className="btn-primary text-xs w-full disabled:opacity-50">
             {saving ? 'Сохранение…' : `Сохранить ${staged.rows.length} операций`}
           </button>

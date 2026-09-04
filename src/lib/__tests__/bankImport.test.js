@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   generateTxHash, matchCondition, applyDbRules, withConditions, monthBounds,
   buildImportRows, splitDuplicates, summarizeImport, statementFreshness,
-  formatStatementUploadNotification, commitImport, stageStatement,
+  formatStatementUploadNotification, commitImport, stageStatement, balanceReviewNote,
 } from '../bankImport.js'
 
 const parsedTx = (over = {}) => ({
@@ -161,6 +161,16 @@ describe('Запись в базу', () => {
     const sb = fakeSupabase({ insertError: { message: 'duplicate key value violates unique constraint' } })
     const { inserted, skipped } = await commitImport(sb, [{ account_id: 2, amount: 1, is_debit: true }, { account_id: 2, amount: 2, is_debit: true }])
     assert.equal(inserted.length + skipped, 2)
+  })
+  it('несошедшиеся остатки: строки сохраняются с пометкой «к проверке»', async () => {
+    const note = balanceReviewNote({ opening: 100, closing: 50, delta: 12345.6, ok: false }, 'kaspi.xlsx')
+    assert.match(note, /12\s346 ₸ \(kaspi.xlsx\)/) // разделитель тысяч — неразрывный пробел
+    assert.equal(balanceReviewNote({ ok: true }), null)
+    assert.equal(balanceReviewNote(null), null)
+    const sb = fakeSupabase()
+    const { inserted } = await commitImport(sb, [{ account_id: 2, amount: 1, is_debit: true }], { reviewNote: note })
+    assert.equal(inserted[0].review_note, note)
+    assert.equal(sb.writes.bank[0].review_note, note)
   })
   it('пустой список ничего не пишет', async () => {
     const sb = fakeSupabase()
