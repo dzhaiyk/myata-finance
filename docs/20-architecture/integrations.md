@@ -4,7 +4,7 @@ summary: Supabase, Telegram, iiko через Netlify Function, выписки Ka
 read_when: настраиваешь окружение, трогаешь iiko/Telegram/парсеры выписок или ищешь, откуда берутся данные
 domain: -
 status: inferred
-updated: 2026-09-04
+updated: 2026-09-05
 ---
 
 # Внешние интеграции

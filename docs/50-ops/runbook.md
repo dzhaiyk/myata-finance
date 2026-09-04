@@ -4,7 +4,7 @@ summary: симптом → причина → что делать: лимит 1
 read_when: что-то сломалось или цифры выглядят неправдоподобно
 domain: -
 status: confirmed
-updated: 2026-09-04
+updated: 2026-09-05
 ---
 
 # Runbook

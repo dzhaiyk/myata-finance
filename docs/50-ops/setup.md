@@ -4,7 +4,7 @@ summary: npm run dev/build/preview/test, имена env-переменных (ф
 read_when: разворачиваешь проект, запускаешь тесты или добавляешь переменную окружения
 domain: -
 status: confirmed
-updated: 2026-09-04
+updated: 2026-09-05
 ---
 
 # Запуск
