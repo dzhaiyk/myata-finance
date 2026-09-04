@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchAll } from '@/lib/fetchAll'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, MONTHS_RU } from '@/lib/utils'
 import { yearsRange } from '@/lib/dates'
@@ -154,10 +155,10 @@ export default function InvestmentsPage() {
     setLoading(true)
     const [invRes, txRes] = await Promise.all([
       supabase.from('investors').select('*').order('id'),
-      supabase.from('investor_transactions').select('*, investors(full_name)').order('transaction_date', { ascending: false }),
+      fetchAll(() => supabase.from('investor_transactions').select('*, investors(full_name)').order('transaction_date', { ascending: false }).order('id')),
     ])
     setInvestors(invRes.data || [])
-    setTransactions(txRes.data || [])
+    setTransactions(txRes)
     setLoading(false)
   }
 

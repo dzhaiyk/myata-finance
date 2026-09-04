@@ -209,8 +209,8 @@ export default function AccountsPage() {
     // Delete child records first
     await supabase.from('account_balances').delete().eq('account_id', accountId)
     // Парные стороны переводов на ДРУГИХ счетах — иначе их балансы разъезжаются
-    const { data: ownTxs } = await supabase.from('account_transactions').select('id').eq('account_id', accountId)
-    const ownIds = (ownTxs || []).map(t => t.id)
+    const ownTxs = await fetchAll(() => supabase.from('account_transactions').select('id').eq('account_id', accountId).order('id'))
+    const ownIds = ownTxs.map(t => t.id)
     if (ownIds.length > 0) {
       await supabase.from('account_transactions').delete().in('linked_transaction_id', ownIds)
     }
