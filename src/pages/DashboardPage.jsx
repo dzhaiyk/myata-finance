@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fmt, fmtK, fmtPct, MONTHS_RU } from '@/lib/utils'
-import { getTxAmountForMonth, bankTxRangeFilter } from '@/lib/pnl'
-import { isPnlCategory } from '@/lib/categories'
+import { bankTxRangeFilter } from '@/lib/pnl'
 import { yearsRange } from '@/lib/dates'
+import { sumMonths } from '@/lib/pnlCompute'
 import { DollarSign, TrendingDown, ShoppingCart, CirclePercent, AlertTriangle, FileText, Trophy, CalendarDays } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts'
-import { isTechStaff } from '@/lib/reconcile'
 
 const fmtM = (v) => {
   if (!v || v === 0) return ''
@@ -59,107 +58,6 @@ const PieWithLegend = ({ title, data, total }) => (
 // Same logic as PnLPage.jsx values computation.
 // months — Set 0-based месяцев года, по которым распределяются банковские суммы
 // (period allocation, как в PnLPage — иначе цифры расходятся с P&L)
-function computePnL(dailyReports, bankTxs, adjustments, year, months) {
-  const v = {}
-
-  // Revenue
-  let revK = 0, revB = 0, revH = 0, revO = 0
-  dailyReports.forEach(r => {
-    const depts = r.data?.departments || []
-    depts.forEach(d => {
-      const a = Number(d.amount) || 0
-      if (d.name === 'Кухня') revK += a
-      else if (d.name === 'Бар') revB += a
-      else if (d.name === 'Кальян') revH += a
-      else revO += a
-    })
-  })
-  v.rev_kitchen = revK; v.rev_bar = revB; v.rev_hookah = revH; v.rev_other = revO
-  v.revenue = revK + revB + revH + revO
-
-  // Cash expenses
-  let cashKitchen = 0, cashBar = 0, cashHookah = 0, cashOther = 0, cashHookahCapex = 0, cashTech = 0
-  dailyReports.forEach(r => {
-    const w = r.data?.withdrawals || {}
-    const sum = (arr) => (arr || []).reduce((s, row) => s + (Number(row.amount) || 0), 0)
-    cashKitchen += sum(w.suppliers_kitchen)
-    cashBar += sum(w.suppliers_bar)
-    ;(w.tobacco || []).forEach(row => {
-      const amt = Number(row.amount) || 0
-      if (row.name === 'Аппараты') cashHookahCapex += amt
-      else cashHookah += amt
-    })
-    cashOther += sum(w.other)
-    ;(w.payroll || []).forEach(row => { if (isTechStaff(row.name)) cashTech += Number(row.amount) || 0 })
-  })
-
-  // Bank expenses by category
-  // Кредиты (возвраты) уменьшают расход по категории — как в PnLPage.
-  // Сумма транзакции распределяется по месяцам периода (period allocation)
-  const bankByCat = {}
-  bankTxs.forEach(tx => {
-    if (!isPnlCategory(tx.category)) return
-    let amt = 0
-    months.forEach(m => { amt += getTxAmountForMonth(tx, year, m + 1) })
-    if (amt === 0) return
-    bankByCat[tx.category] = (bankByCat[tx.category] || 0) + (tx.is_debit ? amt : -amt)
-  })
-  const bk = (cat) => bankByCat[cat] || 0
-
-  // Food cost (cash + bank)
-  v.fc_kitchen = cashKitchen + bk('cogs_kitchen')
-  v.fc_bar = cashBar + bk('cogs_bar')
-  v.fc_hookah = cashHookah + bk('cogs_hookah')
-  v.foodcost = v.fc_kitchen + v.fc_bar + v.fc_hookah
-
-  // CapEx
-  v.capex_repair = bk('capex_repair')
-  v.capex_furniture = bk('capex_furniture')
-  v.capex_other = bk('capex_other') + cashHookahCapex
-  v.capex = v.capex_repair + v.capex_furniture + v.capex_other
-
-  // OpEx subcategories (bank only, except household)
-  const payrollKeys = ['payroll_mgmt', 'payroll_kitchen', 'payroll_bar', 'payroll_hookah', 'payroll_hall', 'payroll_transport', 'payroll_other']
-  const marketingKeys = ['mkt_smm', 'mkt_target', 'mkt_2gis', 'mkt_yandex', 'mkt_google', 'mkt_other']
-  const rentKeys = ['rent_premises', 'rent_warehouse', 'rent_property_tax']
-  const utilKeys = ['util_electric', 'util_water', 'util_heating', 'util_bi', 'util_internet', 'util_waste', 'util_other']
-  const opexOtherKeys = ['opex_household', 'bank_fee', 'opex_security', 'opex_software', 'opex_menu', 'opex_pest', 'opex_grease', 'opex_repair', 'opex_uniform', 'opex_music', 'opex_royalty', 'opex_misc']
-  const taxKeys = ['tax_retail', 'tax_payroll', 'tax_insurance', 'tax_alcohol', 'tax_hookah', 'tax_other']
-
-  // Set individual keys from bank
-  payrollKeys.forEach(k => { v[k] = bk(k) })
-  v.payroll_other += cashTech // техперсонал — ежедневно из кассы, только в отчётах смен
-  marketingKeys.forEach(k => { v[k] = bk(k) })
-  rentKeys.forEach(k => { v[k] = bk(k) })
-  utilKeys.forEach(k => { v[k] = bk(k) })
-  opexOtherKeys.forEach(k => { v[k] = bk(k) })
-  v.opex_household = cashOther + bk('household')
-  taxKeys.forEach(k => { v[k] = bk(k) })
-
-  // Apply manual adjustments to individual keys
-  adjustments.forEach(a => {
-    const amt = Number(a.amount) || 0
-    const key = a.category
-    if (key && v[key] !== undefined) v[key] += amt
-  })
-
-  // Recalc ALL group sums from children after adjustments
-  v.revenue = v.rev_kitchen + v.rev_bar + v.rev_hookah + v.rev_other
-  v.foodcost = v.fc_kitchen + v.fc_bar + v.fc_hookah
-  v.capex = v.capex_repair + v.capex_furniture + v.capex_other
-  v.payroll = payrollKeys.reduce((s, k) => s + (v[k] || 0), 0)
-  v.marketing = marketingKeys.reduce((s, k) => s + (v[k] || 0), 0)
-  v.rent = rentKeys.reduce((s, k) => s + (v[k] || 0), 0)
-  v.utilities = utilKeys.reduce((s, k) => s + (v[k] || 0), 0)
-  v.opex_other_val = opexOtherKeys.reduce((s, k) => s + (v[k] || 0), 0)
-  v.taxes = taxKeys.reduce((s, k) => s + (v[k] || 0), 0)
-  v.opex = v.payroll + v.foodcost + v.marketing + v.rent + v.utilities + v.opex_other_val + v.taxes
-  v.expenses = v.capex + v.opex
-  v.op_profit = v.revenue - v.opex
-  v.net_profit = v.revenue - v.expenses
-
-  return v
-}
 
 export default function DashboardPage() {
   const [year, setYear] = useState(new Date().getFullYear())
@@ -195,6 +93,8 @@ export default function DashboardPage() {
   // Completed months: past month + has bank import data
   const now = new Date()
   const currentMonth = now.getFullYear() === year ? now.getMonth() : 12
+  // Месяц считается закрытым, если по нему есть банковская выписка ИЛИ
+  // исторические данные (2022–2025 живут только в pnl_data, выписок в базе нет)
   const monthsWithBank = new Set()
   bankTx.forEach(tx => {
     // Только транзакции с датой в выбранном году: period-overlap подгружает соседние годы
@@ -203,19 +103,19 @@ export default function DashboardPage() {
     const m = d.getMonth()
     if (m < currentMonth) monthsWithBank.add(m)
   })
+  adjustments.forEach(a => {
+    if (a.type === 'historical' && a.month - 1 < currentMonth) monthsWithBank.add(a.month - 1)
+  })
 
   const completedReports = reports.filter(r => monthsWithBank.has(new Date(r.report_date).getMonth()))
-  const completedAdj = adjustments.filter(a => monthsWithBank.has(a.month - 1))
 
-  // Compute PnL using same logic as PnLPage (period allocation по закрытым месяцам)
-  const pnl = computePnL(completedReports, bankTx, completedAdj, year, monthsWithBank)
+  // Расчёт — той же функцией, что и на странице P&L
+  const pnl = sumMonths(year, [...monthsWithBank].map(m => m + 1), reports, bankTx, adjustments)
 
   // Monthly breakdown
   const monthlyData = MONTHS_RU.map((name, i) => {
     if (!monthsWithBank.has(i)) return { month: name.slice(0, 3), revenue: 0, expenses: 0 }
-    const mReports = completedReports.filter(r => new Date(r.report_date).getMonth() === i)
-    const mAdj = adjustments.filter(a => a.month === i + 1)
-    const mPnl = computePnL(mReports, bankTx, mAdj, year, new Set([i]))
+    const mPnl = sumMonths(year, [i + 1], reports, bankTx, adjustments)
     return { month: name.slice(0, 3), revenue: mPnl.revenue, expenses: mPnl.expenses }
   })
 
@@ -244,7 +144,7 @@ export default function DashboardPage() {
     { name: 'Маркетинг', value: pnl.marketing, color: '#ec4899' },
     { name: 'Аренда', value: pnl.rent, color: '#8b5cf6' },
     { name: 'Коммунальные', value: pnl.utilities, color: '#06b6d4' },
-    { name: 'OpEx прочее', value: pnl.opex_other_val, color: '#f472b6' },
+    { name: 'OpEx прочее', value: pnl.opex_other, color: '#f472b6' },
     { name: 'Налоги', value: pnl.taxes, color: '#ef4444' },
     { name: 'CapEx', value: pnl.capex, color: '#fb923c' },
   ].filter(d => d.value > 0)
