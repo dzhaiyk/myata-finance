@@ -3,7 +3,7 @@
 Обновлено: 2026-09-04
 
 ## В работе
-- `/discover payroll` — блок 1 из 12 (границы и цель), ждёт ответов владельца. Порядок доменов подтверждён 04.09.2026: payroll → shift → control → reporting → bank → accounts → investors → access.
+- `/discover payroll` — блок 1 из 12 (границы и цель): вопросы записаны в `docs/10-business/payroll/open-questions.md` (#6–11), ждут ответов владельца. Порядок доменов подтверждён 04.09.2026: payroll → shift → control → reporting → bank → accounts → investors → access.
 
 ## Следующие
 - `/discover shift` после payroll, далее по подтверждённому порядку.
@@ -11,6 +11,7 @@
 - TASK: свежие выписки банков → Halyk ИП списания 6,36 млн разнести.
 
 ## Ждёт владельца
+- Ответы на вопросы #6–11 в `docs/10-business/payroll/open-questions.md` (блок 1 /discover).
 - Разрешение удалить `docs/ФОТ-методика.md` (перенесено в payroll).
 - Топ-10 вопросов из отчёта инициализации; полные списки — `docs/10-business/<домен>/open-questions.md`.
 - Тест на реальном файле Kaspi: задваиваются ли операции «в обработке» при повторной загрузке.
