@@ -250,7 +250,8 @@ export function cashDividends(journalDividends, bankDividends) {
  * Необъяснённые наличные у учредителей: снято со счетов − возвращено − ушло на ЗП − дивиденды наличными.
  * Положительный остаток выше допуска = деньги вне контура.
  */
-export function unexplainedOwnerCash(transitNet, fromOwnersTotal, cashDividendsTotal = 0, tolerance = 500000) {
-  const unexplained = num(transitNet) - Math.max(0, num(fromOwnersTotal)) - Math.max(0, num(cashDividendsTotal))
-  return { unexplained, ok: unexplained <= tolerance }
+export function unexplainedOwnerCash(transitNet, fromOwnersTotal, cashDividendsTotal = 0, tolerance = 500000, opening = 0) {
+  // opening — наличные у учредителей на 1 января (снятые в конце прошлого года, settings.owner_cash_opening)
+  const unexplained = num(opening) + num(transitNet) - Math.max(0, num(fromOwnersTotal)) - Math.max(0, num(cashDividendsTotal))
+  return { unexplained, ok: Math.abs(unexplained) <= tolerance }
 }

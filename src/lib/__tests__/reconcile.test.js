@@ -191,6 +191,13 @@ describe('Дивиденды наличными (04.09.2026)', () => {
     assert.equal(unexplainedOwnerCash(25406476, 15337770, 9140000).ok, false)
     assert.equal(unexplainedOwnerCash(25406476, 15337770, 9140000 + 3000000).ok, true)
   })
+  it('остаток на 1 января прибавляется; большой минус — тоже не «ок»', () => {
+    // −3,93 млн без остатка на 1 января: учредители «вернули больше, чем взяли» — это ошибка модели, не зелёный свет
+    assert.equal(unexplainedOwnerCash(22406476, 15337770, 9140000 + 1861260).ok, false)
+    const withOpening = unexplainedOwnerCash(22406476, 15337770, 9140000 + 1861260, 500000, 3725000)
+    assert.equal(withOpening.unexplained, -207554)
+    assert.equal(withOpening.ok, true)
+  })
 })
 
 describe('Свежесть выписки', () => {
