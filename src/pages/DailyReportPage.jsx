@@ -5,6 +5,7 @@ import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { sendTelegramNotification, formatDailyReportNotification, formatCashDiscrepancyAlert } from '@/lib/telegram'
 import { getBusinessDate } from '@/lib/dates'
+import StatementUploadCard from '@/components/StatementUploadCard'
 import { Save, Send, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Plus, Trash2, Calendar, ArrowLeft, FileText, Eye, Clock, Check, Pencil, Download } from 'lucide-react'
 import jsPDF from 'jspdf'
 
@@ -145,6 +146,7 @@ export default function DailyReportPage() {
   const [allAccounts, setAllAccounts] = useState([]) // all accounts for parent lookup
   const [terminalAccounts, setTerminalAccounts] = useState([]) // sub-accounts (have parent_account_id)
   const [terminals, setTerminals] = useState({}) // { accountId: amount }
+  const [stmtFreshness, setStmtFreshness] = useState([]) // свежесть выписок по счетам — предупреждение при отправке
 
   useEffect(() => { loadJournal(); loadSavedEntities() }, [])
 
@@ -354,6 +356,12 @@ export default function DailyReportPage() {
   const submitReport = async () => {
     if (!num(cashEnd)) {
       if (!confirm('Остаток на конец смены не указан. Всё равно отправить?')) return
+    }
+    // Выписка — половина контура контроля: без неё смену можно отправить, но осознанно
+    const stale = stmtFreshness.filter(f => !f.ok)
+    if (stale.length > 0) {
+      const list = stale.map(f => `${f.name} (${f.never ? 'ни разу' : `${f.daysAgo} дн. назад`})`).join(', ')
+      if (!confirm(`Выписка давно не загружалась: ${list}. Отправить отчёт без неё?`)) return
     }
     setSaving(true)
     try {
@@ -884,6 +892,11 @@ export default function DailyReportPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Выписки банков: менеджер загружает файл, категории ставит учредитель или бухгалтер */}
+      {hasPermission('bank_import.upload') && (
+        <StatementUploadCard accounts={allAccounts.filter(a => a.type === 'bank')} managerName={profile?.full_name} onFreshness={setStmtFreshness} />
       )}
 
       {/* ══════════ БЛОК 1: ДОХОДЫ ══════════ */}

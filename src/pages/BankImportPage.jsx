@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt } from '@/lib/utils'
-import { parseBankStatement, parseStatementBalances } from '@/lib/categorize'
+import { stageStatement, commitImport } from '@/lib/bankImport'
 import { getCutoffHour, yearsRange } from '@/lib/dates'
 import { Upload, Trash2, Settings, Plus, X, Save, Calendar, Pencil, Check, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
@@ -23,15 +23,6 @@ const OPERATORS = {
   is_debit: [{ value: 'equals', label: 'равно' }],
 }
 
-// Hash for deduplication — uses SubtleCrypto SHA-256 for collision resistance
-// ВАЖНО: хеш строится по КАЛЕНДАРНОЙ дате (dateRaw), а не по операционной —
-// иначе уже импортированные записи при повторном импорте станут «новыми»
-async function generateTxHash(tx) {
-  const hashDate = tx.dateRaw || tx.date
-  const str = `${hashDate}|${tx.number}|${tx.amount}|${tx.isDebit}|${(tx.beneficiary || '').trim().toLowerCase()}|${(tx.purpose || '').slice(0, 120).trim().toLowerCase()}`
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str))
-  return Array.from(new Uint8Array(buf)).slice(0, 12).map(b => b.toString(16).padStart(2, '0')).join('')
-}
 const TYPE_LABELS = { income: 'Доходы', cogs: 'Себестоимость', opex: 'Операционные', below_ebitda: 'Ниже EBITDA', other: 'Прочее' }
 
 // === Period helpers ===
@@ -273,173 +264,27 @@ export default function BankImportPage() {
     return rules.map(r => ({ ...r, conditions: ruleConditions.filter(c => c.rule_id === r.id) }))
   }, [rules, ruleConditions])
 
-  const matchCondition = (tx, cond) => {
-    if (cond.field === 'is_debit') {
-      // Support both parsed (isDebit) and DB (is_debit) field names
-      const val = tx.is_debit !== undefined ? tx.is_debit : tx.isDebit
-      return String(val) === cond.value
-    }
-    const fieldVal = (() => {
-      if (cond.field === 'beneficiary') return tx.beneficiary || ''
-      if (cond.field === 'purpose') return tx.purpose || ''
-      if (cond.field === 'knp') return tx.knp || ''
-      if (cond.field === 'amount') return String(Math.abs(tx.amount || 0))
-      return ''
-    })()
-    switch (cond.operator) {
-      case 'contains': return fieldVal.toLowerCase().includes(cond.value.toLowerCase())
-      case 'not_contains': return !fieldVal.toLowerCase().includes(cond.value.toLowerCase())
-      case 'equals': return fieldVal.toLowerCase() === cond.value.toLowerCase()
-      case 'not_equals': return fieldVal.toLowerCase() !== cond.value.toLowerCase()
-      case 'starts_with': return fieldVal.toLowerCase().startsWith(cond.value.toLowerCase())
-      case 'gt': return Number(fieldVal) > Number(cond.value)
-      case 'gte': return Number(fieldVal) >= Number(cond.value)
-      case 'lt': return Number(fieldVal) < Number(cond.value)
-      case 'lte': return Number(fieldVal) <= Number(cond.value)
-      case 'between': {
-        const [min, max] = cond.value.split('-').map(Number)
-        const num = Number(fieldVal)
-        return num >= min && num <= max
-      }
-      default: return false
-    }
-  }
-
-  // Step 1: Parse file → stage rows for preview (no DB write)
+  // Шаг 1: файл → разбор, правила из базы, дедупликация. В базу пока ничего не пишем.
   const handleFile = async (e) => {
     const file = e.target.files[0]; if (!file) return
     if (!selectedAccountId) { alert('Выберите счёт для импорта'); e.target.value = ''; return }
     setImporting(true)
     try {
       const data = await file.arrayBuffer()
-      const batchId = crypto.randomUUID()
-      const isPdf = /\.pdf$/i.test(file.name)
-
-      let parsed = []
-      let balanceCheck = null
-      let parseIssues = []
-
-      if (isPdf) {
-        // Halyk отдаёт выписку только в PDF: таблица собирается по координатам текста
-        const { parseHalykPdf } = await import('@/lib/halykStatement')
-        const res = await parseHalykPdf(data)
-        parsed = res.rows
-        parseIssues = res.issues
-        const { openingBalance, closingBalance } = res.meta
-        if (openingBalance != null && closingBalance != null) {
-          const turnover = res.totals.credit - res.totals.debit
-          const delta = Math.round((openingBalance + turnover - closingBalance) * 100) / 100
-          balanceCheck = { opening: openingBalance, closing: closingBalance, delta, ok: Math.abs(delta) < 1 }
-        }
-        if (!parsed.length) throw new Error('В PDF не найдено ни одной операции. Это выписка по счёту Halyk?')
-      } else {
-        const XLSX = await import('xlsx')
-        const wb = XLSX.read(data); const ws = wb.Sheets[wb.SheetNames[0]]
-        const rows = XLSX.utils.sheet_to_json(ws, { header: 1 })
-
-        // parseBankStatement now handles date parsing and column mapping internally.
-        // Ночные операции (до границы операционного дня) относятся к предыдущей дате.
-        parsed = parseBankStatement(rows, { cutoffHour: getCutoffHour() })
-
-        // Сверка полноты файла: остаток начала + обороты = остаток конца.
-        // Ловит обрезанную или отредактированную выписку ДО записи в базу.
-        const balances = parseStatementBalances(rows)
-        if (balances.opening != null && balances.closing != null) {
-          const turnover = parsed.reduce((s, t) => s + (t.credit || 0) - (t.debit || 0), 0)
-          const delta = Math.round((balances.opening + turnover - balances.closing) * 100) / 100
-          balanceCheck = { ...balances, delta, ok: Math.abs(delta) < 1 }
-        }
-      }
-      const [rRes, cRes] = await Promise.all([
-        supabase.from('bank_rules').select('*').eq('is_active', true),
-        supabase.from('bank_rule_conditions').select('*'),
-      ])
-      const freshRules = (rRes.data || []).map(r => ({ ...r, conditions: (cRes.data || []).filter(c => c.rule_id === r.id) }))
-      let hidden = 0; const toInsert = []
-      for (const tx of parsed) {
-        let ruleMatch = null
-        for (const rule of freshRules) {
-          if (rule.conditions.length === 0) continue
-          const matches = rule.conditions.map(c => matchCondition(tx, c))
-          const pass = rule.logic === 'and' ? matches.every(Boolean) : matches.some(Boolean)
-          if (pass) { ruleMatch = { category: rule.category_code, action: rule.action }; break }
-        }
-        if (ruleMatch?.action === 'hide') { hidden++; continue }
-        // Default period = month of the transaction date (date is already YYYY-MM-DD from parseBankStatement)
-        const txDate = new Date(tx.date)
-        const txY = !isNaN(txDate) ? txDate.getFullYear() : new Date().getFullYear()
-        const txM = !isNaN(txDate) ? txDate.getMonth() + 1 : (new Date().getMonth() + 1)
-        toInsert.push({
-          transaction_date: tx.date, amount: Math.abs(tx.amount), is_debit: tx.isDebit,
-          beneficiary: tx.beneficiary || '', purpose: tx.purpose || '', knp: tx.knp || '',
-          category: ruleMatch?.category || tx.category || 'uncategorized',
-          confidence: ruleMatch ? 'auto' : tx.confidence || 'low', import_file: file.name, import_batch_id: batchId,
-          tx_hash: await generateTxHash(tx),
-          period_from: firstOfMonth(txY, txM), period_to: lastOfMonth(txY, txM),
-          account_id: selectedAccountId,
-        })
-      }
-      // Check for duplicates but don't insert yet
-      let duplicates = 0
-      let newRows = toInsert
-      if (toInsert.length > 0) {
-        const hashes = toInsert.map(t => t.tx_hash).filter(Boolean)
-        const { data: existing } = await supabase.from('bank_transactions')
-          .select('tx_hash').in('tx_hash', hashes)
-        const existingSet = new Set((existing || []).map(e => e.tx_hash))
-        newRows = toInsert.filter(t => !t.tx_hash || !existingSet.has(t.tx_hash))
-        duplicates = toInsert.length - newRows.length
-      }
-      // Stage for preview
-      setStagedRows(newRows)
-      setStagedMeta({ hidden, duplicates, fileName: file.name, balanceCheck, parsedCount: parsed.length, parseIssues })
+      const staged = await stageStatement(supabase, { name: file.name, data }, { accountId: selectedAccountId, cutoffHour: getCutoffHour() })
+      setStagedRows(staged.rows)
+      setStagedMeta({ hidden: staged.hidden, duplicates: staged.duplicates, fileName: file.name, balanceCheck: staged.balanceCheck, parsedCount: staged.parsedCount, parseIssues: staged.parseIssues })
     } catch (err) { alert('Ошибка: ' + err.message) }
     setImporting(false); e.target.value = ''
   }
 
-  // Step 2: User confirms → write staged rows to DB
+  // Шаг 2: подтверждение → bank_transactions и движение по счёту (см. lib/bankImport)
   const commitStaged = async () => {
     if (!stagedRows || stagedRows.length === 0) return
     setSavingStaged(true)
     try {
-      // .select() возвращает вставленные строки с id — нужны для reference_id,
-      // чтобы удаление/перекатегоризация синхронизировались с балансом счёта
-      let inserted = []
-      const { data, error } = await supabase.from('bank_transactions').insert(stagedRows).select()
-      if (error) {
-        // If batch fails due to unique constraint, fall back to one-by-one insert
-        if (error.message?.includes('unique') || error.message?.includes('duplicate')) {
-          let skipped = 0
-          for (const row of stagedRows) {
-            const { data: one, error: e2 } = await supabase.from('bank_transactions').insert(row).select().single()
-            if (e2) skipped++; else inserted.push(one)
-          }
-          alert(`Сохранено ${inserted.length} записей` + (skipped > 0 ? `, ${skipped} дублей пропущено` : ''))
-        } else {
-          throw error
-        }
-      } else {
-        inserted = data || []
-        alert(`Сохранено ${inserted.length} записей`)
-      }
-      // Create account_transactions for the linked bank account (с привязкой reference_id).
-      // КАЖДАЯ строка выписки двигает баланс счёта — категория влияет только на P&L/CF.
-      // Раньше uncategorized/internal пропускались, и расчётный баланс навсегда расходился с банком.
-      const acctTxs = inserted
-        .filter(r => r.account_id)
-        .map(r => ({
-          account_id: r.account_id,
-          transaction_date: r.transaction_date,
-          type: r.is_debit ? 'expense' : 'income',
-          amount: Number(r.amount),
-          description: r.beneficiary || r.purpose || r.category,
-          reference_type: 'bank_import',
-          reference_id: String(r.id),
-          category: r.category,
-        }))
-      if (acctTxs.length > 0) {
-        await supabase.from('account_transactions').insert(acctTxs)
-      }
+      const { inserted, skipped } = await commitImport(supabase, stagedRows)
+      alert(`Сохранено ${inserted.length} записей` + (skipped > 0 ? `, ${skipped} дублей пропущено` : ''))
       setStagedRows(null)
       load()
     } catch (err) { alert('Ошибка: ' + err.message) }
