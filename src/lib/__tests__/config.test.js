@@ -12,6 +12,10 @@ import {
   THRESHOLDS,
   FOOD_COST_BANDS,
   MARGIN_BANDS,
+  DEFAULT_THRESHOLDS,
+  getThresholds,
+  setThresholds,
+  validateThresholds,
   foodCostLevel,
   isFoodCostAnomaly,
   marginLevel,
@@ -175,6 +179,32 @@ describe('пороги и границы', () => {
     assert.equal(marginLevel(0.30), 'green')
     assert.equal(marginLevel(0.20), 'yellow')
     assert.equal(marginLevel(0.14), 'red')
+  })
+
+  // TASK-021: пороги приходят из settings.thresholds; объекты меняются на месте,
+  // чтобы экраны, читающие THRESHOLDS.x напрямую, увидели новые значения.
+  it('пороги из настроек применяются на месте и откатываются к умолчанию', () => {
+    const before = getThresholds()
+    assert.deepEqual(setThresholds({ cashDiscrepancy: 500, foodCost: { warn: 0.33 } }), [])
+    assert.equal(THRESHOLDS.cashDiscrepancy, 500)
+    assert.equal(FOOD_COST_BANDS.warn, 0.33)
+    assert.equal(FOOD_COST_BANDS.critical, 0.40) // незаданное — из умолчания
+    assert.equal(foodCostLevel(0.34), 'yellow')
+    assert.deepEqual(setThresholds(DEFAULT_THRESHOLDS), [])
+    assert.deepEqual(getThresholds(), before)
+    assert.deepEqual(getThresholds(), DEFAULT_THRESHOLDS)
+  })
+
+  it('неверный набор порогов отклоняется целиком, прежние значения остаются', () => {
+    const before = getThresholds()
+    const errors = setThresholds({ cashDiscrepancy: -1, foodCost: { target: 0.5, warn: 0.35, critical: 0.40 } })
+    assert.equal(errors.length, 1) // сначала отдельные поля, порядок проверяется после
+    assert.deepEqual(getThresholds(), before)
+    assert.deepEqual(validateThresholds({ ...DEFAULT_THRESHOLDS, foodCost: { target: 0.5, warn: 0.35, critical: 0.40 } }), ['food cost: ориентир < жёлтая < красная'])
+    assert.deepEqual(validateThresholds({ ...DEFAULT_THRESHOLDS, margin: { good: 0.1, warn: 0.15 } }), ['маржа: жёлтая граница ниже зелёной'])
+    assert.deepEqual(validateThresholds({ ...DEFAULT_THRESHOLDS, payrollShareTarget: 0.4 }), ['доля ФОТ: ориентир ниже тревоги'])
+    assert.deepEqual(validateThresholds({ ...DEFAULT_THRESHOLDS, payrollShareAlert: '35' }).length, 1) // 35 — не доля
+    assert.deepEqual(validateThresholds(DEFAULT_THRESHOLDS), [])
   })
 
   it('список статей ФОТ — один на проект', () => {

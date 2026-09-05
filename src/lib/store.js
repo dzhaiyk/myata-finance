@@ -6,6 +6,7 @@ import { loadDepartments } from './departments'
 import { loadBranding } from './branding'
 import { loadPnlStructure } from './pnlStructure'
 import { loadCfStructure } from './cashflowStructure'
+import { loadThresholds } from './thresholds'
 import { getBranding } from './config'
 
 const SESSION_KEY = 'myata_session'
@@ -26,6 +27,7 @@ export const useAuthStore = create((set, get) => ({
     await loadBranding()
     await loadPnlStructure()
     await loadCfStructure()
+    await loadThresholds()
     set({ branding: getBranding() })
     const saved = localStorage.getItem(SESSION_KEY)
     if (saved) {

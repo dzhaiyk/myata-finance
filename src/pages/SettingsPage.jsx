@@ -1,19 +1,56 @@
 import { useState } from 'react'
 import { sendTelegramNotification, saveNotifications, maskedBotToken, telegramChatId } from '@/lib/telegram'
-import { getNotifications, THRESHOLDS } from '@/lib/config'
+import { getNotifications, THRESHOLDS, getThresholds, validateThresholds } from '@/lib/config'
+import { saveThresholds } from '@/lib/thresholds'
 import { getCutoffHour, saveCutoffHour } from '@/lib/dates'
 import { useAuthStore } from '@/lib/store'
 import BrandingSettings from '@/components/BrandingSettings'
-import { Save, Send, Bell, Bot, Moon } from 'lucide-react'
+import { Save, Send, Bell, Bot, Moon, Gauge } from 'lucide-react'
 import { money } from '@/lib/utils'
+import { currencySymbol } from '@/lib/config'
 
 // Только те типы, которые приложение действительно умеет отправлять.
 // Порог берётся из настроек, чтобы подпись не разошлась с логикой.
-const NOTIFICATION_LABELS = [
+const notificationLabels = () => [
   { key: 'cash_discrepancy', label: 'Расхождение кассы', desc: `При отправке отчёта, если касса не сошлась${THRESHOLDS.cashDiscrepancy > 0 ? ` больше чем на ${money(THRESHOLDS.cashDiscrepancy)}` : ''}` },
   { key: 'daily_report', label: 'Ежедневный отчёт сдан', desc: 'При каждой отправке отчёта менеджером' },
   { key: 'bank_import', label: 'Импорт банковской выписки', desc: 'При загрузке и обработке выписки' },
 ]
+
+// В форме доли показываются процентами (35), в настройках хранятся долями (0.35)
+const pct = (v) => String(Math.round(Number(v) * 1000) / 10)
+const toForm = (t) => ({
+  cashDiscrepancy: String(t.cashDiscrepancy), accountBalanceTolerance: String(t.accountBalanceTolerance),
+  ownerCashTolerance: String(t.ownerCashTolerance), payrollTolerance: String(t.payrollTolerance),
+  payrollShareTarget: pct(t.payrollShareTarget), payrollShareAlert: pct(t.payrollShareAlert),
+  foodCost: { target: pct(t.foodCost.target), warn: pct(t.foodCost.warn), critical: pct(t.foodCost.critical) },
+  margin: { good: pct(t.margin.good), warn: pct(t.margin.warn) },
+})
+const share = (v) => Number(String(v).replace(',', '.')) / 100
+const fromForm = (f) => ({
+  cashDiscrepancy: Number(f.cashDiscrepancy), accountBalanceTolerance: Number(f.accountBalanceTolerance),
+  ownerCashTolerance: Number(f.ownerCashTolerance), payrollTolerance: Number(f.payrollTolerance),
+  payrollShareTarget: share(f.payrollShareTarget), payrollShareAlert: share(f.payrollShareAlert),
+  foodCost: { target: share(f.foodCost.target), warn: share(f.foodCost.warn), critical: share(f.foodCost.critical) },
+  margin: { good: share(f.margin.good), warn: share(f.margin.warn) },
+})
+
+const MONEY_FIELDS = [
+  ['cashDiscrepancy', 'Расхождение кассы', '0 — касса сходится в ноль (BR-SHF-020)'],
+  ['accountBalanceTolerance', 'Допуск остатка счёта', 'сверка с выпиской (BR-CTL-017)'],
+  ['ownerCashTolerance', 'Наличные у учредителей', 'необъяснённый остаток (BR-CTL-017)'],
+  ['payrollTolerance', 'Допуск сверки ФОТ', 'ведомость против выдач'],
+]
+const SHARE_FIELDS = [
+  ['foodCost.target', 'Food cost — ориентир', 'линия на графике'],
+  ['foodCost.warn', 'Food cost — жёлтая', 'от этой доли'],
+  ['foodCost.critical', 'Food cost — красная', 'от этой доли; аномалия в аналитике'],
+  ['margin.good', 'Маржа — зелёная', 'от этой доли'],
+  ['margin.warn', 'Маржа — жёлтая', 'от этой доли, ниже — красная'],
+  ['payrollShareTarget', 'Доля ФОТ — ориентир', 'линия на графике'],
+  ['payrollShareAlert', 'Доля ФОТ — тревога', 'выше этой доли'],
+]
+const getPath = (obj, path) => path.split('.').reduce((o, k) => o?.[k], obj)
 
 export default function SettingsPage() {
   const { hasPermission } = useAuthStore()
@@ -23,6 +60,24 @@ export default function SettingsPage() {
   const [notifSaved, setNotifSaved] = useState('')
   const [cutoffHour, setCutoffHourState] = useState(getCutoffHour())
   const [cutoffSaved, setCutoffSaved] = useState('')
+  const [thresholds, setThresholdsState] = useState(() => toForm(getThresholds()))
+  const [thrSaved, setThrSaved] = useState('')
+
+  const patchThr = (path, raw) => setThresholdsState(prev => {
+    const next = { ...prev, foodCost: { ...prev.foodCost }, margin: { ...prev.margin } }
+    const [a, b] = path.split('.')
+    if (b) next[a][b] = raw; else next[a] = raw
+    return next
+  })
+
+  const handleSaveThresholds = async () => {
+    const value = fromForm(thresholds)
+    const errors = validateThresholds(value)
+    if (errors.length) { setThrSaved('❌ ' + errors.join('; ')); return }
+    setThrSaved('Сохранение...')
+    const { error } = await saveThresholds(value)
+    setThrSaved(error ? '❌ Ошибка: ' + error.message : '✅ Сохранено')
+  }
 
   const handleSaveCutoff = async () => {
     setCutoffSaved('Сохранение...')
@@ -129,7 +184,7 @@ export default function SettingsPage() {
             <Bell className="w-3.5 h-3.5" /> Типы уведомлений
           </div>
           <div className="space-y-2">
-            {NOTIFICATION_LABELS.map(n => (
+            {notificationLabels().map(n => (
               <label key={n.key} className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-800/30 cursor-pointer transition-colors">
                 <input type="checkbox" checked={notifications[n.key] !== false}
                   onChange={() => toggleNotification(n.key)} className="mt-0.5 accent-brand-500" />
@@ -147,6 +202,47 @@ export default function SettingsPage() {
             {notifSaved && <span className="text-xs text-slate-400">{notifSaved}</span>}
           </div>
         </div>
+      </div>
+
+      {/* Пороги и нормы */}
+      <div className="card space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+            <Gauge className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div>
+            <div className="text-sm font-semibold">Пороги и нормы</div>
+            <div className="text-xs text-slate-500">Допуски сверок в {currencySymbol()} и границы показателей в процентах — одни на все экраны</div>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          {MONEY_FIELDS.map(([key, label, hint]) => (
+            <div key={key}>
+              <label className="label">{label}, {currencySymbol()}</label>
+              <input value={thresholds[key]} disabled={!canEdit} inputMode="decimal" className="input text-sm w-full"
+                onChange={e => patchThr(key, e.target.value)} />
+              <div className="text-[11px] text-slate-500 mt-0.5">{hint}</div>
+            </div>
+          ))}
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          {SHARE_FIELDS.map(([key, label, hint]) => (
+            <div key={key}>
+              <label className="label">{label}, %</label>
+              <input value={getPath(thresholds, key)} disabled={!canEdit} inputMode="decimal" className="input text-sm w-full"
+                onChange={e => patchThr(key, e.target.value)} />
+              <div className="text-[11px] text-slate-500 mt-0.5">{hint}</div>
+            </div>
+          ))}
+        </div>
+        {canEdit && (
+          <div className="flex items-center gap-3">
+            <button onClick={handleSaveThresholds} className="btn-primary text-sm flex items-center gap-2">
+              <Save className="w-4 h-4" /> Сохранить
+            </button>
+            {thrSaved && <span className="text-xs text-slate-400">{thrSaved}</span>}
+          </div>
+        )}
       </div>
 
       {/* How to setup */}

@@ -102,12 +102,12 @@ updated: 2026-09-05
 **Пример.** 37 % в P&L, на дашборде и в аналитике выглядит одинаково жёлтым; 41 % красный везде и помечается аномалией.
 **Основание.** До 05.09.2026 в проекте было четыре несогласованных числа: 0.32 (P&L, причём зелёный не показывался никогда), 0.35 и 0.45 (дашборд), 0.40 (аномалия аналитики). Границы 35/40 выбраны по линиям, которые уже были нарисованы на графике food cost.
 **Статус.** CONFIRMED · 2026-09-05 · Жайык
-**Реализация.** `FOOD_COST_BANDS`, `foodCostLevel`, `isFoodCostAnomaly` в `src/lib/config.js` · тест `config.test.js` (раздел «пороги и границы»)
+**Реализация.** `FOOD_COST_BANDS`, `foodCostLevel`, `isFoodCostAnomaly` в `src/lib/config.js`; значения — из «Настроек» (`settings.thresholds`, TASK-021), в коде только умолчания · тест `config.test.js` (раздел «пороги и границы»)
 
 ### BR-RPT-019 · Нормы маржи и доли ФОТ
 **Правило.** Операционная маржа: зелёная от 30 %, жёлтая от 15 %, ниже — красная. Доля ФОТ в выручке: ориентир 30 %, тревога выше 35 %.
 **Статус.** CONFIRMED · 2026-09-05 · Жайык · вопросы #3, #7 `open-questions.md`
-**Реализация.** `MARGIN_BANDS`, `THRESHOLDS.payrollShareAlert`, `THRESHOLDS.payrollShareTarget` в `src/lib/config.js` · тест `config.test.js`
+**Реализация.** `MARGIN_BANDS`, `THRESHOLDS.payrollShareAlert`, `THRESHOLDS.payrollShareTarget` в `src/lib/config.js`; правятся в «Настройках» (`settings.thresholds`) · тест `config.test.js`
 
 ### BR-RPT-020 · Подпись статьи, привязанной к отделу
 **Правило.** Статья P&L может ссылаться на отдел (`categories.department`) и хранить шаблон подписи (`name_template`, где `{department}` — место названия отдела). Тогда подпись собирается на лету и следует за переименованием отдела. Статья без привязки показывает собственное имя.

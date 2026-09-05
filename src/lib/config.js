@@ -142,10 +142,10 @@ export function isCapexRow(name) {
 
 // --- Пороги ---------------------------------------------------------------
 //
-// Значения заведения. Пока они здесь — чтобы не расходиться по экранам, как было
-// до 05.09.2026: порог расхождения кассы был скопирован в пять мест, допуск
-// остатка счёта в пять, допуск наличных учредителей в три. Следующий шаг —
-// таблица settings и экран настроек (TASK-021, ADR-0010).
+// Значения заведения. Здесь — значения по умолчанию (seed) и кеш: при старте
+// приложения их перекрывает settings.thresholds (TASK-021, ADR-0010), править
+// их можно в «Настройках». Объекты ниже намеренно одни и те же: экраны читают
+// THRESHOLDS.x напрямую, поэтому setThresholds меняет их на месте.
 
 export const THRESHOLDS = {
   // Расхождение кассы: один порог и на подсветку, и на уведомление.
@@ -175,6 +175,61 @@ export const FOOD_COST_BANDS = { target: 0.30, warn: 0.35, critical: 0.40 }
 
 // Границы операционной маржи, в долях. Выше good — зелёный, выше warn — жёлтый.
 export const MARGIN_BANDS = { good: 0.30, warn: 0.15 }
+
+export const DEFAULT_THRESHOLDS = Object.freeze({
+  ...THRESHOLDS, foodCost: { ...FOOD_COST_BANDS }, margin: { ...MARGIN_BANDS },
+})
+
+const finite = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number(String(v ?? '').replace(',', '.')))
+
+/** Снимок всех порогов в форме, в которой они лежат в settings.thresholds. */
+export function getThresholds() {
+  return { ...THRESHOLDS, foodCost: { ...FOOD_COST_BANDS }, margin: { ...MARGIN_BANDS } }
+}
+
+/**
+ * Проверка порогов до сохранения: суммы неотрицательны, доли в (0; 1),
+ * границы упорядочены. Возвращает список ошибок (пустой — всё верно).
+ */
+export function validateThresholds(t) {
+  const errors = []
+  const money = ['cashDiscrepancy', 'accountBalanceTolerance', 'ownerCashTolerance', 'payrollTolerance']
+  for (const k of money) {
+    const v = finite(t?.[k])
+    if (!Number.isFinite(v) || v < 0) errors.push(`${k}: нужна сумма 0 или больше`)
+  }
+  const shares = [
+    ['payrollShareTarget', t?.payrollShareTarget], ['payrollShareAlert', t?.payrollShareAlert],
+    ['foodCost.target', t?.foodCost?.target], ['foodCost.warn', t?.foodCost?.warn], ['foodCost.critical', t?.foodCost?.critical],
+    ['margin.good', t?.margin?.good], ['margin.warn', t?.margin?.warn],
+  ]
+  for (const [k, raw] of shares) {
+    const v = finite(raw)
+    if (!Number.isFinite(v) || v <= 0 || v >= 1) errors.push(`${k}: нужна доля от 0 до 100 %`)
+  }
+  if (errors.length) return errors
+  if (!(finite(t.foodCost.target) < finite(t.foodCost.warn) && finite(t.foodCost.warn) < finite(t.foodCost.critical))) errors.push('food cost: ориентир < жёлтая < красная')
+  if (!(finite(t.margin.warn) < finite(t.margin.good))) errors.push('маржа: жёлтая граница ниже зелёной')
+  if (!(finite(t.payrollShareTarget) < finite(t.payrollShareAlert))) errors.push('доля ФОТ: ориентир ниже тревоги')
+  return errors
+}
+
+/**
+ * Применяет пороги из настроек на месте. Неверный набор игнорируется целиком —
+ * экраны продолжают работать на прежних значениях, а не на половине новых.
+ * @returns {string[]} ошибки проверки (пустой — применено)
+ */
+export function setThresholds(value) {
+  const t = { ...DEFAULT_THRESHOLDS, ...(value || {}),
+    foodCost: { ...DEFAULT_THRESHOLDS.foodCost, ...(value?.foodCost || {}) },
+    margin: { ...DEFAULT_THRESHOLDS.margin, ...(value?.margin || {}) } }
+  const errors = validateThresholds(t)
+  if (errors.length) return errors
+  for (const k of Object.keys(THRESHOLDS)) THRESHOLDS[k] = finite(t[k])
+  for (const k of Object.keys(FOOD_COST_BANDS)) FOOD_COST_BANDS[k] = finite(t.foodCost[k])
+  for (const k of Object.keys(MARGIN_BANDS)) MARGIN_BANDS[k] = finite(t.margin[k])
+  return []
+}
 
 /** @returns {'green'|'yellow'|'red'} уровень food cost по доле (0.37 = 37 %). */
 export function foodCostLevel(pct) {
