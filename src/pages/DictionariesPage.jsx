@@ -6,11 +6,13 @@ import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import DepartmentsSettings from '@/components/DepartmentsSettings'
 import CategoriesEditor from '@/components/CategoriesEditor'
+import PnlLinesEditor from '@/components/PnlLinesEditor'
 import { Package, HandCoins, Landmark, UserCheck, Shield, Upload } from 'lucide-react'
 
 const TABS = [
   { key: 'departments', label: 'Отделы' },
   { key: 'categories', label: 'Статьи P&L' },
+  { key: 'pnl', label: 'Строки P&L' },
 ]
 
 // Справочники со своими страницами: остаются на местах, отсюда — ссылки
@@ -46,6 +48,7 @@ export default function DictionariesPage() {
 
       {tab === 'departments' && <DepartmentsSettings canEdit={canEdit} />}
       {tab === 'categories' && <CategoriesEditor canEdit={canEdit} />}
+      {tab === 'pnl' && <PnlLinesEditor canEdit={canEdit} />}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {LINKS.filter(l => hasPermission(l.perm)).map(l => (

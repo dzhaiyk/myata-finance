@@ -4,6 +4,7 @@ import { loadCutoffHour } from './dates'
 import { loadNotifications } from './telegram'
 import { loadDepartments } from './departments'
 import { loadBranding } from './branding'
+import { loadPnlStructure } from './pnlStructure'
 import { getBranding } from './config'
 
 const SESSION_KEY = 'myata_session'
@@ -22,6 +23,7 @@ export const useAuthStore = create((set, get) => ({
     await loadNotifications()
     await loadDepartments()
     await loadBranding()
+    await loadPnlStructure()
     set({ branding: getBranding() })
     const saved = localStorage.getItem(SESSION_KEY)
     if (saved) {

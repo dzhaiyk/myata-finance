@@ -58,7 +58,7 @@ describe('categorize.js ↔ таблица categories', () => {
 })
 
 describe('PNL_STRUCTURE ↔ таблица categories', () => {
-  const pnlSrc = read('src/lib/pnlCompute.js')   // структура P&L переехала из страницы в общий модуль
+  const pnlSrc = read('src/lib/pnlSeed.js')   // seed структуры P&L (миграция 029); живая — в базе
   const sourceCodes = [...pnlSrc.matchAll(/source:\s*'(?:bank|both):([a-z0-9_]+)'/g)].map(m => m[1])
 
   it('bank:/both: коды извлеклись', () => {

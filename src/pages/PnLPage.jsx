@@ -5,7 +5,8 @@ import { useAuthStore } from '@/lib/store'
 import { cn, fmt, fmtK, MONTHS_RU, money } from '@/lib/utils'
 import { isPnlCategory } from '@/lib/categories'
 import { yearsRange } from '@/lib/dates'
-import { PNL_STRUCTURE, computeMonthValues, sumMonths, pnlLabel } from '@/lib/pnlCompute'
+import { computeMonthValues, sumMonths, pnlLabel } from '@/lib/pnlCompute'
+import { getPnlStructure } from '@/lib/pnlStructure'
 import { foodCostLevel, marginLevel, currencySymbol, locale } from '@/lib/config'
 import { ChevronDown, ChevronRight, Plus, Trash2, Info, FileText, Upload, ChevronsUpDown, Pencil, Save, AlertCircle } from 'lucide-react'
 
@@ -20,6 +21,8 @@ const CURRENT_MONTH = new Date().getMonth() + 1
 // source: 'daily:field' | 'bank:category_code' | 'calc' | 'manual'
 
 export default function PnLPage() {
+  // структура из базы; скрытые строки остаются в расчёте, но не рисуются
+  const STRUCTURE = getPnlStructure().filter(l => !l.hidden)
   const { hasPermission, profile } = useAuthStore()
   const [year, setYear] = useState(CURRENT_YEAR)
   const [month, setMonth] = useState(CURRENT_MONTH)
@@ -34,7 +37,7 @@ export default function PnLPage() {
     // Level 0 (ДОХОДЫ, РАСХОДЫ) — развёрнуты
     // Level 1 (CapEx, OpEx) — развёрнуты
     // Level 2 (ФОТ, Food cost, Маркетинг...) — свёрнуты
-    PNL_STRUCTURE.filter(l => l.level === 2 && l.calc === 'sum_children').forEach(l => { c[l.key] = true })
+    STRUCTURE.filter(l => l.level === 2 && l.calc === 'sum_children').forEach(l => { c[l.key] = true })
     return c
   })
   const [editMode, setEditMode] = useState(false)
@@ -92,7 +95,7 @@ export default function PnLPage() {
     const totals = {}
     for (let m = startMonth; m <= month; m++) {
       const mv = computeMonthValues(year, m, dailyReports, bankTx, adjustments)
-      PNL_STRUCTURE.forEach(line => { totals[line.key] = (totals[line.key] || 0) + (mv[line.key] || 0) })
+      STRUCTURE.forEach(line => { totals[line.key] = (totals[line.key] || 0) + (mv[line.key] || 0) })
     }
     // Ratios пересчитываются от суммарных значений (а не суммой процентов)
     totals.margin_pct = totals.revenue > 0 ? totals.op_profit / totals.revenue : 0
@@ -116,7 +119,7 @@ export default function PnLPage() {
       }))
       // Add totals column
       const totals = {}
-      PNL_STRUCTURE.forEach(line => {
+      STRUCTURE.forEach(line => {
         totals[line.key] = columns.reduce((s, col) => s + (col.values[line.key] || 0), 0)
       })
       totals.margin_pct = totals.revenue > 0 ? totals.op_profit / totals.revenue : 0
@@ -135,7 +138,7 @@ export default function PnLPage() {
         const yearValues = {}
         for (let m = 1; m <= 12; m++) {
           const mv = computeMonthValues(y, m, dailyReports, bankTx, adjustments)
-          PNL_STRUCTURE.forEach(line => {
+          STRUCTURE.forEach(line => {
             yearValues[line.key] = (yearValues[line.key] || 0) + (mv[line.key] || 0)
           })
         }
@@ -149,7 +152,7 @@ export default function PnLPage() {
       })
       // Totals
       const totals = {}
-      PNL_STRUCTURE.forEach(line => {
+      STRUCTURE.forEach(line => {
         totals[line.key] = columns.reduce((s, col) => s + (col.values[line.key] || 0), 0)
       })
       totals.margin_pct = totals.revenue > 0 ? totals.op_profit / totals.revenue : 0
@@ -167,7 +170,7 @@ export default function PnLPage() {
     const newState = !allExpanded
     setAllExpanded(newState)
     const c = {}
-    PNL_STRUCTURE.filter(l => l.calc === 'sum_children').forEach(l => { c[l.key] = !newState })
+    STRUCTURE.filter(l => l.calc === 'sum_children').forEach(l => { c[l.key] = !newState })
     setCollapsed(c)
   }
   const toggleSection = (key) => setCollapsed(p => ({ ...p, [key]: !p[key] }))
@@ -192,7 +195,7 @@ export default function PnLPage() {
     const inserts = Object.entries(adjEdits)
       .filter(([_, v]) => v !== '' && Number(v) !== 0)
       .map(([key, v]) => {
-        const line = PNL_STRUCTURE.find(l => l.key === key)
+        const line = STRUCTURE.find(l => l.key === key)
         return { year, month, category: key, type: line?.section === 'revenue' ? 'income' : 'expense', amount: Number(v), description: 'Ручная корректировка', created_by: userName }
       })
     if (inserts.length > 0) {
@@ -229,7 +232,7 @@ export default function PnLPage() {
     // Walk backwards to find all ancestors and check if any are collapsed
     let targetLevel = line.level
     for (let i = idx - 1; i >= 0; i--) {
-      const ancestor = PNL_STRUCTURE[i]
+      const ancestor = STRUCTURE[i]
       if (ancestor.level < targetLevel && ancestor.calc === 'sum_children') {
         if (collapsed[ancestor.key]) return false
         targetLevel = ancestor.level
@@ -337,7 +340,7 @@ export default function PnLPage() {
       {/* P&L Vertical Table (month/ytd) */}
       {(viewMode === 'month' || viewMode === 'ytd') && (
       <div className="card p-0 divide-y divide-slate-800">
-        {PNL_STRUCTURE.map((line, idx) => {
+        {STRUCTURE.map((line, idx) => {
           if (!isVisible(line, idx)) return null
           const val = values[line.key] || 0
           const isRatio = line.section === 'ratio'
@@ -434,7 +437,7 @@ export default function PnLPage() {
               </tr>
             </thead>
             <tbody>
-              {PNL_STRUCTURE.map((line, idx) => {
+              {STRUCTURE.map((line, idx) => {
                 if (!isVisible(line, idx)) return null
                 const isGroup = line.calc === 'sum_children'
                 const isResult = line.section === 'result'
@@ -500,7 +503,7 @@ export default function PnLPage() {
           <div className="text-xs font-semibold text-purple-400 mb-3">Лог корректировок ({adjustments.filter(a => a.type !== 'historical').length})</div>
           <div className="space-y-1.5">
             {adjustments.filter(a => a.type !== 'historical').sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)).map(a => {
-              const catLine = PNL_STRUCTURE.find(l => l.key === a.category)
+              const catLine = STRUCTURE.find(l => l.key === a.category)
               const dt = a.created_at ? new Date(a.created_at) : null
               return (
                 <div key={a.id} className="flex items-center justify-between text-xs bg-slate-900/50 rounded-lg px-3 py-1.5">
