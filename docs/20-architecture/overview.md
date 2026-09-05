@@ -4,7 +4,7 @@ summary: SPA без бэкенда: страницы напрямую ходят
 read_when: добавляешь страницу или модуль, ищешь, где живёт расчёт, или решаешь, куда положить новый код
 domain: -
 status: inferred
-updated: 2026-09-04
+updated: 2026-09-06
 ---
 
 # Архитектура
@@ -35,6 +35,7 @@ Netlify — хостинг dist/ и функция /api/iiko (netlify/functions/
 | `pages/UsersPage.jsx`, `pages/RolesPage.jsx`, `pages/SettingsPage.jsx`, `pages/LoginPage.jsx`, `lib/store.js`, `components/Layout.jsx` | access | пользователи, роли, права, настройки |
 | `pages/SuppliersPage.jsx` | shift (справочник) | поставщики для автоподсказок в отчёте смены |
 | `lib/iiko.js`, `netlify/functions/iiko.js`, `lib/telegram.js`, `lib/supabase.js`, `lib/fetchAll.js`, `lib/utils.js` | — (инфраструктура) | интеграции и утилиты, см. `integrations.md` |
+| `index.css`, `tailwind.config.js`, `lib/theme.js`, `lib/chartTheme.js`, `lib/staleReload.js` | — | палитра на переменных и две темы, шкала кеглей, оформление графиков, самолечение устаревшей вкладки |
 
 Список доменов и их границы — `docs/10-business/_domains.md`.
 
