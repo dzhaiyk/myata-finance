@@ -14,7 +14,7 @@
 | TASK-010 | Мёртвый код: `checkPayroll`, `formatBankImportNotification`, `getDepartments/getOlapColumns`; дубли распределения по периодам в BankImportPage; миграция 016 `CREATE POLICY IF NOT EXISTS` | — | P3 | |
 | TASK-011 | Модуль «Зарплаты» по методике ФОТ (табель, проценты по должностям, пул кальянов, удержания) | payroll | P2 | после /discover payroll |
 | TASK-026 | `CATEGORIES` (60 кодов) в `categorize.js` дублирует таблицу `categories` и служит каноном для контрактного теста — свести к одному источнику | bank | P3 | остаток TASK-022 |
-| TASK-030 | Сервер (ADR-0012, шаг 0): `ops/` — Postgres 16, nginx с TLS, ежедневный `pg_dump` во внешнее хранилище, автообновления, проверка доступности → Telegram; поднимается повторяемо | — | P1 | ждёт сервер и домен |
+| TASK-030 | Сервер (ADR-0012, шаг 0): `ops/` — Postgres 16, nginx с TLS, ежедневный `pg_dump` во внешнее хранилище, автообновления, проверка доступности → Telegram; поднимается повторяемо | — | P1 | отложено: план в `docs/20-architecture/server-migration-plan.md`, ждёт сервер и домен |
 | TASK-031 | Перенос данных Supabase → VPS (шаг 1): `pg_dump`/restore, из миграций убрать `GRANT … TO anon` и открытые политики, проверка контрольных сумм таблиц | — | P1 | после TASK-030 |
 | TASK-032 | Node-сервис (шаг 2): вход с хешированием, сессии в cookie, `tenant_id` во всех таблицах, RLS по арендатору с тестами. **До этого второго клиента не подключать** | access | P1 | после TASK-031 |
 | TASK-033 | Секреты и интеграции в сервис (шаг 3): Telegram, iiko; `VITE_`-токены уходят из бандла | — | P1 | после TASK-032 |
