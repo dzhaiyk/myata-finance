@@ -5,7 +5,7 @@ import { fmt, fmtK, fmtPct, MONTHS_RU } from '@/lib/utils'
 import { bankTxRangeFilter } from '@/lib/pnl'
 import { yearsRange } from '@/lib/dates'
 import { sumMonths } from '@/lib/pnlCompute'
-import { foodCostLevel, marginLevel, THRESHOLDS } from '@/lib/config'
+import { foodCostLevel, marginLevel, THRESHOLDS, departmentLabel } from '@/lib/config'
 import { DollarSign, TrendingDown, ShoppingCart, CirclePercent, AlertTriangle, FileText, Trophy, CalendarDays } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts'
 
@@ -123,17 +123,17 @@ export default function DashboardPage() {
 
   // Department revenue
   const deptData = [
-    { name: 'Кухня', value: pnl.rev_kitchen, color: '#22c55e' },
-    { name: 'Бар', value: pnl.rev_bar, color: '#3b82f6' },
-    { name: 'Кальян', value: pnl.rev_hookah, color: '#f59e0b' },
+    { name: departmentLabel('kitchen'), value: pnl.rev_kitchen, color: '#22c55e' },
+    { name: departmentLabel('bar'), value: pnl.rev_bar, color: '#3b82f6' },
+    { name: departmentLabel('hookah'), value: pnl.rev_hookah, color: '#f59e0b' },
   ].filter(d => d.value > 0)
   const deptTotal = deptData.reduce((s, d) => s + d.value, 0)
 
   // Food cost by department
   const fcData = [
-    { name: 'Кухня', value: pnl.fc_kitchen, color: '#22c55e' },
-    { name: 'Бар', value: pnl.fc_bar, color: '#3b82f6' },
-    { name: 'Кальян', value: pnl.fc_hookah, color: '#f59e0b' },
+    { name: departmentLabel('kitchen'), value: pnl.fc_kitchen, color: '#22c55e' },
+    { name: departmentLabel('bar'), value: pnl.fc_bar, color: '#3b82f6' },
+    { name: departmentLabel('hookah'), value: pnl.fc_hookah, color: '#f59e0b' },
   ].filter(d => d.value > 0)
   const fcTotal = fcData.reduce((s, d) => s + d.value, 0)
   const fcPct = pnl.revenue > 0 ? fcTotal / pnl.revenue : 0

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { PNL_STRUCTURE, computeMonthValues, sumMonths } from '../pnlCompute.js'
+import { PNL_STRUCTURE, computeMonthValues, sumMonths, pnlLabel } from '../pnlCompute.js'
 import { setDepartments } from '../config.js'
 import { FIXTURE_DEPARTMENTS } from './fixtures.js'
 
@@ -176,5 +176,34 @@ describe('P&L — сопоставление отделов и строк чер
     const v = computeMonthValues(2026, 5, [r], [], [])
     assert.equal(v.fc_hookah, 3000)
     assert.equal(v.capex_other, 25000)   // аппараты идут в «CapEx прочее» (pnlCompute.js:207)
+  })
+})
+
+// TASK-023: переименование отдела должно быть видно в P&L, а не только в форме
+describe('подписи строк, привязанных к отделу', () => {
+  const lineOf = (key) => PNL_STRUCTURE.find(l => l.key === key)
+
+  it('название берётся из справочника', () => {
+    setDepartments(FIXTURE_DEPARTMENTS)
+    assert.equal(pnlLabel(lineOf('rev_kitchen')), 'Кухня')
+    assert.equal(pnlLabel(lineOf('payroll_kitchen')), 'ФОТ Кухня')
+    assert.equal(pnlLabel(lineOf('fc_hookah')), 'Закуп Кальян')
+    assert.equal(pnlLabel(lineOf('fc_bar_pct')), 'Бар')
+  })
+
+  it('переименованный отдел меняет подпись во всех своих строках', () => {
+    setDepartments(FIXTURE_DEPARTMENTS.map(d => (d.code === 'kitchen' ? { ...d, name: 'Асхана' } : d)))
+    assert.equal(pnlLabel(lineOf('rev_kitchen')), 'Асхана')
+    assert.equal(pnlLabel(lineOf('payroll_kitchen')), 'ФОТ Асхана')
+    assert.equal(pnlLabel(lineOf('fc_kitchen')), 'Закуп Асхана')
+    assert.equal(pnlLabel(lineOf('fc_kitchen_pct')), 'Асхана')
+    setDepartments(FIXTURE_DEPARTMENTS)
+  })
+
+  it('строки без отдела и незагруженный справочник — статичная подпись', () => {
+    assert.equal(pnlLabel(lineOf('revenue')), lineOf('revenue').label)
+    setDepartments([])
+    assert.equal(pnlLabel(lineOf('rev_kitchen')), 'Кухня')
+    setDepartments(FIXTURE_DEPARTMENTS)
   })
 })

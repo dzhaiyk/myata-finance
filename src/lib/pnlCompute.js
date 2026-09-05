@@ -4,7 +4,7 @@
 import { getTxAmountForMonth } from './pnl.js'
 import { isPnlCategory } from './categories.js'
 import { isTechStaff } from './reconcile.js'
-import { departmentCode, isCapexRow } from './config.js'
+import { departmentCode, departmentByCode, isCapexRow } from './config.js'
 
 // P&L structure matching the restaurant's actual format
 // Each line: { key, label, level (0=header,1=group,2=sub), source, calc }
@@ -12,9 +12,9 @@ import { departmentCode, isCapexRow } from './config.js'
 export const PNL_STRUCTURE = [
   // === REVENUE ===
   { key: 'revenue', label: 'ДОХОДЫ', level: 0, section: 'revenue', calc: 'sum_children' },
-  { key: 'rev_kitchen', label: 'Кухня', level: 2, section: 'revenue', source: 'daily:dept_kitchen' },
-  { key: 'rev_bar', label: 'Бар', level: 2, section: 'revenue', source: 'daily:dept_bar' },
-  { key: 'rev_hookah', label: 'Кальян', level: 2, section: 'revenue', source: 'daily:dept_hookah' },
+  { key: 'rev_kitchen', label: 'Кухня', dept: 'kitchen', level: 2, section: 'revenue', source: 'daily:dept_kitchen' },
+  { key: 'rev_bar', label: 'Бар', dept: 'bar', level: 2, section: 'revenue', source: 'daily:dept_bar' },
+  { key: 'rev_hookah', label: 'Кальян', dept: 'hookah', level: 2, section: 'revenue', source: 'daily:dept_hookah' },
   // Прочий доход приходит из двух мест: отдел «Прочее» в отчёте смены и
   // поступления на счёт, не связанные с эквайрингом (например, аренда места
   // под станции зарядки). У банковских строк знак обратный: кредит = доход.
@@ -35,18 +35,18 @@ export const PNL_STRUCTURE = [
   // ФОТ
   { key: 'payroll', label: 'ФОТ', level: 2, section: 'expenses', calc: 'sum_children', parent: 'opex' },
   { key: 'payroll_mgmt', label: 'ФОТ Менеджмент', level: 3, section: 'expenses', source: 'bank:payroll_mgmt' },
-  { key: 'payroll_kitchen', label: 'ФОТ Кухня', level: 3, section: 'expenses', source: 'bank:payroll_kitchen' },
-  { key: 'payroll_bar', label: 'ФОТ Бар', level: 3, section: 'expenses', source: 'bank:payroll_bar' },
-  { key: 'payroll_hookah', label: 'ФОТ Кальян', level: 3, section: 'expenses', source: 'bank:payroll_hookah' },
+  { key: 'payroll_kitchen', label: 'ФОТ Кухня', dept: 'kitchen', labelPrefix: 'ФОТ', level: 3, section: 'expenses', source: 'bank:payroll_kitchen' },
+  { key: 'payroll_bar', label: 'ФОТ Бар', dept: 'bar', labelPrefix: 'ФОТ', level: 3, section: 'expenses', source: 'bank:payroll_bar' },
+  { key: 'payroll_hookah', label: 'ФОТ Кальян', dept: 'hookah', labelPrefix: 'ФОТ', level: 3, section: 'expenses', source: 'bank:payroll_hookah' },
   { key: 'payroll_hall', label: 'ФОТ Зал', level: 3, section: 'expenses', source: 'bank:payroll_hall' },
   { key: 'payroll_transport', label: 'Развозка', level: 3, section: 'expenses', source: 'bank:payroll_transport' },
   { key: 'payroll_other', label: 'ФОТ Прочее', level: 3, section: 'expenses', source: 'both:payroll_other' },
 
   // Food Cost
   { key: 'foodcost', label: 'Food cost', level: 2, section: 'expenses', calc: 'sum_children', parent: 'opex' },
-  { key: 'fc_kitchen', label: 'Закуп кухня', level: 3, section: 'expenses', source: 'both:cogs_kitchen', dailyField: 'suppliers_kitchen' },
-  { key: 'fc_bar', label: 'Закуп бар', level: 3, section: 'expenses', source: 'both:cogs_bar', dailyField: 'suppliers_bar' },
-  { key: 'fc_hookah', label: 'Закуп кальян', level: 3, section: 'expenses', source: 'both:cogs_hookah', dailyField: 'tobacco' },
+  { key: 'fc_kitchen', label: 'Закуп кухня', dept: 'kitchen', labelPrefix: 'Закуп', level: 3, section: 'expenses', source: 'both:cogs_kitchen', dailyField: 'suppliers_kitchen' },
+  { key: 'fc_bar', label: 'Закуп бар', dept: 'bar', labelPrefix: 'Закуп', level: 3, section: 'expenses', source: 'both:cogs_bar', dailyField: 'suppliers_bar' },
+  { key: 'fc_hookah', label: 'Закуп кальян', dept: 'hookah', labelPrefix: 'Закуп', level: 3, section: 'expenses', source: 'both:cogs_hookah', dailyField: 'tobacco' },
 
   // Маркетинг
   { key: 'marketing', label: 'Маркетинг', level: 2, section: 'expenses', calc: 'sum_children', parent: 'opex' },
@@ -104,10 +104,22 @@ export const PNL_STRUCTURE = [
   // === RATIOS ===
   { key: 'margin_pct', label: 'Маржа (от опер. прибыли)', level: 0, section: 'ratio', calc: 'ratio' },
   { key: 'fc_pct', label: 'Food cost в %', level: 0, section: 'ratio', calc: 'ratio' },
-  { key: 'fc_kitchen_pct', label: 'Кухня', level: 2, section: 'ratio', calc: 'ratio' },
-  { key: 'fc_bar_pct', label: 'Бар', level: 2, section: 'ratio', calc: 'ratio' },
-  { key: 'fc_hookah_pct', label: 'Кальян', level: 2, section: 'ratio', calc: 'ratio' },
+  { key: 'fc_kitchen_pct', label: 'Кухня', dept: 'kitchen', level: 2, section: 'ratio', calc: 'ratio' },
+  { key: 'fc_bar_pct', label: 'Бар', dept: 'bar', level: 2, section: 'ratio', calc: 'ratio' },
+  { key: 'fc_hookah_pct', label: 'Кальян', dept: 'hookah', level: 2, section: 'ratio', calc: 'ratio' },
 ]
+
+/**
+ * Подпись строки отчёта. У строк, привязанных к отделу, название берётся из
+ * справочника: переименование отдела должно быть видно в P&L, а не только в форме.
+ * Пока справочник не загружен, показывается статичная подпись.
+ */
+export function pnlLabel(line) {
+  if (!line?.dept) return line?.label || ''
+  const dep = departmentByCode(line.dept)
+  if (!dep) return line.label || ''
+  return line.labelPrefix ? `${line.labelPrefix} ${dep.name}` : dep.name
+}
 
 export function computeMonthValues(targetYear, targetMonth, allDailyReports, allBankTx, allAdjustments) {
   const v = {}

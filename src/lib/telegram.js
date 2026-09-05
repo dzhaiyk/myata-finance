@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { getNotifications, setNotifications, isNotificationEnabled } from './config.js'
+import { getNotifications, setNotifications, isNotificationEnabled, departmentsFor } from './config.js'
 
 const TELEGRAM_BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN
 const TELEGRAM_CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID
@@ -60,6 +60,18 @@ export async function sendTelegramNotification(message, type) {
   }
 }
 
+// Отделы в уведомлении перечисляются по справочнику: раньше три строки были
+// вписаны в шаблон, и переименование отдела в них не попадало.
+const DEPARTMENT_ICONS = { kitchen: '🍽', bar: '🍸', hookah: '💨' }
+
+function departmentLines(departments) {
+  const rows = departmentsFor('revenue')
+  if (!rows.length) return ''
+  return rows
+    .map(d => `${DEPARTMENT_ICONS[d.code] || '•'} ${d.name}: ${fmt(departments?.[d.code] || 0)} ₸`)
+    .join('\n')
+}
+
 export function formatDailyReportNotification(report) {
   const { date, manager, revenue, withdrawals, cashExpected, cashActual, discrepancy, departments } = report
   const disc = discrepancy !== 0 ? `\n⚠️ <b>РАСХОЖДЕНИЕ: ${fmt(discrepancy)} ₸</b>` : '\n✅ Расхождений нет'
@@ -69,9 +81,7 @@ export function formatDailyReportNotification(report) {
 👤 Менеджер: ${manager}
 
 💰 <b>Выручка: ${fmt(revenue)} ₸</b>
-🍽 Кухня: ${fmt(departments?.kitchen || 0)} ₸
-🍸 Бар: ${fmt(departments?.bar || 0)} ₸
-💨 Кальян: ${fmt(departments?.hookah || 0)} ₸
+${departmentLines(departments)}
 
 📤 Изъятия: ${fmt(withdrawals)} ₸
 💵 Ожидаемый остаток: ${fmt(cashExpected)} ₸

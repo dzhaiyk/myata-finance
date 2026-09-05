@@ -8,7 +8,7 @@ import { getBusinessDate } from '@/lib/dates'
 import StatementUploadCard from '@/components/StatementUploadCard'
 import { Save, Send, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Plus, Trash2, Calendar, ArrowLeft, FileText, Eye, Clock, Check, Pencil, Download } from 'lucide-react'
 import jsPDF from 'jspdf'
-import { CAPEX_ROW_LABEL, THRESHOLDS, departmentsFor, departmentCode, departmentLabel } from '@/lib/config'
+import { CAPEX_ROW_LABEL, THRESHOLDS, departmentsFor, departmentCode, departmentLabel, departmentByCode } from '@/lib/config'
 
 const MoneyInput = ({ value, onChange, className = '', disabled = false }) => (
   <input type="text" inputMode="decimal" value={value} disabled={disabled}
@@ -43,9 +43,9 @@ const NameInput = ({ value, onChange, suggestions, placeholder, disabled = false
 }
 
 const SECTIONS = [
-  { key: 'suppliers_kitchen', label: 'Закуп Кухня', color: 'green', icon: '🍽', supplierCode: 'kitchen' },
-  { key: 'suppliers_bar', label: 'Закуп Бар', color: 'blue', icon: '🍸', supplierCode: 'bar' },
-  { key: 'tobacco', label: 'Закуп Кальян', color: 'amber', icon: '💨', fixed: true },
+  { key: 'suppliers_kitchen', label: 'Закуп Кухня', color: 'green', icon: '🍽', supplierCode: 'kitchen', dept: 'kitchen' },
+  { key: 'suppliers_bar', label: 'Закуп Бар', color: 'blue', icon: '🍸', supplierCode: 'bar', dept: 'bar' },
+  { key: 'tobacco', label: 'Закуп Кальян', color: 'amber', icon: '💨', fixed: true, dept: 'hookah' },
   { key: 'payroll', label: 'Авансы персоналу', color: 'indigo', icon: '👥', isPayroll: true },
   { key: 'other', label: 'Прочие расходы', color: 'rose', icon: '📦', fixed: true },
   { key: 'cash_withdrawals', label: 'Изъятия из кассы', color: 'red', icon: '💸' },
@@ -57,6 +57,10 @@ const FIXED_ROWS = {
 const PAYMENT_TYPES = ['Наличные', 'Kaspi', 'Halyk', 'Wolt', 'Glovo', 'Yandex Eda', 'Прочее']
 // Отделы выручки берутся из справочника (миграция 025), а не из списка в коде.
 // В строке хранится код: переименование отдела не должно менять расчёты.
+// Подпись раздела закупа берётся из справочника: переименовали отдел — изменилось
+// и здесь. Статичная label остаётся запасной, пока справочник не загружен.
+const sectionLabel = (sec) => (sec.dept && departmentByCode(sec.dept) ? `Закуп ${departmentByCode(sec.dept).name}` : sec.label)
+
 const emptyDepartments = () => departmentsFor('revenue').map(d => ({ code: d.code, name: d.name, amount: '' }))
 
 // У отчётов до миграции 025 кода нет — проставляем его по названию.
@@ -625,14 +629,14 @@ export default function DailyReportPage() {
       const neededHeight = rows.length * 6 + 22
       checkPage(neededHeight)
 
-      subHeader(sec.label)
+      subHeader(sectionLabel(sec))
       rows.forEach(r => {
         const label = r.name || r.comment || '—'
         const comment = r.comment && r.name ? `  (${r.comment})` : ''
         row(`${label}${comment}`, `${fmt(num(r.amount))} ₸`)
       })
       divider()
-      row(`Итого ${sec.label}`, `${fmt(secTotal)} ₸`, { bold: true })
+      row(`Итого ${sectionLabel(sec)}`, `${fmt(secTotal)} ₸`, { bold: true })
       y += 2
     })
 
@@ -1060,7 +1064,7 @@ export default function DailyReportPage() {
             <div key={sec.key} className={cn('card border overflow-visible', colorMap[sec.color])}>
               <button onClick={() => setExpanded(prev => ({ ...prev, [sec.key]: !prev[sec.key] }))} className="flex items-center justify-between w-full text-left">
                 <div className="flex items-center gap-2">
-                  <span>{sec.icon}</span><h3 className="text-sm font-display font-bold">{sec.label}</h3>
+                  <span>{sec.icon}</span><h3 className="text-sm font-display font-bold">{sectionLabel(sec)}</h3>
                   {total > 0 && <span className="badge-yellow">{fmt(total)} ₸</span>}
                 </div>
                 {isOpen ? <ChevronDown className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}

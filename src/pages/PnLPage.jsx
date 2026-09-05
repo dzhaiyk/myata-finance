@@ -5,7 +5,7 @@ import { useAuthStore } from '@/lib/store'
 import { cn, fmt, fmtK, MONTHS_RU } from '@/lib/utils'
 import { isPnlCategory } from '@/lib/categories'
 import { yearsRange } from '@/lib/dates'
-import { PNL_STRUCTURE, computeMonthValues, sumMonths } from '@/lib/pnlCompute'
+import { PNL_STRUCTURE, computeMonthValues, sumMonths, pnlLabel } from '@/lib/pnlCompute'
 import { foodCostLevel, marginLevel } from '@/lib/config'
 import { ChevronDown, ChevronRight, Plus, Trash2, Info, FileText, Upload, ChevronsUpDown, Pencil, Save, AlertCircle } from 'lucide-react'
 
@@ -354,7 +354,7 @@ export default function PnLPage() {
           if (isResult) {
             return (
               <div key={line.key} className={cn('flex items-center justify-between px-4 py-3', val >= 0 ? 'bg-green-500/5' : 'bg-red-500/5')}>
-                <span className="text-sm font-display font-bold">{line.label}</span>
+                <span className="text-sm font-display font-bold">{pnlLabel(line)}</span>
                 <div className="flex items-center gap-4">
                   <span className={cn('font-mono text-base font-bold', val >= 0 ? 'text-green-400' : 'text-red-400')}>{fmt(val)} ₸</span>
                   <span className="text-[10px] text-slate-500 w-12 text-right">{pct(val)}</span>
@@ -366,7 +366,7 @@ export default function PnLPage() {
           if (isRatio) {
             return (
               <div key={line.key} className={cn('flex items-center justify-between px-4 py-2', line.level === 2 && 'pl-10')}>
-                <span className={cn('text-sm', line.level === 0 ? 'font-bold' : 'text-slate-400')}>{line.label}</span>
+                <span className={cn('text-sm', line.level === 0 ? 'font-bold' : 'text-slate-400')}>{pnlLabel(line)}</span>
                 <span className={cn('font-mono text-sm', line.key.includes('fc') ? LEVEL_CLASS[foodCostLevel(val)] : 'text-slate-300')}>{fmtPct(val)}</span>
               </div>
             )
@@ -381,7 +381,7 @@ export default function PnLPage() {
                   line.level === 0 && 'bg-slate-900/50', padLeft)}>
                 <div className="flex items-center gap-2">
                   {isCollapsed ? <ChevronRight className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
-                  <span className={cn('text-sm font-bold', color)}>{line.label}</span>
+                  <span className={cn('text-sm font-bold', color)}>{pnlLabel(line)}</span>
                 </div>
                 <div className="flex items-center gap-4">
                   <span className={cn('font-mono text-sm font-bold', color)}>{fmt(val)} ₸</span>
@@ -397,7 +397,7 @@ export default function PnLPage() {
           const hasAdj = adjVal !== '' && Number(adjVal) !== 0
           return (
             <div key={line.key} className={cn('flex items-center justify-between px-4 py-2', leafPad)}>
-              <span className="text-sm text-slate-400">{line.label}</span>
+              <span className="text-sm text-slate-400">{pnlLabel(line)}</span>
               <div className="flex items-center gap-3">
                 <span className="font-mono text-sm text-slate-300">{fmt(val)} ₸</span>
                 {editMode && (
@@ -453,10 +453,10 @@ export default function PnLPage() {
                       {isGroup ? (
                         <button onClick={() => toggleSection(line.key)} className="flex items-center gap-1 w-full">
                           {isCollapsedRow ? <ChevronRight className="w-3 h-3 text-slate-500" /> : <ChevronDown className="w-3 h-3 text-slate-500" />}
-                          <span className={cn('text-sm', isGroup && 'font-bold')}>{line.label}</span>
+                          <span className={cn('text-sm', isGroup && 'font-bold')}>{pnlLabel(line)}</span>
                         </button>
                       ) : (
-                        <span className={cn('text-sm', isResult ? 'font-bold' : 'text-slate-400')}>{line.label}</span>
+                        <span className={cn('text-sm', isResult ? 'font-bold' : 'text-slate-400')}>{pnlLabel(line)}</span>
                       )}
                     </td>
                     {multiPeriodData.map(col => {
@@ -508,7 +508,7 @@ export default function PnLPage() {
                     <span className={cn('font-mono font-bold shrink-0', Number(a.amount) >= 0 ? 'text-green-400' : 'text-red-400')}>
                       {Number(a.amount) > 0 ? '+' : ''}{fmt(a.amount)}
                     </span>
-                    <span className="text-slate-400 truncate">{catLine?.label || a.category}</span>
+                    <span className="text-slate-400 truncate">{catLine ? pnlLabel(catLine) : a.category}</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0 text-slate-600">
                     {a.created_by && <span>{a.created_by}</span>}
