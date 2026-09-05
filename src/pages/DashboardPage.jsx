@@ -44,7 +44,7 @@ const PieWithLegend = ({ title, data, total }) => (
               </div>
               <div className="flex items-center gap-2 shrink-0 ml-1">
                 <span className="font-mono text-2xs text-slate-500">{fmtK(d.value)}</span>
-                <span className="text-xs font-mono font-bold w-10 text-right" style={{ color: d.color }}>{pct}%</span>
+                <span className="text-xs font-mono font-bold w-12 text-right" style={{ color: d.color }}>{pct}%</span>
               </div>
             </div>
             <div className="h-1 bg-slate-800 rounded-full overflow-hidden">

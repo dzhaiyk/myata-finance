@@ -395,7 +395,7 @@ export default function PnLPage() {
                 </div>
                 <div className="flex items-center gap-4">
                   <span className={cn('font-mono text-sm font-bold', color)}>{money(val)}</span>
-                  <span className="text-2xs text-slate-500 w-12 text-right">{pct(val)}</span>
+                  <span className="font-mono text-sm font-bold w-16 text-right border-l border-slate-800 pl-3">{pct(val)}</span>
                 </div>
               </button>
             )

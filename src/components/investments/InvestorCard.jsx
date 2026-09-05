@@ -38,9 +38,9 @@ export default function InvestorCard({ investor, transactions, allInvestors, can
 
   return (
     <div className="card space-y-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-slate-100 font-semibold text-base">{investor.full_name}</h3>
             <span className={cn(
               'badge text-xs',
@@ -56,7 +56,7 @@ export default function InvestorCard({ investor, transactions, allInvestors, can
         {canManage && isActive && (
           <button
             onClick={() => onTransfer?.(investor)}
-            className="btn-secondary text-xs flex items-center gap-1"
+            className="btn-secondary text-xs flex items-center gap-1 shrink-0 whitespace-nowrap"
           >
             <ArrowRightLeft size={14} />
             Передача доли
@@ -78,27 +78,27 @@ export default function InvestorCard({ investor, transactions, allInvestors, can
         )}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+        <div className="min-w-0">
           <p className="text-xs text-slate-500">Вложено</p>
-          <p className="text-slate-100 font-medium">{money(stats.invested)}</p>
+          <p className="text-slate-100 font-medium font-mono text-sm truncate" title={money(stats.invested)}>{money(stats.invested)}</p>
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs text-slate-500">Выведено</p>
-          <p className="text-slate-100 font-medium">{money(stats.withdrawn)}</p>
+          <p className="text-slate-100 font-medium font-mono text-sm truncate" title={money(stats.withdrawn)}>{money(stats.withdrawn)}</p>
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs text-slate-500">Чистая прибыль</p>
-          <p className={cn(
-            'font-medium',
+          <p title={money(stats.profit)} className={cn(
+            'font-medium font-mono text-sm truncate',
             stats.profit >= 0 ? 'text-green-400' : 'text-red-400'
           )}>
             {money(stats.profit)}
           </p>
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs text-slate-500">ROI</p>
-          <p className="text-slate-100 font-medium">
+          <p className="text-slate-100 font-medium font-mono text-sm">
             {stats.roi > 0 ? `${stats.roi.toFixed(1)}x` : '—'}
           </p>
         </div>
@@ -106,13 +106,13 @@ export default function InvestorCard({ investor, transactions, allInvestors, can
 
       {(stats.avgDivCurrent || stats.avgDivPrev) && (
         <div className="flex items-center gap-4 pt-2 border-t border-slate-800">
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <p className="text-2xs text-slate-500 uppercase tracking-wider">{stats.currentYear} ср./мес</p>
-            <p className="text-sm font-mono text-blue-400">{stats.avgDivCurrent ? `${money(stats.avgDivCurrent)}` : '—'}</p>
+            <p className="text-sm font-mono text-blue-400 truncate">{stats.avgDivCurrent ? `${money(stats.avgDivCurrent)}` : '—'}</p>
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <p className="text-2xs text-slate-500 uppercase tracking-wider">{stats.currentYear - 1} ср./мес</p>
-            <p className="text-sm font-mono text-slate-400">{stats.avgDivPrev ? `${money(stats.avgDivPrev)}` : '—'}</p>
+            <p className="text-sm font-mono text-slate-400 truncate">{stats.avgDivPrev ? `${money(stats.avgDivPrev)}` : '—'}</p>
           </div>
         </div>
       )}
