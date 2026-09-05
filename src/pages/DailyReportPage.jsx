@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { fmt, cn, money, amountInput } from '@/lib/utils'
 import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { sendTelegramNotification, formatDailyReportNotification, formatCashDiscrepancyAlert } from '@/lib/telegram'
 import { getBusinessDate } from '@/lib/dates'
+import { loadModule, registerStaleReloadHook } from '@/lib/staleReload'
 import StatementUploadCard from '@/components/StatementUploadCard'
 import { Save, Send, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Plus, Trash2, Calendar, ArrowLeft, FileText, Eye, Clock, Check, Pencil, Download } from 'lucide-react'
 import jsPDF from 'jspdf'
@@ -158,6 +159,10 @@ export default function DailyReportPage() {
   const [iikoError, setIikoError] = useState('')
   const [iikoCashLoading, setIikoCashLoading] = useState(false)
   const [iikoCashInfo, setIikoCashInfo] = useState(null)
+  // Приложение обновилось — вкладка перезагрузится сама; заполненный черновик
+  // при этом сохраняется, иначе менеджер потерял бы введённое (staleReload.js).
+  const staleSaveRef = useRef(null)
+  useEffect(() => registerStaleReloadHook(() => staleSaveRef.current?.()), [])
   const [revenue, setRevenue] = useState(PAYMENT_TYPES.map(t => ({ type: t, amount: '', checks: '' })))
   const [departments, setDepartments] = useState(emptyDepartments)
   const [allAccounts, setAllAccounts] = useState([]) // all accounts for parent lookup
@@ -368,6 +373,14 @@ export default function DailyReportPage() {
       loadJournal()
     } catch (e) { alert('Ошибка: ' + e.message) }
     setSaving(false)
+  }
+
+  // Значение обновляется каждый рендер: хук всегда видит текущую форму
+  staleSaveRef.current = async () => {
+    if (mode !== 'form' || status === 'submitted' || !canEdit) return
+    const filled = num(cashStart) || num(cashEnd) || totalRevenue > 0 || totalWithdrawals > 0
+    if (!filled) return
+    await saveDraft()
   }
 
   // Submit final report
@@ -730,7 +743,7 @@ export default function DailyReportPage() {
     setIikoError('')
     setIikoLoading(true)
     try {
-      const { fetchSales, toDailyReportShape } = await import('@/lib/iiko')
+      const { fetchSales, toDailyReportShape } = await loadModule(() => import('@/lib/iiko'))
       const days = await fetchSales({ from: date, to: date })
       const shape = toDailyReportShape(days[date])
       if (!shape) throw new Error(`за ${date} нет продаж`)
@@ -752,7 +765,8 @@ export default function DailyReportPage() {
     setIikoCashLoading(true)
     try {
       const [{ fetchCashPayments }, { splitPayments, mergeWithdrawals, summarize }, { loadWithdrawalRules }] = await Promise.all([
-        import('@/lib/iiko'), import('@/lib/iikoCash'), import('@/lib/iikoWithdrawalRules'),
+        loadModule(() => import('@/lib/iiko')), loadModule(() => import('@/lib/iikoCash')),
+        loadModule(() => import('@/lib/iikoWithdrawalRules')),
       ])
       const rules = await loadWithdrawalRules()
       const { shifts, payments } = await fetchCashPayments({ date })

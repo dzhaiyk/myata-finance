@@ -2,6 +2,10 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
+import { installStaleChunkReload } from './lib/staleReload'
+
+// Вкладка со старой версией сама перезагружается, когда просит исчезнувший файл
+installStaleChunkReload()
 
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null } }
