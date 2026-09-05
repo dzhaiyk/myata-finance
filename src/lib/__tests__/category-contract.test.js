@@ -1,13 +1,14 @@
 // Контракт кодов категорий.
 // Класс бага №1 из аудита: categorize.js писал коды (marketing_smm, rent_main...),
 // которых нет в таблице categories и в PNL_STRUCTURE — суммы молча выпадали из P&L.
-// Этот тест сверяет коды во всех местах с каноном — миграцией 008 (таблица categories).
+// Этот тест сверяет коды во всех местах с каноном — миграциями таблицы categories.
+// Списка категорий в коде больше нет (TASK-026): приложение читает справочник.
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { resolve, dirname } from 'node:path'
-import { CATEGORIES } from '../categorize.js'
+import { NON_PNL_CATEGORIES } from '../categories.js'
 import { seededRules } from './fixtures.js'
 import { PAYROLL_CATEGORIES } from '../config.js'
 
@@ -39,10 +40,11 @@ describe('канон — миграция 008', () => {
   })
 })
 
-describe('categorize.js ↔ таблица categories', () => {
-  it('каждый код CATEGORIES существует в БД', () => {
-    for (const code of Object.keys(CATEGORIES)) {
-      assert.ok(dbCodes.has(code), `CATEGORIES.${code} отсутствует в categories (миграция 008)`)
+describe('код ↔ таблица categories', () => {
+  // Единственный список кодов, оставшийся в коде, — служебные категории вне P&L
+  it('каждая служебная категория (вне P&L) существует в БД', () => {
+    for (const code of NON_PNL_CATEGORIES) {
+      assert.ok(dbCodes.has(code), `NON_PNL_CATEGORIES.${code} отсутствует в categories`)
     }
   })
 

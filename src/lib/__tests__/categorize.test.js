@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { CATEGORIES, categorizeTransaction, parseBankStatement } from '../categorize.js'
+import { categorizeTransaction, parseBankStatement } from '../categorize.js'
 import { applyDbRules } from '../bankImport.js'
 import { seededRules } from './fixtures.js'
 
@@ -57,13 +57,6 @@ describe('категоризация по правилам из базы', () =>
     const r = categorizeTransaction({ purpose: 'Оплата за продукты кухня' })
     assert.equal(r.category, 'uncategorized')
     assert.equal(r.confidence, 'low')
-  })
-
-  it('каждое правило ссылается на существующую категорию', () => {
-    for (const rule of RULES) {
-      assert.notEqual(CATEGORIES[rule.category_code], undefined,
-        `правило ${rule.id} → неизвестный код ${rule.category_code}`)
-    }
   })
 })
 
