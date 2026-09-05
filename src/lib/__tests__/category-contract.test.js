@@ -73,8 +73,8 @@ describe('PNL_STRUCTURE ↔ таблица categories', () => {
 })
 
 describe('CashFlowPage группы категорий ↔ таблица categories', () => {
-  const cfSrc = read('src/pages/CashFlowPage.jsx')
-  const catArrays = [...cfSrc.matchAll(/const [A-Z_]+_CATS = \[([^\]]+)\]/g)]
+  const cfSrc = read('src/lib/cashflowCompute.js')   // расчёт CF переехал из страницы (TASK-029)
+  const catArrays = [...cfSrc.matchAll(/(?:export )?const [A-Z_]+_CATS = \[([^\]]+)\]/g)]
   // PAYROLL_CATS переехал в config.js (TASK-017): в исходнике страницы его больше
   // нет литералом, поэтому коды ФОТ берём из общего списка
   const cfCodes = [
