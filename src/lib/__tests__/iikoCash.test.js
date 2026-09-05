@@ -39,6 +39,21 @@ describe('BR-SHF-021 — изъятия из кассовой смены iiko', 
     assert.equal(matchRule('пиво и мясо', RULES).section, 'suppliers_kitchen') // «мясо» в первом правиле
     assert.equal(matchRule('табак сердце', RULES).name, 'Табак')
     assert.equal(matchRule('что-то странное', RULES), null)
+  })
+
+  // Из живого запуска 06.09.2026: комментарии менеджеров — «лед», «дост табак»,
+  // «чизкейк», «аванс». Короткое слово не должно ловить чужое слово целиком.
+  it('слово ищется с начала слова, а не любой подстрокой', () => {
+    const rules = [
+      { pattern: 'лед|лёд', section: 'suppliers_bar', name: '' },
+      { pattern: 'табак', section: 'tobacco', name: 'Табак' },
+    ]
+    assert.equal(matchRule('лед', rules).section, 'suppliers_bar')
+    assert.equal(matchRule('Лед для бара', rules).section, 'suppliers_bar')
+    assert.equal(matchRule('следующая поставка', rules), null)
+    assert.equal(matchRule('обследование', rules), null)
+    assert.equal(matchRule('табака 2 пачки', rules).name, 'Табак')
+    assert.equal(matchRule('дост табак', rules).name, 'Табак')
     assert.equal(matchRule('', []), null)
   })
 

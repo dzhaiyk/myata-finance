@@ -50,10 +50,18 @@ export function isPayOut(p) {
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-/** Правило {pattern, section, name}: pattern — слова через «|», без учёта регистра. */
+/**
+ * Правило {pattern, section, name}: слова через «|», без учёта регистра.
+ * Слово ищется с начала слова: «табак» обязан ловить «табака», но «лед» не
+ * должен ловить «следующий» — иначе деньги молча уедут в чужую секцию.
+ * Браузеры без lookbehind работают как раньше, простой подстрокой.
+ */
 export function ruleRegex(rule) {
   const alts = String(rule?.pattern || '').split('|').map(s => s.trim()).filter(Boolean).map(escapeRe)
-  return alts.length ? new RegExp(alts.join('|'), 'i') : null
+  if (!alts.length) return null
+  const body = alts.join('|')
+  try { return new RegExp(`(?<![\\p{L}\\p{N}])(?:${body})`, 'iu') }
+  catch { return new RegExp(body, 'i') }
 }
 
 export function matchRule(comment, rules) {
