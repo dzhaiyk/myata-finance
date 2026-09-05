@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { getNotifications, setNotifications, isNotificationEnabled, departmentsFor } from './config.js'
+import { getNotifications, setNotifications, isNotificationEnabled, departmentsFor, documentTitle } from './config.js'
 
 const TELEGRAM_BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN
 const TELEGRAM_CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID
@@ -76,7 +76,7 @@ export function formatDailyReportNotification(report) {
   const { date, manager, revenue, withdrawals, cashExpected, cashActual, discrepancy, departments } = report
   const disc = discrepancy !== 0 ? `\n⚠️ <b>РАСХОЖДЕНИЕ: ${fmt(discrepancy)} ₸</b>` : '\n✅ Расхождений нет'
 
-  return `🍃 <b>Мята — Ежедневный отчёт</b>
+  return `<b>${documentTitle('Ежедневный отчёт')}</b>
 📅 ${date}
 👤 Менеджер: ${manager}
 

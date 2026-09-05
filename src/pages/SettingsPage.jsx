@@ -4,6 +4,7 @@ import { getNotifications, THRESHOLDS } from '@/lib/config'
 import { getCutoffHour, saveCutoffHour } from '@/lib/dates'
 import { useAuthStore } from '@/lib/store'
 import DepartmentsSettings from '@/components/DepartmentsSettings'
+import BrandingSettings from '@/components/BrandingSettings'
 import { Save, Send, Bell, Bot, Moon } from 'lucide-react'
 
 // Только те типы, которые приложение действительно умеет отправлять.
@@ -87,6 +88,8 @@ export default function SettingsPage() {
         </p>
       </div>
 
+      <BrandingSettings canEdit={canEdit} />
+
       <DepartmentsSettings canEdit={canEdit} />
 
       {/* Telegram Bot */}
@@ -152,7 +155,7 @@ export default function SettingsPage() {
       <div className="card border-blue-500/20 bg-blue-500/5">
         <div className="text-sm font-semibold text-blue-300 mb-3">📋 Как настроить Telegram-бот</div>
         <div className="text-xs text-slate-400 space-y-2">
-          <p>1. Откройте @BotFather в Telegram → /newbot → назовите «Мята Finance Bot»</p>
+          <p>1. Откройте @BotFather в Telegram → /newbot → придумайте имя боту</p>
           <p>2. Скопируйте полученный Token и вставьте выше</p>
           <p>3. Создайте группу, добавьте бота, напишите любое сообщение</p>
           <p>4. Откройте <code className="text-blue-400">api.telegram.org/bot[TOKEN]/getUpdates</code></p>

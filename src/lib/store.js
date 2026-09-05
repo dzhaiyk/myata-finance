@@ -3,6 +3,8 @@ import { supabase } from './supabase'
 import { loadCutoffHour } from './dates'
 import { loadNotifications } from './telegram'
 import { loadDepartments } from './departments'
+import { loadBranding } from './branding'
+import { getBranding } from './config'
 
 const SESSION_KEY = 'myata_session'
 
@@ -11,11 +13,16 @@ export const useAuthStore = create((set, get) => ({
   profile: null,
   permissions: {},
   loading: true,
+  // Бренд лежит в кеше config.js (его читает и код вне React), а здесь — чтобы
+  // экран входа перерисовался, когда настройки догрузятся
+  branding: getBranding(),
 
   initialize: async () => {
     await loadCutoffHour()
     await loadNotifications()
     await loadDepartments()
+    await loadBranding()
+    set({ branding: getBranding() })
     const saved = localStorage.getItem(SESSION_KEY)
     if (saved) {
       try {

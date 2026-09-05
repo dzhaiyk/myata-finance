@@ -241,3 +241,50 @@ export function isNotificationEnabled(key) {
   if (!NOTIFICATION_KEYS.includes(key)) return true
   return notifications[key] !== false
 }
+
+// --- Бренд заведения ------------------------------------------------------
+//
+// Название заведения, юрлицо и логотип приходят из настроек (`settings`, ключ
+// `general`) и кешируются здесь. В коде их нет: у каждого клиента свои
+// (ADR-0010). Пока настройки не загружены, показываются нейтральные подписи —
+// чужого названия пользователь не увидит ни на секунду.
+
+const BRANDING_FALLBACK = {
+  app_title: 'Финансовый учёт',
+  restaurant_name: '',
+  company: '',
+  logo_url: '',
+}
+
+let branding = { ...BRANDING_FALLBACK }
+
+export const getBranding = () => ({ ...branding })
+
+export function setBranding(value) {
+  const pick = (key) => {
+    const v = value?.[key]
+    return typeof v === 'string' && v.trim() ? v.trim() : BRANDING_FALLBACK[key]
+  }
+  branding = {
+    app_title: pick('app_title'),
+    restaurant_name: pick('restaurant_name'),
+    company: pick('company'),
+    logo_url: pick('logo_url'),
+  }
+  return getBranding()
+}
+
+/** Название приложения для вкладки, сайдбара и экрана входа. */
+export const appTitle = () => branding.app_title
+
+/** Название заведения. Пусто, пока настройки не загружены. */
+export const venueName = () => branding.restaurant_name
+
+/** Строка копирайта: год текущий, а не зашитый. */
+export function copyrightLine(year = new Date().getFullYear()) {
+  const parts = [branding.company, branding.restaurant_name].filter(Boolean)
+  return parts.length ? `© ${year} ${parts.join(' — ')}` : `© ${year}`
+}
+
+/** Заголовок документа: «<заведение> — <что это>», если заведение известно. */
+export const documentTitle = (what) => (branding.restaurant_name ? `${branding.restaurant_name} — ${what}` : what)

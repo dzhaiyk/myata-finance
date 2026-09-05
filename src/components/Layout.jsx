@@ -3,6 +3,7 @@ import { useAuthStore } from '@/lib/store'
 import { LayoutDashboard, FileText, TrendingUp, Wallet, Upload, Users, Shield, Settings, LogOut, Menu, X, Leaf, UserCheck, Calculator, Package, Landmark, HandCoins, BarChart2, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { appTitle, venueName, getBranding } from '@/lib/config'
 
 const NAV = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', perm: 'dashboard.view' },
@@ -46,10 +47,10 @@ export default function Layout() {
       )}>
         {/* Logo */}
         <div className="px-5 py-5 flex items-center gap-3 border-b border-slate-800">
-          <img src="/logo-192.png" alt="Myata" className="w-9 h-9 rounded-xl" />
+          {getBranding().logo_url && <img src={getBranding().logo_url} alt="" className="w-9 h-9 rounded-xl" />}
           <div>
-            <div className="font-display font-bold text-sm tracking-tight">Мята Finance</div>
-            <div className="text-[10px] text-slate-500 font-medium tracking-wide uppercase">Platinum 4YOU</div>
+            <div className="font-display font-bold text-sm tracking-tight">{appTitle()}</div>
+            {venueName() && <div className="text-[10px] text-slate-500 font-medium tracking-wide uppercase">{venueName()}</div>}
           </div>
         </div>
 
@@ -102,7 +103,7 @@ export default function Layout() {
           <button onClick={() => setOpen(true)} className="p-1.5 rounded-lg hover:bg-slate-800">
             <Menu className="w-5 h-5" />
           </button>
-          <div className="font-display font-bold text-sm">Мята Finance</div>
+          <div className="font-display font-bold text-sm">{appTitle()}</div>
         </div>
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">

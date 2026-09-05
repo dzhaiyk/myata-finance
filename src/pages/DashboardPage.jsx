@@ -5,7 +5,7 @@ import { fmt, fmtK, fmtPct, MONTHS_RU } from '@/lib/utils'
 import { bankTxRangeFilter } from '@/lib/pnl'
 import { yearsRange } from '@/lib/dates'
 import { sumMonths } from '@/lib/pnlCompute'
-import { foodCostLevel, marginLevel, THRESHOLDS, departmentLabel } from '@/lib/config'
+import { foodCostLevel, marginLevel, THRESHOLDS, departmentLabel, venueName } from '@/lib/config'
 import { DollarSign, TrendingDown, ShoppingCart, CirclePercent, AlertTriangle, FileText, Trophy, CalendarDays } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts'
 
@@ -221,7 +221,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-display font-bold tracking-tight">Dashboard</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Мята Platinum 4YOU — {completedMonthNames.length > 0 ? `Данные: ${completedMonthNames.join(', ')}` : 'Нет закрытых месяцев'}
+            {venueName() && `${venueName()} — `}{completedMonthNames.length > 0 ? `Данные: ${completedMonthNames.join(', ')}` : 'Нет закрытых месяцев'}
           </p>
         </div>
         <select value={year} onChange={e => setYear(Number(e.target.value))} className="input text-sm">

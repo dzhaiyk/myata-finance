@@ -18,6 +18,7 @@ import AccountsPage from '@/pages/AccountsPage'
 import InvestmentsPage from '@/pages/InvestmentsPage'
 import AnalyticsPage from '@/pages/AnalyticsPage'
 import ControlPage from '@/pages/ControlPage'
+import { appTitle } from '@/lib/config'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuthStore()
@@ -32,10 +33,16 @@ function ProtectedRoute({ children }) {
 
 export default function App() {
   const { initialize } = useAuthStore()
+  const branding = useAuthStore(st => st.branding)
 
   useEffect(() => {
     initialize()
   }, [])
+
+  // Заголовок вкладки — из настроек: в index.html названия заведения нет (ADR-0010)
+  useEffect(() => {
+    document.title = appTitle()
+  }, [branding])
 
   return (
     <BrowserRouter>

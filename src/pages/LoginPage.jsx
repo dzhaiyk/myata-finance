@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/lib/store'
 import { Leaf, Eye, EyeOff } from 'lucide-react'
+import { appTitle, venueName, copyrightLine, getBranding } from '@/lib/config'
 
 export default function LoginPage() {
   const [username, setUsername] = useState('')
@@ -10,6 +11,9 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { signIn } = useAuthStore()
+  // подписка на бренд: он догружается асинхронно, и без неё экран входа
+  // так и остался бы с нейтральной подписью до перезагрузки страницы
+  useAuthStore(st => st.branding)
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
@@ -33,9 +37,9 @@ export default function LoginPage() {
 
       <div className="relative w-full max-w-md animate-fade-in">
         <div className="text-center mb-8">
-          <img src="/logo-192.png" alt="Myata 4YOU" className="w-20 h-20 rounded-2xl mx-auto mb-4 shadow-lg shadow-green-900/40" />
-          <h1 className="text-2xl font-display font-bold tracking-tight">Мята Finance</h1>
-          <p className="text-slate-500 text-sm mt-1">Platinum 4YOU — Финансовый учёт</p>
+          {getBranding().logo_url && <img src={getBranding().logo_url} alt="" className="w-20 h-20 rounded-2xl mx-auto mb-4 shadow-lg shadow-green-900/40" />}
+          <h1 className="text-2xl font-display font-bold tracking-tight">{appTitle()}</h1>
+          {venueName() && <p className="text-slate-500 text-sm mt-1">{venueName()}</p>}
         </div>
 
         <form onSubmit={handleSubmit} className="card space-y-5">
@@ -81,7 +85,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-xs text-slate-600 mt-6">© 2025 ТОО «RIM PARTNERS» — Мята Platinum 4YOU</p>
+        <p className="text-center text-xs text-slate-600 mt-6">{copyrightLine()}</p>
       </div>
     </div>
   )

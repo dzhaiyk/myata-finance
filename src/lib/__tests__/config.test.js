@@ -23,6 +23,12 @@ import {
   isNotificationEnabled,
   codeFromName,
   categoryLabel,
+  setBranding,
+  getBranding,
+  appTitle,
+  venueName,
+  copyrightLine,
+  documentTitle,
 } from '../config.js'
 import { FIXTURE_DEPARTMENTS } from './fixtures.js'
 
@@ -207,5 +213,37 @@ describe('уведомления', () => {
 
   it('незнакомый тип считается включённым', () => {
     assert.equal(isNotificationEnabled('чего-то нового'), true)
+  })
+})
+
+// TASK-019: названия заведения и юрлица в исходниках больше нет
+describe('бренд заведения', () => {
+  it('без настроек показывает нейтральное, а не чужое название', () => {
+    setBranding({})
+    assert.equal(appTitle(), 'Финансовый учёт')
+    assert.equal(venueName(), '')
+    assert.equal(documentTitle('Отчёт за 2026-09-05'), 'Отчёт за 2026-09-05')
+    assert.equal(copyrightLine(2026), '© 2026')
+  })
+
+  it('подставляет заданные значения', () => {
+    setBranding({ app_title: 'Мята Finance', restaurant_name: 'Мята Platinum 4YOU', company: 'ТОО RIM PARTNERS' })
+    assert.equal(appTitle(), 'Мята Finance')
+    assert.equal(documentTitle('Отчёт за 2026-09-05'), 'Мята Platinum 4YOU — Отчёт за 2026-09-05')
+    assert.equal(copyrightLine(2026), '© 2026 ТОО RIM PARTNERS — Мята Platinum 4YOU')
+  })
+
+  it('пробелы и пустые строки не считаются значением', () => {
+    setBranding({ app_title: '   ', restaurant_name: '', company: null })
+    assert.equal(appTitle(), 'Финансовый учёт')
+    assert.equal(venueName(), '')
+    assert.deepEqual(Object.keys(getBranding()).sort(), ['app_title', 'company', 'logo_url', 'restaurant_name'])
+  })
+
+  // Год в копирайте был зашит как 2025 и устарел бы молча
+  it('год в копирайте берётся текущий', () => {
+    setBranding({ company: 'ТОО Тест' })
+    assert.ok(copyrightLine().startsWith(`© ${new Date().getFullYear()}`))
+    setBranding({})
   })
 })

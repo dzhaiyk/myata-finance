@@ -8,7 +8,7 @@ import { getBusinessDate } from '@/lib/dates'
 import StatementUploadCard from '@/components/StatementUploadCard'
 import { Save, Send, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Plus, Trash2, Calendar, ArrowLeft, FileText, Eye, Clock, Check, Pencil, Download } from 'lucide-react'
 import jsPDF from 'jspdf'
-import { CAPEX_ROW_LABEL, THRESHOLDS, departmentsFor, departmentCode, departmentLabel, departmentByCode } from '@/lib/config'
+import { CAPEX_ROW_LABEL, THRESHOLDS, departmentsFor, departmentCode, departmentLabel, departmentByCode, documentTitle, codeFromName, venueName } from '@/lib/config'
 
 const MoneyInput = ({ value, onChange, className = '', disabled = false }) => (
   <input type="text" inputMode="decimal" value={value} disabled={disabled}
@@ -560,7 +560,7 @@ export default function DailyReportPage() {
 
     // ── HEADER ──
     setBold(18)
-    doc.text(`Myata 4YOU — Отчёт за ${date}`, L, y); y += 8
+    doc.text(documentTitle(`Отчёт за ${date}`), L, y); y += 8
     setNormal(10); doc.setTextColor(120)
     doc.text(`Менеджер: ${profile?.full_name || '—'}`, L, y); y += 2
     doc.setTextColor(30)
@@ -685,11 +685,12 @@ export default function DailyReportPage() {
       if (totalPages > 1) doc.text(`${i} / ${totalPages}`, R, 287, { align: 'right' })
     }
 
-    doc.save(`Myata_Report_${date}.pdf`)
+    // имя файла латиницей: кириллица в именах ломается у части почтовых клиентов
+    doc.save(`${codeFromName(venueName()) || 'report'}_${date}.pdf`)
   }
 
   const buildWhatsAppText = () => {
-    let text = `📊 Myata 4YOU — Отчёт за ${date}\n👤 ${profile?.full_name}\n\n`
+    let text = `📊 ${documentTitle(`Отчёт за ${date}`)}\n👤 ${profile?.full_name}\n\n`
     text += `💰 Выручка по отделам: ${fmt(totalDeptRevenue)} ₸\n`
     departments.forEach(d => { if (num(d.amount)) text += `  ${d.name}: ${fmt(num(d.amount))} ₸\n` })
     text += `💰 По типам оплат: ${fmt(totalRevenue)} ₸\n`
