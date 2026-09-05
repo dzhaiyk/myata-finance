@@ -26,6 +26,8 @@ export const getDepartments = () => departments.map(d => ({ ...d }))
 export function setDepartments(rows) {
   departments = (rows || [])
     .map(r => ({
+      // id нужен экрану настроек, чтобы обновлять строку, а не вставлять новую
+      id: r.id,
       code: String(r.code || ''),
       name: String(r.name || ''),
       for_revenue: r.for_revenue === true,

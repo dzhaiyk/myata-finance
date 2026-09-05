@@ -66,6 +66,13 @@ describe('config — справочник отделов (ADR-0010)', () => {
     assert.equal(departmentLabel('bakery'), 'bakery')
   })
 
+  // Без id экран настроек сохранял правку как вставку и падал на уникальности кода
+  it('id из базы сохраняется — по нему обновляется строка', () => {
+    setDepartments([{ id: 42, code: 'bakery', name: 'Пекарня', for_revenue: true, sort_order: 1 }])
+    assert.equal(getDepartments()[0].id, 42)
+    setDepartments(FIXTURE_DEPARTMENTS)
+  })
+
   it('справочник отсортирован по порядку, а не по приходу из базы', () => {
     setDepartments([...FIXTURE_DEPARTMENTS].reverse())
     assert.deepEqual(getDepartments().map(d => d.code).slice(0, 3), ['kitchen', 'bar', 'hookah'])

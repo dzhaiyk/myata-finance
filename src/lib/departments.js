@@ -21,9 +21,12 @@ export async function saveDepartment(row) {
     sort_order: Number(row.sort_order) || 0,
     is_active: row.is_active !== false,
   }
-  const { error } = row.id
-    ? await supabase.from('departments').update(payload).eq('id', row.id)
-    : await supabase.from('departments').insert(payload)
+  // upsert по коду: код уникален, поэтому сохранение не зависит от того,
+  // дошёл ли до формы id — иначе правка существующего отдела уходила вставкой
+  // и падала на departments_code_key
+  const { error } = await supabase
+    .from('departments')
+    .upsert(payload, { onConflict: 'code' })
   if (!error) await loadDepartments()
   return { error }
 }
