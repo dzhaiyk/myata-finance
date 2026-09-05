@@ -7,7 +7,8 @@ import { yearsRange } from '@/lib/dates'
 import { dashboardSummary } from '@/lib/dashboardCompute'
 import { foodCostLevel, marginLevel, THRESHOLDS, departmentLabel, venueName, currencySymbol, locale } from '@/lib/config'
 import { DollarSign, TrendingDown, ShoppingCart, CirclePercent, AlertTriangle, FileText, Trophy, CalendarDays } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { chartColors, tooltipProps, axisProps, gridProps } from '@/lib/chartTheme'
 
 const fmtM = (v) => {
   if (!v || v === 0) return ''
@@ -26,7 +27,7 @@ const PieWithLegend = ({ title, data, total }) => (
             <Pie data={data} cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={3} dataKey="value">
               {data.map((d, i) => <Cell key={i} fill={d.color} />)}
             </Pie>
-            <Tooltip formatter={(v) => [money(v)]} contentStyle={{ background: '#172033', border: '1px solid #293548', borderRadius: 12, fontSize: 12 }} />
+            <Tooltip formatter={(v) => [money(v)]} {...tooltipProps()} />
           </PieChart>
         </ResponsiveContainer>
       </div>
@@ -241,17 +242,12 @@ export default function DashboardPage() {
         <h3 className="text-sm font-semibold text-slate-300 mb-4">Доходы vs Расходы (помесячно)</h3>
         <ResponsiveContainer width="100%" height={320}>
           <BarChart data={monthlyData} barGap={2} margin={{ top: 25, right: 10, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="month" tick={{ fill: '#64748b', fontSize: 11 }} />
-            <YAxis tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={v => fmtM(v)} />
-            <Tooltip contentStyle={{ background: '#172033', border: '1px solid #293548', borderRadius: 12, fontSize: 12 }}
-              formatter={(v) => [money(v)]} labelStyle={{ color: '#94a3b8' }} />
-            <Bar dataKey="revenue" fill="#22c55e" radius={[4, 4, 0, 0]} name="Доходы">
-              <LabelList dataKey="revenue" position="top" formatter={fmtM} style={{ fill: '#86efac', fontSize: 10, fontFamily: 'JetBrains Mono' }} />
-            </Bar>
-            <Bar dataKey="expenses" fill="#ef4444" radius={[4, 4, 0, 0]} opacity={0.7} name="Расходы">
-              <LabelList dataKey="expenses" position="top" formatter={fmtM} style={{ fill: '#fca5a5', fontSize: 10, fontFamily: 'JetBrains Mono' }} />
-            </Bar>
+            <CartesianGrid {...gridProps()} />
+            <XAxis dataKey="month" {...axisProps()} />
+            <YAxis {...axisProps()} tickFormatter={v => fmtM(v)} width={54} />
+            <Tooltip formatter={(v) => [money(v)]} {...tooltipProps()} />
+            <Bar dataKey="revenue" fill={chartColors().revenue} radius={[6, 6, 0, 0]} maxBarSize={28} name="Доходы" />
+            <Bar dataKey="expenses" fill={chartColors().expense} radius={[6, 6, 0, 0]} opacity={0.85} maxBarSize={28} name="Расходы" />
           </BarChart>
         </ResponsiveContainer>
       </div>

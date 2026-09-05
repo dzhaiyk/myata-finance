@@ -11,6 +11,7 @@ import {
 } from 'recharts'
 import { FOOD_COST_BANDS, THRESHOLDS, departmentLabel, currencySymbol, locale } from '@/lib/config'
 import { monthlyTrends, expenseAnomalies } from '@/lib/analyticsCompute'
+import { chartColors, tooltipProps, axisProps, gridProps } from '@/lib/chartTheme'
 
 // Доля в подпись графика: 0.35 → «35%»
 const pctLabel = (v) => `${Math.round(v * 100)}%`
@@ -18,9 +19,7 @@ const pctLabel = (v) => `${Math.round(v * 100)}%`
 const WEEKDAYS_RU = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
 const WEEKDAYS_ORDER = [1, 2, 3, 4, 5, 6, 0] // Mon–Sun
 
-const chartTooltipStyle = {
-  background: '#172033', border: '1px solid #293548', borderRadius: 12, fontSize: 12
-}
+
 
 export default function AnalyticsPage() {
   const { hasPermission } = useAuthStore()
@@ -235,10 +234,10 @@ export default function AnalyticsPage() {
         {revenueTrends.data.length > 0 && (
           <ResponsiveContainer width="100%" height={280}>
             <ComposedChart data={revenueTrends.data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 9 }} interval={6} />
-              <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => fmtK(v)} />
-              <Tooltip contentStyle={chartTooltipStyle} formatter={(v) => [money(v)]} labelStyle={{ color: '#94a3b8' }} />
+              <CartesianGrid {...gridProps()} />
+              <XAxis dataKey="label" {...axisProps()} interval={6} />
+              <YAxis {...axisProps()} tickFormatter={v => fmtK(v)} />
+              <Tooltip formatter={(v) => [money(v)]} {...tooltipProps()} />
               <Bar dataKey="revenue" fill="#22c55e" opacity={0.4} radius={[2, 2, 0, 0]} name="Выручка" />
               <Line type="monotone" dataKey="avg7" stroke="#3b82f6" strokeWidth={2} dot={false} name="7-дн. среднее" />
             </ComposedChart>
@@ -257,10 +256,10 @@ export default function AnalyticsPage() {
         </div>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={weekdayPerf} margin={{ top: 15, right: 10, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="day" tick={{ fill: '#64748b', fontSize: 11 }} />
-            <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => fmtK(v)} />
-            <Tooltip contentStyle={chartTooltipStyle} formatter={(v) => [money(v)]} labelStyle={{ color: '#94a3b8' }} />
+            <CartesianGrid {...gridProps()} />
+            <XAxis dataKey="day" {...axisProps()} />
+            <YAxis {...axisProps()} tickFormatter={v => fmtK(v)} />
+            <Tooltip formatter={(v) => [money(v)]} {...tooltipProps()} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar dataKey="allTime" fill="#22c55e" opacity={0.3} radius={[3, 3, 0, 0]} name="Всё время" />
             <Bar dataKey="d90" fill="#3b82f6" opacity={0.5} radius={[3, 3, 0, 0]} name="90 дней" />
@@ -291,10 +290,10 @@ export default function AnalyticsPage() {
           </div>
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={fcTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 9 }} interval={2} />
-              <YAxis tick={{ fill: '#64748b', fontSize: 10 }} domain={[0, 60]} tickFormatter={v => v + '%'} />
-              <Tooltip contentStyle={chartTooltipStyle} formatter={(v) => [v.toFixed(1) + '%']} labelStyle={{ color: '#94a3b8' }} />
+              <CartesianGrid {...gridProps()} />
+              <XAxis dataKey="label" {...axisProps()} interval={2} />
+              <YAxis {...axisProps()} domain={[0, 60]} tickFormatter={v => v + '%'} />
+              <Tooltip {...tooltipProps()} formatter={(v) => [v.toFixed(1) + '%']} labelStyle={{ color: '#94a3b8' }} />
               <ReferenceLine y={FOOD_COST_BANDS.target * 100} stroke="#22c55e" strokeDasharray="5 5" label={{ value: pctLabel(FOOD_COST_BANDS.target), fill: '#22c55e', fontSize: 10 }} />
               <ReferenceLine y={FOOD_COST_BANDS.warn * 100} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: pctLabel(FOOD_COST_BANDS.warn), fill: '#f59e0b', fontSize: 10 }} />
               <ReferenceLine y={FOOD_COST_BANDS.critical * 100} stroke="#ef4444" strokeDasharray="5 5" label={{ value: pctLabel(FOOD_COST_BANDS.critical), fill: '#ef4444', fontSize: 10 }} />
@@ -321,10 +320,10 @@ export default function AnalyticsPage() {
           </div>
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={payrollTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 9 }} interval={2} />
-              <YAxis tick={{ fill: '#64748b', fontSize: 10 }} domain={[0, 50]} tickFormatter={v => v + '%'} />
-              <Tooltip contentStyle={chartTooltipStyle} formatter={(v) => [v.toFixed(1) + '%']} labelStyle={{ color: '#94a3b8' }} />
+              <CartesianGrid {...gridProps()} />
+              <XAxis dataKey="label" {...axisProps()} interval={2} />
+              <YAxis {...axisProps()} domain={[0, 50]} tickFormatter={v => v + '%'} />
+              <Tooltip {...tooltipProps()} formatter={(v) => [v.toFixed(1) + '%']} labelStyle={{ color: '#94a3b8' }} />
               <ReferenceLine y={THRESHOLDS.payrollShareTarget * 100} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: pctLabel(THRESHOLDS.payrollShareTarget), fill: '#f59e0b', fontSize: 10 }} />
               <ReferenceLine y={THRESHOLDS.payrollShareAlert * 100} stroke="#ef4444" strokeDasharray="5 5" label={{ value: pctLabel(THRESHOLDS.payrollShareAlert), fill: '#ef4444', fontSize: 10 }} />
               <Line type="monotone" dataKey="payrollPct" stroke="#818cf8" strokeWidth={2} dot={false} name="ФОТ %" />
@@ -391,10 +390,10 @@ export default function AnalyticsPage() {
 
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={discrepancyData.monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 9 }} interval={2} />
-              <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => fmtK(v)} />
-              <Tooltip contentStyle={chartTooltipStyle} formatter={(v) => [money(v)]} labelStyle={{ color: '#94a3b8' }} />
+              <CartesianGrid {...gridProps()} />
+              <XAxis dataKey="label" {...axisProps()} interval={2} />
+              <YAxis {...axisProps()} tickFormatter={v => fmtK(v)} />
+              <Tooltip formatter={(v) => [money(v)]} {...tooltipProps()} />
               <Bar dataKey="value" fill="#ef4444" opacity={0.6} radius={[3, 3, 0, 0]} name="|Расхождение|" />
             </BarChart>
           </ResponsiveContainer>

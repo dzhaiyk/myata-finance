@@ -218,6 +218,12 @@ export default function PnLPage() {
     }
     return values.revenue > 0 ? ((val / values.revenue) * 100).toFixed(1) + '%' : '—'
   }
+  // Доля числом (0.37), а не строкой: по ней красится food cost по норме BR-RPT-018
+  const pctValue = (val, key) => {
+    const fcDeptMap = { fc_kitchen: 'rev_kitchen', fc_bar: 'rev_bar', fc_hookah: 'rev_hookah' }
+    const base = fcDeptMap[key] ? (values[fcDeptMap[key]] || 0) : (values.revenue || 0)
+    return base > 0 ? val / base : 0
+  }
   const fmtPct = (val) => (val * 100).toFixed(1) + '%'
 
   if (loading) return <div className="text-center text-slate-500 py-20">Загрузка...</div>
@@ -361,7 +367,7 @@ export default function PnLPage() {
                 <span className="text-sm font-display font-bold">{pnlLabel(line)}</span>
                 <div className="flex items-center gap-4">
                   <span className={cn('font-mono text-base font-bold', val >= 0 ? 'text-green-400' : 'text-red-400')}>{money(val)}</span>
-                  <span className="text-2xs text-slate-500 w-12 text-right">{pct(val)}</span>
+                  <span className="font-mono text-sm font-bold w-16 text-right border-l border-slate-800 pl-3">{pct(val)}</span>
                 </div>
               </div>
             )
@@ -415,7 +421,10 @@ export default function PnLPage() {
                     {Number(adjVal) > 0 ? '+' : ''}{fmt(Number(adjVal))}
                   </span>
                 )}
-                <span className="text-2xs text-slate-500 w-12 text-right">{val > 0 ? pct(val, line.key) : '—'}</span>
+                <span className={cn('font-mono text-sm font-semibold w-16 text-right border-l border-slate-800 pl-3',
+                  line.key.includes('fc') ? LEVEL_CLASS[foodCostLevel(pctValue(val, line.key))] : 'text-slate-300')}>
+                  {val > 0 ? pct(val, line.key) : '—'}
+                </span>
               </div>
             </div>
           )
@@ -424,15 +433,21 @@ export default function PnLPage() {
       )}
 
       {/* P&L Horizontal Table (year/overall) */}
-      {(viewMode === 'year' || viewMode === 'overall') && multiPeriodData && (
+      {(viewMode === 'year' || viewMode === 'overall') && multiPeriodData && (() => {
+      // Доля от выручки — то, ради чего открывают P&L, поэтому она стоит сразу
+      // за названием статьи и не уезжает при горизонтальной прокрутке
+      const orderedColumns = [...multiPeriodData].sort((a, b) => (b.isPct ? 1 : 0) - (a.isPct ? 1 : 0))
+      return (
         <div className="card p-0 overflow-x-auto">
           <table className="w-full text-sm" style={{ minWidth: viewMode === 'year' ? 1400 : 900 }}>
             <thead>
               <tr>
                 <th className="table-header text-left sticky left-0 bg-slate-900 z-10 min-w-[200px]">Статья</th>
-                {multiPeriodData.map(col => (
-                  <th key={col.label} className={cn('table-header text-right', col.isPct ? 'min-w-[55px]' : 'min-w-[90px]', (col.isTotal || col.isPct) && 'bg-slate-800/50 font-bold')}>
-                    {col.label}
+                {orderedColumns.map(col => (
+                  <th key={col.label} className={cn('table-header text-right',
+                    col.isPct ? 'min-w-[76px] bg-slate-800 text-slate-300' : 'min-w-[90px]',
+                    col.isTotal && 'bg-slate-800/50 font-bold')}>
+                    {col.isPct ? '% выр.' : col.label}
                   </th>
                 ))}
               </tr>
@@ -463,7 +478,7 @@ export default function PnLPage() {
                         <span className={cn('text-sm', isResult ? 'font-bold' : 'text-slate-400')}>{pnlLabel(line)}</span>
                       )}
                     </td>
-                    {multiPeriodData.map(col => {
+                    {orderedColumns.map(col => {
                       const val = col.values[line.key] || 0
                       let display = ''
                       if (col.isPct) {
@@ -484,7 +499,9 @@ export default function PnLPage() {
                       else if (line.section === 'expenses' && line.level === 0) color = 'text-red-400'
 
                       return (
-                        <td key={col.label} className={cn('table-cell text-right font-mono text-xs', color, (col.isTotal || col.isPct) && 'bg-slate-800/50 font-bold')}
+                        <td key={col.label} className={cn('table-cell text-right font-mono text-sm', color,
+                          col.isPct && 'bg-slate-800/60 font-bold border-r border-slate-750 text-slate-100',
+                          col.isTotal && 'bg-slate-800/50 font-bold')}
                           title={val ? fmt(val) : ''}>
                           {display}
                         </td>
@@ -496,7 +513,7 @@ export default function PnLPage() {
             </tbody>
           </table>
         </div>
-      )}
+      ) })()}
 
       {/* Adjustment audit log — только ручные корректировки, без historical-импорта */}
       {!editMode && (viewMode === 'month' || viewMode === 'ytd') && adjustments.some(a => a.type !== 'historical') && (

@@ -38,16 +38,19 @@ export default {
         display: ['Plus Jakarta Sans', '-apple-system', 'system-ui', 'sans-serif'],
         mono: ['ui-monospace', 'SF Mono', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
+      // Шкала поднята ещё раз 06.09.2026: `text-sm` встречается в приложении
+      // 350 раз и служит основным текстом, поэтому он равен 16 пикселям, а не
+      // «мелкому» размеру. Всё, что мельче 13, из шкалы убрано.
       fontSize: {
-        '2xs': ['0.75rem',   { lineHeight: '1.4',  letterSpacing: '0.01em' }],
-        xs:    ['0.8125rem', { lineHeight: '1.45', letterSpacing: '0.005em' }],
-        sm:    ['0.9375rem', { lineHeight: '1.5',  letterSpacing: '0' }],
-        base:  ['1rem',      { lineHeight: '1.55', letterSpacing: '0' }],
-        lg:    ['1.1875rem', { lineHeight: '1.4',  letterSpacing: '-0.01em' }],
-        xl:    ['1.375rem',  { lineHeight: '1.3',  letterSpacing: '-0.014em' }],
-        '2xl': ['1.625rem',  { lineHeight: '1.22', letterSpacing: '-0.018em' }],
-        '3xl': ['2rem',      { lineHeight: '1.15', letterSpacing: '-0.022em' }],
-        '4xl': ['2.5rem',    { lineHeight: '1.1',  letterSpacing: '-0.024em' }],
+        '2xs': ['0.8125rem', { lineHeight: '1.4',  letterSpacing: '0.006em' }],
+        xs:    ['0.875rem',  { lineHeight: '1.45', letterSpacing: '0.003em' }],
+        sm:    ['1rem',      { lineHeight: '1.5',  letterSpacing: '0' }],
+        base:  ['1.0625rem', { lineHeight: '1.55', letterSpacing: '0' }],
+        lg:    ['1.25rem',   { lineHeight: '1.35', letterSpacing: '-0.011em' }],
+        xl:    ['1.5rem',    { lineHeight: '1.28', letterSpacing: '-0.016em' }],
+        '2xl': ['1.8125rem', { lineHeight: '1.2',  letterSpacing: '-0.02em' }],
+        '3xl': ['2.25rem',   { lineHeight: '1.14', letterSpacing: '-0.022em' }],
+        '4xl': ['2.75rem',   { lineHeight: '1.08', letterSpacing: '-0.025em' }],
       },
       borderRadius: { xl: '0.875rem', '2xl': '1.125rem', '3xl': '1.5rem' },
       boxShadow: {
