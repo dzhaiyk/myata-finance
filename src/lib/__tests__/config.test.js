@@ -108,10 +108,9 @@ describe('config — справочник отделов (ADR-0010)', () => {
 describe('пороги и границы', () => {
   it('значения порогов зафиксированы', () => {
     assert.deepEqual(THRESHOLDS, {
-      cashDiscrepancyFlag: 500,
-      cashDiscrepancyAlert: 1000,
+      cashDiscrepancy: 0,
       accountBalanceTolerance: 100,
-      ownerCashTolerance: 500000,
+      ownerCashTolerance: 200000,
       payrollTolerance: 1000,
       payrollShareAlert: 0.35,
       payrollShareTarget: 0.30,

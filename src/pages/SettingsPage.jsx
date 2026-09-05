@@ -9,7 +9,7 @@ import { Save, Send, Bell, Bot, Moon } from 'lucide-react'
 // Только те типы, которые приложение действительно умеет отправлять.
 // Порог берётся из настроек, чтобы подпись не разошлась с логикой.
 const NOTIFICATION_LABELS = [
-  { key: 'cash_discrepancy', label: `Расхождение кассы > ${THRESHOLDS.cashDiscrepancyAlert.toLocaleString('ru-RU')} ₸`, desc: 'При отправке отчёта с расхождением' },
+  { key: 'cash_discrepancy', label: 'Расхождение кассы', desc: `При отправке отчёта, если касса не сошлась${THRESHOLDS.cashDiscrepancy > 0 ? ` больше чем на ${THRESHOLDS.cashDiscrepancy.toLocaleString('ru-RU')} ₸` : ''}` },
   { key: 'daily_report', label: 'Ежедневный отчёт сдан', desc: 'При каждой отправке отчёта менеджером' },
   { key: 'bank_import', label: 'Импорт банковской выписки', desc: 'При загрузке и обработке выписки' },
 ]

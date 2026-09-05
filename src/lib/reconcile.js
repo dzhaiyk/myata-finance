@@ -44,7 +44,7 @@ export function checkRevenueConsistency(reports, tolerance = 1) {
 /**
  * Сверка №2 — касса: расхождения при пересчёте наличных.
  */
-export function checkCashDiscrepancies(reports, threshold = THRESHOLDS.cashDiscrepancyFlag) {
+export function checkCashDiscrepancies(reports, threshold = THRESHOLDS.cashDiscrepancy) {
   return reports.map(reportTotals)
     .filter(t => Math.abs(t.discrepancy) > threshold)
     .sort((a, b) => Math.abs(b.discrepancy) - Math.abs(a.discrepancy))

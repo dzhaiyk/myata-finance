@@ -459,7 +459,7 @@ export default function DailyReportPage() {
           cashExpected, cashActual: num(cashEnd), discrepancy,
           departments: Object.fromEntries(departments.map(d => [d.code || departmentCode(d.name), num(d.amount)]))
         }), 'daily_report')
-        if (Math.abs(discrepancy) > THRESHOLDS.cashDiscrepancyAlert) {
+        if (Math.abs(discrepancy) > THRESHOLDS.cashDiscrepancy) {
           await sendTelegramNotification(formatCashDiscrepancyAlert(date, profile?.full_name, discrepancy), 'cash_discrepancy')
         }
       } catch (_) {}
@@ -663,7 +663,7 @@ export default function DailyReportPage() {
     if (discrepancy === 0) {
       setBold(12); doc.setTextColor(34, 139, 34)
       doc.text('Расхождений нет', L + 4, y)
-    } else if (Math.abs(discrepancy) <= THRESHOLDS.cashDiscrepancyFlag) {
+    } else if (Math.abs(discrepancy) <= THRESHOLDS.cashDiscrepancy) {
       setBold(12); doc.setTextColor(245, 158, 11)
       doc.text('РАСХОЖДЕНИЕ', L + 4, y)
       doc.text(`${discrepancy > 0 ? '+' : ''}${fmt(discrepancy)} ₸`, R - 2, y, { align: 'right' })
@@ -709,7 +709,7 @@ export default function DailyReportPage() {
     text += `💵 Ожидаемый: ${fmt(cashExpected)} ₸\n`
     if (discrepancy === 0) {
       text += `✅ Расхождений нет`
-    } else if (Math.abs(discrepancy) <= THRESHOLDS.cashDiscrepancyFlag) {
+    } else if (Math.abs(discrepancy) <= THRESHOLDS.cashDiscrepancy) {
       text += `⚠️ Расхождение: ${fmt(discrepancy)} ₸`
     } else {
       text += `🚨 Расхождение: ${fmt(discrepancy)} ₸`
@@ -794,7 +794,7 @@ export default function DailyReportPage() {
             {journalTotal > JOURNAL_PAGE_SIZE && <JournalPagination page={journalPage} total={journalTotal} pageSize={JOURNAL_PAGE_SIZE} onChange={p => { setJournalPage(p); loadJournal(p) }} />}
             {journal.map(r => {
               const disc = r.cash_discrepancy || 0
-              const hasDisc = Math.abs(disc) > THRESHOLDS.cashDiscrepancyFlag
+              const hasDisc = Math.abs(disc) > THRESHOLDS.cashDiscrepancy
               const isDraft = r.status === 'draft' || !r.status
               return (
                 <div key={r.id} className={cn('card w-full text-left flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 hover:border-brand-500/30 transition-all group',
@@ -1162,8 +1162,8 @@ export default function DailyReportPage() {
             <div className="flex justify-between font-bold"><span>Фактический остаток</span><span className="font-mono text-green-400">{fmt(num(cashEnd))} ₸</span></div>
             <div className="h-px bg-slate-700 my-2" />
             <div className={cn('flex justify-between text-lg font-bold',
-              discrepancy === 0 ? 'text-green-400' : Math.abs(discrepancy) <= THRESHOLDS.cashDiscrepancyFlag ? 'text-yellow-400' : 'text-red-400')}>
-              <span>{discrepancy === 0 ? '✅ Расхождений нет' : Math.abs(discrepancy) <= THRESHOLDS.cashDiscrepancyFlag ? 'Расхождение' : '⚠️ Расхождение'}</span>
+              Math.abs(discrepancy) <= THRESHOLDS.cashDiscrepancy ? 'text-green-400' : 'text-red-400')}>
+              <span>{Math.abs(discrepancy) <= THRESHOLDS.cashDiscrepancy ? '✅ Расхождений нет' : '⚠️ Расхождение'}</span>
               {discrepancy !== 0 && <span className="font-mono">{discrepancy > 0 ? '+' : ''}{fmt(discrepancy)} ₸</span>}
             </div>
           </div>

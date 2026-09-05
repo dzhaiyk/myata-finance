@@ -14,6 +14,8 @@
 | TASK-009 | Переезд на VPS: self-hosted Supabase, db-max-rows, хеширование паролей, RLS по ролям, Telegram-токен на сервер (ADR-0008) | access | P3 | |
 | TASK-010 | Мёртвый код: `checkPayroll`, `formatBankImportNotification`, `getDepartments/getOlapColumns`; дубли распределения по периодам в BankImportPage; миграция 016 `CREATE POLICY IF NOT EXISTS` | — | P3 | |
 | TASK-011 | Модуль «Зарплаты» по методике ФОТ (табель, проценты по должностям, пул кальянов, удержания) | payroll | P2 | после /discover payroll |
+| TASK-024 | Эквайринг без норматива (BR-CTL-018): считать фактическую комиссию из выписки и сравнивать с историей банка вместо зашитых 1,5 % и допуска 1 % | control | P2 | |
+| TASK-025 | Привязать статьи `categories` к отделу, чтобы «ФОТ Кухня» шло за переименованием (миграция + вывод названия) | reporting | P2 | |
 | TASK-019 | Бренд и юрлицо в настройки: `Layout.jsx`, `LoginPage.jsx:84`, PDF и WhatsApp в `DailyReportPage.jsx:547,672,676`, `telegram.js:31`, `index.html:6` | — | P2 | SaaS |
 | TASK-020 | Валюта, локаль, часовой пояс: единая функция форматирования денег вместо `₸` в ~60 местах, `ru-RU`, ввод чисел, явный TZ вместо времени браузера | — | P2 | SaaS |
 | TASK-021 | Пороги и ставки из `src/lib/config.js` в таблицу `settings` и на экран настроек | — | P2 | SaaS, готова к работе |

@@ -72,15 +72,25 @@ describe('Сверка №1 — выручка: отделы ↔ типы опл
 })
 
 describe('Сверка №2 — расхождения кассы', () => {
-  it('фильтрует по порогу и сортирует по величине', () => {
+  it('фильтрует по переданному порогу и сортирует по величине', () => {
     const res = checkCashDiscrepancies([
       mkReport('2026-08-20', { discrepancy: -200 }),   // ниже порога
       mkReport('2026-08-21', { discrepancy: -1500 }),
       mkReport('2026-08-22', { discrepancy: 3000 }),
-    ])
+    ], 500)
     assert.equal(res.length, 2)
     assert.equal(res[0].discrepancy, 3000)  // худшее первым
     assert.equal(res[1].discrepancy, -1500)
+  })
+
+  // BR-SHF-020: касса должна сходиться в ноль, порог по умолчанию — 0
+  it('по умолчанию считает расхождением любое несовпадение', () => {
+    const res = checkCashDiscrepancies([
+      mkReport('2026-08-20', { discrepancy: -200 }),
+      mkReport('2026-08-21', { discrepancy: 0 }),
+    ])
+    assert.equal(res.length, 1)
+    assert.equal(res[0].discrepancy, -200)
   })
 })
 

@@ -156,7 +156,7 @@ export default function DashboardPage() {
   const marginColor = marginLevel(opMargin)
 
   const completedMonthNames = [...monthsWithBank].sort((a, b) => a - b).map(m => MONTHS_RU[m].slice(0, 3))
-  const discrepancies = reports.filter(r => Math.abs(r.cash_discrepancy || 0) > THRESHOLDS.cashDiscrepancyFlag)
+  const discrepancies = reports.filter(r => Math.abs(r.cash_discrepancy || 0) > THRESHOLDS.cashDiscrepancy)
 
   // === RECORDS (all time) ===
   const WEEKDAYS_RU = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
