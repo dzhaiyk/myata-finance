@@ -75,6 +75,20 @@ export function departmentCode(value) {
 // она видна отдельно как unassigned.
 export const FALLBACK_DEPARTMENT_CODE = 'other'
 
+/**
+ * Подпись статьи P&L. Если статья привязана к отделу и у неё есть шаблон,
+ * название собирается из шаблона и текущего названия отдела: «ФОТ {department}»
+ * → «ФОТ Асхана». Иначе берётся собственное имя статьи (миграция 026).
+ */
+export function categoryLabel(category) {
+  if (!category) return ''
+  const { name_template: tpl, department, name } = category
+  if (!tpl || !department) return name || ''
+  const dep = departmentByCode(department)
+  if (!dep) return name || ''
+  return tpl.replace('{department}', dep.name)
+}
+
 // Транслитерация для автоматического кода: код нельзя менять после создания,
 // поэтому его не вводят руками, а получают из названия (ADR-0010).
 const TRANSLIT = {

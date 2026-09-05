@@ -20,7 +20,7 @@ updated: 2026-09-05
 | `settings` | shift/control/access | key → JSONB: `shift.cutoff_hour`, `closures`, `owner_cash_opening`, `telegram.notifications`, `general` | key PK |
 | `bank_transactions` | bank | строка выписки; `transaction_date` — TEXT операционной даты | `tx_hash` UNIQUE (дедуп); `period_from/to` (P&L по периодам); `account_id` → accounts; `review_note` (к проверке) |
 | `bank_rules`, `bank_rule_conditions` | bank | правила категоризации из UI; первое совпавшее выигрывает | logic and/or; action categorize/hide; field/operator CHECK |
-| `categories` | bank/reporting | план счетов: код → тип (income/cogs/opex/below_ebitda/other), группа P&L | code UNIQUE; канон кодов = миграция 008 (тест `category-contract.test.js`) |
+| `categories` | bank/reporting | план счетов: код → тип (income/cogs/opex/below_ebitda/other), группа P&L; `department` + `name_template` — подпись собирается из названия отдела (миграция 026) | code UNIQUE; канон кодов = миграция 008 (тест `category-contract.test.js`) |
 | `accounts` | accounts | касса, банки, депозиты, терминалы; терминал → `parent_account_id` банка | type IN (cash/bank/deposit/terminal) |
 | `account_transactions` | accounts | движение по счёту; каждая строка выписки создаёт запись (`reference_type='bank_import'`) | type income/expense/transfer_in/transfer_out; reference_type CHECK |
 | `account_balances` | accounts | сверка остатка на дату; `discrepancy` — GENERATED = actual − expected | UNIQUE(account_id, balance_date) |

@@ -5,6 +5,7 @@ import { cn, fmt } from '@/lib/utils'
 import { stageStatement, commitImport } from '@/lib/bankImport'
 import { getCutoffHour, yearsRange } from '@/lib/dates'
 import { Upload, Trash2, Settings, Plus, X, Save, Calendar, Pencil, Check, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { categoryLabel } from '@/lib/config'
 
 const MONTHS_SHORT = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек']
 
@@ -253,7 +254,8 @@ export default function BankImportPage() {
   }
 
   const catMap = useMemo(() => { const m = {}; categories.forEach(c => { m[c.code] = c }); return m }, [categories])
-  const catName = (code) => catMap[code]?.name || code
+  // Подпись статьи может собираться из отдела (миграция 026): «ФОТ {department}»
+  const catName = (code) => (catMap[code] ? categoryLabel(catMap[code]) : code)
 
   const catGroups = useMemo(() => {
     const groups = {}
@@ -530,7 +532,7 @@ export default function BankImportPage() {
                       <option value="">— Выберите —</option>
                       {Object.entries(catGroups).map(([type, cats]) => (
                         <optgroup key={type} label={TYPE_LABELS[type] || type}>
-                          {cats.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+                          {cats.map(c => <option key={c.code} value={c.code}>{categoryLabel(c)}</option>)}
                         </optgroup>
                       ))}
                     </select>
@@ -604,7 +606,7 @@ export default function BankImportPage() {
                         <option value="">— Выберите —</option>
                         {Object.entries(catGroups).map(([type, cats]) => (
                           <optgroup key={type} label={TYPE_LABELS[type] || type}>
-                            {cats.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+                            {cats.map(c => <option key={c.code} value={c.code}>{categoryLabel(c)}</option>)}
                           </optgroup>
                         ))}
                       </select>
@@ -777,7 +779,7 @@ export default function BankImportPage() {
                           <option value="uncategorized">— Не распознано —</option>
                           {Object.entries(catGroups).map(([type, cats]) => (
                             <optgroup key={type} label={TYPE_LABELS[type] || type}>
-                              {cats.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+                              {cats.map(c => <option key={c.code} value={c.code}>{categoryLabel(c)}</option>)}
                             </optgroup>
                           ))}
                         </select>
@@ -841,7 +843,7 @@ export default function BankImportPage() {
                       <option value="uncategorized">— Не распознано —</option>
                       {Object.entries(catGroups).map(([type, cats]) => (
                         <optgroup key={type} label={TYPE_LABELS[type] || type}>
-                          {cats.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+                          {cats.map(c => <option key={c.code} value={c.code}>{categoryLabel(c)}</option>)}
                         </optgroup>
                       ))}
                     </select>

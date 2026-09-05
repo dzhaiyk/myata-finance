@@ -26,7 +26,7 @@
 | 10-business/accounts/permissions.md | счета создаёт settings.edit, переводы и ручные операции — accounts.manage | меняешь доступ к счетам | inferred |
 | 10-business/accounts/open-questions.md | 3 вопроса: сверка без права, роль Kaspi ТОО, остатки депозитов | берёшь задачу по счетам или готовишь /discover accounts | draft |
 | 10-business/reporting/process.md | P&L собирается на лету из смен, банка (по периодам) и pnl_data; Cash Flow — по датам платежей; ручные правки и исторические месяцы | меняешь расчёт P&L/CF, структуру строк, добавляешь категорию или правишь месяц вручную | inferred |
-| 10-business/reporting/rules.md | 19 правил BR-RPT-* по источникам и приоритетам P&L, знакам, распределению по периодам, группам и прибыли, ФОТ в P&L, Cash Flow, бенчмаркам и аномалиям аналитики | меняешь расчёт P&L/CF/дашборда/аналитики или добавляешь строку отчёта | partial |
+| 10-business/reporting/rules.md | 20 правил BR-RPT-* по источникам и приоритетам P&L, знакам, распределению по периодам, группам и прибыли, ФОТ в P&L, Cash Flow, бенчмаркам и аномалиям аналитики | меняешь расчёт P&L/CF/дашборда/аналитики или добавляешь строку отчёта | partial |
 | 10-business/reporting/entities.md | строка P&L (PNL_STRUCTURE), запись pnl_data (historical / корректировка), структура Cash Flow | добавляешь строку отчёта или категорию | inferred |
 | 10-business/reporting/permissions.md | просмотр P&L/CF/дашборда/аналитики по ключам view; pnl.edit и cashflow.edit объявлены, но не проверяются | меняешь доступ к отчётам | inferred |
 | 10-business/reporting/open-questions.md | 7 вопросов: Cash Flow без тестов, доли 0.5/0.3/0.2, единые бенчмарки, аналитика мимо pnlCompute, ROI-метрики | берёшь задачу по P&L/CF/аналитике или готовишь /discover reporting | draft |

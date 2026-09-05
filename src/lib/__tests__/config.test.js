@@ -22,6 +22,7 @@ import {
   setNotifications,
   isNotificationEnabled,
   codeFromName,
+  categoryLabel,
 } from '../config.js'
 import { FIXTURE_DEPARTMENTS } from './fixtures.js'
 
@@ -87,6 +88,24 @@ describe('config — справочник отделов (ADR-0010)', () => {
     assert.equal(codeFromName('Асхана', ['ashana', 'ashana_2']), 'ashana_3')
     assert.equal(codeFromName('   '), '')
     assert.equal(codeFromName('!!!'), '')
+  })
+
+  // TASK-025: «ФОТ Кухня» должно идти за переименованием отдела
+  it('подпись статьи собирается из шаблона и названия отдела', () => {
+    setDepartments(FIXTURE_DEPARTMENTS)
+    const cat = { code: 'payroll_kitchen', name: 'ФОТ Кухня', department: 'kitchen', name_template: 'ФОТ {department}' }
+    assert.equal(categoryLabel(cat), 'ФОТ Кухня')
+    setDepartments(FIXTURE_DEPARTMENTS.map(d => (d.code === 'kitchen' ? { ...d, name: 'Асхана' } : d)))
+    assert.equal(categoryLabel(cat), 'ФОТ Асхана')
+    setDepartments(FIXTURE_DEPARTMENTS)
+  })
+
+  it('статья без отдела или шаблона показывает своё имя', () => {
+    assert.equal(categoryLabel({ name: 'Аренда помещения' }), 'Аренда помещения')
+    assert.equal(categoryLabel({ name: 'ФОТ Кухня', department: 'kitchen' }), 'ФОТ Кухня')
+    assert.equal(categoryLabel({ name: 'ФОТ Кухня', name_template: 'ФОТ {department}' }), 'ФОТ Кухня')
+    assert.equal(categoryLabel({ name: 'Что-то', department: 'bakery', name_template: 'ФОТ {department}' }), 'Что-то')
+    assert.equal(categoryLabel(null), '')
   })
 
   it('справочник отсортирован по порядку, а не по приходу из базы', () => {
