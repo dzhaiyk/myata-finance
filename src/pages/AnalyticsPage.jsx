@@ -2,15 +2,15 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchAll } from '@/lib/fetchAll'
 import { useAuthStore } from '@/lib/store'
-import { cn, fmt, fmtK, MONTHS_RU, linearRegression, money } from '@/lib/utils'
-import { getTxAmountForMonth } from '@/lib/pnl'
+import { cn, fmtK, MONTHS_RU, linearRegression, money } from '@/lib/utils'
 import { yearsRange } from '@/lib/dates'
 import { BarChart2, TrendingUp, TrendingDown, ArrowRight, AlertTriangle, Calendar } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ReferenceLine, Legend, ComposedChart, Area
 } from 'recharts'
-import { isCapexRow, isFoodCostAnomaly, FOOD_COST_BANDS, THRESHOLDS, PAYROLL_CATEGORIES, currencySymbol, locale } from '@/lib/config'
+import { FOOD_COST_BANDS, THRESHOLDS, departmentLabel, currencySymbol, locale } from '@/lib/config'
+import { monthlyTrends, expenseAnomalies } from '@/lib/analyticsCompute'
 
 // Доля в подпись графика: 0.35 → «35%»
 const pctLabel = (v) => `${Math.round(v * 100)}%`
@@ -115,175 +115,15 @@ export default function AnalyticsPage() {
   const bestDay = weekdayPerf.reduce((best, w) => w.allTime > (best?.allTime || 0) ? w : best, null)
   const weakDay = weekdayPerf.reduce((weak, w) => (w.allTime < (weak?.allTime || Infinity) && w.allTime > 0) ? w : weak, null)
 
-  // ====== 3.3 Food Cost % Trend ======
-  const fcTrend = useMemo(() => {
-    const months = []
-    for (const y of yearsRange()) {
-      for (let m = 1; m <= 12; m++) {
-        // Get revenue from daily reports
-        const monthReports = allReports.filter(r => {
-          const d = new Date(r.report_date)
-          return d.getFullYear() === y && d.getMonth() + 1 === m
-        })
-
-        // Historical data
-        const historical = pnlData.filter(a => a.year === y && a.month === m && a.type === 'historical')
-
-        let revenue = 0, fcK = 0, fcB = 0, fcH = 0
-        if (monthReports.length > 0) {
-          monthReports.forEach(r => {
-            const depts = r.data?.departments || []
-            depts.forEach(d => { revenue += Number(d.amount) || 0 })
-            const w = r.data?.withdrawals || {}
-            const sum = (arr) => (arr || []).reduce((s, row) => s + (Number(row.amount) || 0), 0)
-            fcK += sum(w.suppliers_kitchen)
-            fcB += sum(w.suppliers_bar)
-            ;(w.tobacco || []).forEach(row => { if (!isCapexRow(row.name)) fcH += Number(row.amount) || 0 })
-          })
-          // Add bank cogs (кредиты-возвраты уменьшают закуп)
-          bankTx.forEach(tx => {
-            const amt = getTxAmountForMonth(tx, y, m) * (tx.is_debit ? 1 : -1)
-            if (tx.category === 'cogs_kitchen') fcK += amt
-            else if (tx.category === 'cogs_bar') fcB += amt
-            else if (tx.category === 'cogs_hookah') fcH += amt
-          })
-        } else if (historical.length > 0) {
-          historical.forEach(h => {
-            if (h.category?.startsWith('rev_')) revenue += Number(h.amount) || 0
-            if (h.category === 'fc_kitchen') fcK += Number(h.amount) || 0
-            if (h.category === 'fc_bar') fcB += Number(h.amount) || 0
-            if (h.category === 'fc_hookah') fcH += Number(h.amount) || 0
-          })
-        }
-
-        if (revenue <= 0) continue
-        const revK = monthReports.length > 0 ? monthReports.reduce((s, r) => {
-          const k = (r.data?.departments || []).find(d => d.name === 'Кухня')
-          return s + (Number(k?.amount) || 0)
-        }, 0) : (historical.find(h => h.category === 'rev_kitchen') ? Number(historical.find(h => h.category === 'rev_kitchen').amount) : revenue * 0.5)
-        const revB = monthReports.length > 0 ? monthReports.reduce((s, r) => {
-          const b = (r.data?.departments || []).find(d => d.name === 'Бар')
-          return s + (Number(b?.amount) || 0)
-        }, 0) : (historical.find(h => h.category === 'rev_bar') ? Number(historical.find(h => h.category === 'rev_bar').amount) : revenue * 0.3)
-        const revH = monthReports.length > 0 ? monthReports.reduce((s, r) => {
-          const h = (r.data?.departments || []).find(d => d.name === 'Кальян')
-          return s + (Number(h?.amount) || 0)
-        }, 0) : (historical.find(h => h.category === 'rev_hookah') ? Number(historical.find(h => h.category === 'rev_hookah').amount) : revenue * 0.2)
-
-        const totalFC = fcK + fcB + fcH
-        months.push({
-          label: `${MONTHS_RU[m - 1].slice(0, 3)} ${String(y).slice(2)}`,
-          fcTotal: revenue > 0 ? (totalFC / revenue * 100) : 0,
-          fcKitchen: revK > 0 ? (fcK / revK * 100) : 0,
-          fcBar: revB > 0 ? (fcB / revB * 100) : 0,
-          fcHookah: revH > 0 ? (fcH / revH * 100) : 0,
-          anomaly: revenue > 0 && isFoodCostAnomaly(totalFC / revenue),
-        })
-      }
-    }
-    return months
-  }, [allReports, pnlData, bankTx])
-
-  // ====== 3.4 Payroll % Trend ======
-  const payrollTrend = useMemo(() => {
-    const payrollCats = PAYROLL_CATEGORIES
-    const months = []
-    for (const y of yearsRange()) {
-      for (let m = 1; m <= 12; m++) {
-        const monthReports = allReports.filter(r => {
-          const d = new Date(r.report_date)
-          return d.getFullYear() === y && d.getMonth() + 1 === m
-        })
-        const historical = pnlData.filter(a => a.year === y && a.month === m && a.type === 'historical')
-
-        let revenue = 0, payroll = 0
-        if (monthReports.length > 0) {
-          monthReports.forEach(r => {
-            const depts = r.data?.departments || []
-            depts.forEach(d => { revenue += Number(d.amount) || 0 })
-          })
-          bankTx.forEach(tx => {
-            if (!payrollCats.includes(tx.category)) return
-            payroll += getTxAmountForMonth(tx, y, m) * (tx.is_debit ? 1 : -1)
-          })
-        } else if (historical.length > 0) {
-          historical.forEach(h => {
-            if (h.category?.startsWith('rev_')) revenue += Number(h.amount) || 0
-            if (payrollCats.includes(h.category)) payroll += Number(h.amount) || 0
-          })
-        }
-
-        if (revenue <= 0) continue
-        months.push({
-          label: `${MONTHS_RU[m - 1].slice(0, 3)} ${String(y).slice(2)}`,
-          payrollPct: (payroll / revenue) * 100,
-          alert: (payroll / revenue) > THRESHOLDS.payrollShareAlert,
-        })
-      }
-    }
-    return months
-  }, [allReports, pnlData, bankTx])
-
-  // ====== 3.5 Expense Anomaly Detection ======
-  const anomalies = useMemo(() => {
-    const opexCategories = [
-      { key: 'payroll', label: 'ФОТ', cats: PAYROLL_CATEGORIES },
-      { key: 'rent', label: 'Аренда', cats: ['rent_premises', 'rent_warehouse', 'rent_property_tax'] },
-      { key: 'utilities', label: 'Коммунальные', cats: ['util_electric', 'util_water', 'util_heating', 'util_bi', 'util_internet', 'util_waste', 'util_other'] },
-      { key: 'marketing', label: 'Маркетинг', cats: ['mkt_smm', 'mkt_target', 'mkt_2gis', 'mkt_yandex', 'mkt_google', 'mkt_other'] },
-      { key: 'taxes', label: 'Налоги', cats: ['tax_retail', 'tax_payroll', 'tax_insurance', 'tax_alcohol', 'tax_hookah', 'tax_other'] },
-      { key: 'other', label: 'Прочие OpEx', cats: ['household', 'bank_fee', 'opex_security', 'opex_software', 'opex_menu', 'opex_pest', 'opex_grease', 'opex_repair', 'opex_uniform', 'opex_music', 'opex_royalty', 'opex_misc'] },
-    ]
-
-    const now = new Date()
-    const currentY = now.getFullYear()
-    const currentM = now.getMonth() + 1
-
-    return opexCategories.map(cat => {
-      // Collect last 12 months of data
-      const monthValues = []
-      for (let i = 1; i <= 12; i++) {
-        let m = currentM - i
-        let y = currentY
-        if (m <= 0) { m += 12; y-- }
-
-        let total = 0
-        // Bank transactions
-        bankTx.forEach(tx => {
-          if (!cat.cats.includes(tx.category)) return
-          total += getTxAmountForMonth(tx, y, m) * (tx.is_debit ? 1 : -1)
-        })
-        // Historical pnl_data
-        pnlData.filter(a => a.year === y && a.month === m && a.type === 'historical' && cat.cats.includes(a.category))
-          .forEach(h => { total += Math.abs(Number(h.amount) || 0) })
-
-        if (total > 0) monthValues.push(total)
-      }
-
-      if (monthValues.length < 3) return null
-
-      const mean = monthValues.reduce((s, v) => s + v, 0) / monthValues.length
-      const stddev = Math.sqrt(monthValues.reduce((s, v) => s + (v - mean) ** 2, 0) / monthValues.length)
-
-      // Current month value
-      let currentVal = 0
-      bankTx.forEach(tx => {
-        if (!cat.cats.includes(tx.category)) return
-        currentVal += getTxAmountForMonth(tx, currentY, currentM) * (tx.is_debit ? 1 : -1)
-      })
-
-      const deviation = stddev > 0 ? (currentVal - mean) / stddev : 0
-      const isAnomaly = currentVal > mean + 1.5 * stddev
-
-      return {
-        label: cat.label,
-        mean: Math.round(mean),
-        current: Math.round(currentVal),
-        deviation: deviation.toFixed(1),
-        isAnomaly,
-      }
-    }).filter(Boolean)
-  }, [bankTx, pnlData])
+  // ====== 3.3–3.5 Food cost, ФОТ, аномалии — той же формулой, что P&L (BR-RPT-023) ======
+  const monthLabel = (t) => `${MONTHS_RU[t.month - 1].slice(0, 3)} ${String(t.year).slice(2)}`
+  const trends = useMemo(() => (
+    monthlyTrends({ reports: allReports, bankTx, adjustments: pnlData, years: yearsRange() })
+      .map(t => ({ ...t, label: monthLabel(t) }))
+  ), [allReports, pnlData, bankTx])
+  const fcTrend = trends
+  const payrollTrend = trends
+  const anomalies = useMemo(() => expenseAnomalies({ reports: allReports, bankTx, adjustments: pnlData }), [allReports, bankTx, pnlData])
 
   // ====== 3.6 Cash Discrepancy Tracker ======
   const discrepancyData = useMemo(() => {
@@ -459,9 +299,9 @@ export default function AnalyticsPage() {
               <ReferenceLine y={FOOD_COST_BANDS.warn * 100} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: pctLabel(FOOD_COST_BANDS.warn), fill: '#f59e0b', fontSize: 10 }} />
               <ReferenceLine y={FOOD_COST_BANDS.critical * 100} stroke="#ef4444" strokeDasharray="5 5" label={{ value: pctLabel(FOOD_COST_BANDS.critical), fill: '#ef4444', fontSize: 10 }} />
               <Line type="monotone" dataKey="fcTotal" stroke="#f59e0b" strokeWidth={2} dot={false} name="Итого FC%" />
-              <Line type="monotone" dataKey="fcKitchen" stroke="#22c55e" strokeWidth={1.5} dot={false} name="Кухня" />
-              <Line type="monotone" dataKey="fcBar" stroke="#3b82f6" strokeWidth={1.5} dot={false} name="Бар" />
-              <Line type="monotone" dataKey="fcHookah" stroke="#a855f7" strokeWidth={1.5} dot={false} name="Кальян" />
+              <Line type="monotone" dataKey="fcKitchen" stroke="#22c55e" strokeWidth={1.5} dot={false} name={departmentLabel('kitchen')} />
+              <Line type="monotone" dataKey="fcBar" stroke="#3b82f6" strokeWidth={1.5} dot={false} name={departmentLabel('bar')} />
+              <Line type="monotone" dataKey="fcHookah" stroke="#a855f7" strokeWidth={1.5} dot={false} name={departmentLabel('hookah')} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
             </LineChart>
           </ResponsiveContainer>
