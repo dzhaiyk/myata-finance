@@ -5,8 +5,8 @@
 -- заведение с другим набором отделов не могло завести свой без правки схемы.
 -- Плюс отделы хранились отображаемым названием, и переименование ломало расчёты.
 --
--- Порядок важен: сначала таблица и seed, затем перевод значений на коды,
--- затем снятие CHECK и внешние ключи, и только потом JSONB отчётов.
+-- Порядок важен: таблица и seed → снятие CHECK → перевод значений на коды →
+-- внешние ключи → JSONB отчётов. Снять CHECK до перевода обязательно.
 
 -- 1. Справочник -------------------------------------------------------------
 
@@ -42,16 +42,9 @@ INSERT INTO public.departments (code, name, for_revenue, for_staff, for_supply, 
   ('other',      'Прочее',     true,  true,  true,  NULL,                7)
 ON CONFLICT (code) DO NOTHING;
 
--- 2. Значения в таблицах переводятся с названий на коды ---------------------
-
-UPDATE public.positions p SET department = d.code
-  FROM public.departments d WHERE p.department = d.name;
-UPDATE public.staff s SET department = d.code
-  FROM public.departments d WHERE s.department = d.name;
-UPDATE public.suppliers s SET category = d.code
-  FROM public.departments d WHERE s.category = d.name;
-
--- 3. CHECK снимаются, вместо них внешние ключи ------------------------------
+-- 2. CHECK снимаются ПЕРВЫМИ -----------------------------------------------
+-- Старый CHECK разрешает только русские названия, поэтому перевести значения
+-- на коды, не сняв его, нельзя: 'management' в него не проходит.
 
 ALTER TABLE public.positions DROP CONSTRAINT IF EXISTS positions_department_check;
 ALTER TABLE public.staff     DROP CONSTRAINT IF EXISTS staff_department_check;
@@ -61,6 +54,17 @@ ALTER TABLE public.positions DROP CONSTRAINT IF EXISTS positions_department_fkey
 ALTER TABLE public.staff     DROP CONSTRAINT IF EXISTS staff_department_fkey;
 ALTER TABLE public.suppliers DROP CONSTRAINT IF EXISTS suppliers_category_fkey;
 
+-- 3. Значения переводятся с названий на коды --------------------------------
+
+UPDATE public.positions p SET department = d.code
+  FROM public.departments d WHERE p.department = d.name;
+UPDATE public.staff s SET department = d.code
+  FROM public.departments d WHERE s.department = d.name;
+UPDATE public.suppliers s SET category = d.code
+  FROM public.departments d WHERE s.category = d.name;
+
+-- 4. Внешние ключи вместо снятых CHECK --------------------------------------
+
 ALTER TABLE public.positions ADD CONSTRAINT positions_department_fkey
   FOREIGN KEY (department) REFERENCES public.departments(code);
 ALTER TABLE public.staff ADD CONSTRAINT staff_department_fkey
@@ -68,7 +72,7 @@ ALTER TABLE public.staff ADD CONSTRAINT staff_department_fkey
 ALTER TABLE public.suppliers ADD CONSTRAINT suppliers_category_fkey
   FOREIGN KEY (category) REFERENCES public.departments(code);
 
--- 4. Коды в отчётах смен ----------------------------------------------------
+-- 5. Коды в отчётах смен ----------------------------------------------------
 -- Отделы лежат в data->'departments' как [{name, amount}]. Добавляем code,
 -- сохраняя порядок элементов. Название оставляем: оно показывается в старых PDF.
 
