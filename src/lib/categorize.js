@@ -82,120 +82,21 @@ export const CATEGORIES = {
   uncategorized: { label: '❓ Не распознано', group: 'uncategorized', pnl: null },
 }
 
-// Keyword rules: check purpose field first, then beneficiary
-// Order matters — first match wins
-export const KEYWORD_RULES = [
-  // Движение денег банк ↔ касса ↔ эквайринг — раньше эти строки попадали в «комиссию банка»
-  // или в «зачисление эквайринга» и искажали P&L/CF. Проверяются первыми.
-  { field: 'purpose', pattern: /взнос наличных/i, category: 'internal' },                 // касса → счёт
-  { field: 'purpose', pattern: /комисси\S* за снят/i, category: 'bank_fee' },             // раньше самого снятия!
-  { field: 'purpose', pattern: /снят\S* наличных/i, category: 'cash_withdrawal' },       // счёт → наличные (куда — решает пользователь)
-  { field: 'purpose', pattern: /возврат продаж/i, category: 'acquiring_settlement' },      // возврат покупателю по карте (дебет)
-  { field: 'purpose', pattern: /продажи с kaspi/i, category: 'acquiring_settlement' },     // зачисление выручки Kaspi Pay
-  { field: 'purpose', pattern: /расчеты по карточкам/i, category: 'acquiring_settlement' }, // зачисление эквайринга Halyk
-  { field: 'purpose', pattern: /пополнение с терминала/i, category: 'acquiring_settlement' }, // зачисление POS Halyk (выписка по счёту)
-  { field: 'purpose', pattern: /комисси\S* за операци/i, category: 'bank_fee' },           // «Комиссия за операцию …» в выписке Halyk
-  // Поступления не от эквайринга: субаренда места под станции зарядки. Правило
-  // должно стоять выше правила «аренда» по назначению, иначе доход уйдёт в расход.
-  { field: 'beneficiary', pattern: /PowerBNK/i, isDebit: false, category: 'income_other' }, // арендатор станций зарядки платит нам (ответ 04.09.2026)
-  { field: 'purpose', pattern: /перевод собственных средств на карту/i, category: 'cash_withdrawal' }, // обналичка через карту учредителя (ответ 03.09.2026)
-  { field: 'purpose', pattern: /ИПН с доходов, не облагаемых/i, category: 'tax_retail' },     // налог ИП с дохода — не ФОТ (ответ 03.09.2026)
-  { field: 'purpose', pattern: /страхован\S* жизни/i, category: 'tax_insurance' },           // Nomad Life — страхование сотрудников
-  { field: 'purpose', pattern: /строительно.монтажн|услуги дизайнера/i, category: 'capex_repair' },
-  { field: 'purpose', pattern: /мебел/i, category: 'capex_furniture' },
-  { field: 'purpose', pattern: /бесконтактн\S* меню/i, category: 'opex_menu' },
-  { field: 'purpose', pattern: /крафт.пакет/i, category: 'household' },
-  // Purpose-based keywords (бухгалтер пишет в Назначение)
-  { field: 'purpose', pattern: /кухня/i, category: 'cogs_kitchen' },
-  { field: 'purpose', pattern: /бар/i, category: 'cogs_bar' },
-  { field: 'purpose', pattern: /кальян|дымн/i, category: 'cogs_hookah' },
-  { field: 'purpose', pattern: /хоз\s*товар/i, category: 'household' },
-  { field: 'purpose', pattern: /хозка/i, category: 'household' },                         // сленг бухгалтера в назначении
-  // Налог на имущество арендодатель перевыставляет нам раз в год, и в назначении
-  // стоит «За аренду/лизинг…» — правило обязано стоять выше правила аренды
-  { field: 'purpose', pattern: /налог\S*\s+(на\s+)?(имуществ|недвижим)/i, category: 'rent_property_tax' },
-  { field: 'purpose', pattern: /аренд\S*\s+(лайтбокс|склад|кровл)/i, category: 'rent_warehouse' },
-  // Аренда помещения — только платежи арендодателю (условие учредителя 04.09.2026)
-  { field: 'purpose', pattern: /аренд/i, beneficiary: /Абласанов/i, category: 'rent_premises' },
-  { field: 'purpose', pattern: /отопление|горяч/i, category: 'util_heating' },
-  { field: 'purpose', pattern: /коммунальн/i, category: 'util_other' },
-  { field: 'purpose', pattern: /электри/i, category: 'util_electric' },
-  { field: 'purpose', pattern: /водоснаб/i, category: 'util_water' },
-  { field: 'purpose', pattern: /вывоз.*мусор/i, category: 'util_waste' },
-  { field: 'purpose', pattern: /дератизац|дезинсек/i, category: 'opex_pest' },
-  { field: 'purpose', pattern: /жироулов/i, category: 'opex_grease' },
-  { field: 'purpose', pattern: /розничн.*налог/i, category: 'tax_retail' },
-  { field: 'purpose', pattern: /ИПН|подоходн/i, category: 'tax_payroll' },
-  { field: 'purpose', pattern: /пенсион|социальн|медицинск|страхован/i, category: 'tax_payroll' },
-  { field: 'purpose', pattern: /лицензи.*алкоголь/i, category: 'tax_alcohol' },
-  { field: 'purpose', pattern: /лицензи.*дымн|лицензи.*кальян/i, category: 'tax_hookah' },
-  { field: 'purpose', pattern: /безвозмезд.*перевод/i, category: 'dividends' },
-  { field: 'purpose', pattern: /дивиденд/i, category: 'dividends' },
-  { field: 'purpose', pattern: /зарплат|ЗП/i, category: 'payroll_other' },
-  { field: 'purpose', pattern: /операций по картам/i, category: 'bank_fee' },
-  { field: 'purpose', pattern: /информационно-технолог/i, category: 'bank_fee' },
-  { field: 'purpose', pattern: /комисси.*ведени.*счет/i, category: 'bank_fee' },
-  { field: 'purpose', pattern: /маркетинг|реклам/i, category: 'mkt_other' },
-  { field: 'purpose', pattern: /СММ|smm/i, category: 'mkt_smm' },
-  { field: 'purpose', pattern: /таргет/i, category: 'mkt_target' },
-  { field: 'purpose', pattern: /роялти/i, category: 'opex_royalty' },
-  { field: 'purpose', pattern: /kaspi ?pay.*депозит|депозит.*kaspi ?pay|со счета.*на.*счет/i, category: 'internal' },
-
-  // Beneficiary-based rules
-  { field: 'beneficiary', pattern: /Дюсебекова/i, category: 'payroll_mgmt' }, // бухгалтер (ответ учредителя 03.09.2026)
-  { field: 'beneficiary', pattern: /Бақыт Әділет/i, category: 'dividends' },
-  { field: 'beneficiary', pattern: /Nomad Life/i, category: 'tax_insurance' },
-  // «Фин помощь» от учредителя — возврат выведенных средств в оборот, не доход (ответ 03.09.2026)
-  { field: 'beneficiary', pattern: /Ахметқали Алмаз/i, isDebit: false, category: 'internal' },
-  // Kaspi Pay: направление решает — кредит = зачисление выручки с терминалов
-  // (нужно для сверки «терминалы ↔ зачисления»), дебет = комиссия эквайринга
-  { field: 'beneficiary', pattern: /Kaspi Pay/i, isDebit: false, category: 'acquiring_settlement' },
-  { field: 'beneficiary', pattern: /Kaspi Pay/i, isDebit: true, category: 'bank_fee' },
-  { field: 'beneficiary', pattern: /KASPI BANK/i, isDebit: false, category: 'acquiring_settlement' },
-  { field: 'beneficiary', pattern: /KASPI BANK/i, isDebit: true, category: 'bank_fee' },
-  { field: 'beneficiary', pattern: /2ГИС|2gis/i, category: 'mkt_2gis' },
-  { field: 'beneficiary', pattern: /авторское/i, category: 'opex_music' },
-  { field: 'beneficiary', pattern: /Алатау Жарық|электри/i, category: 'util_electric' },
-  { field: 'beneficiary', pattern: /Алматы Су/i, category: 'util_water' },
-  { field: 'beneficiary', pattern: /тепловые сети/i, category: 'util_heating' },
-  { field: 'beneficiary', pattern: /Кузет|охран/i, category: 'opex_security' },
-  { field: 'beneficiary', pattern: /Кафе Софт|iiko/i, category: 'opex_software' },
-  { field: 'beneficiary', pattern: /Управляющая компания Мята/i, category: 'opex_royalty' },
-  { field: 'beneficiary', pattern: /Ак Тартип/i, category: 'opex_pest' },
-  { field: 'beneficiary', pattern: /RIM PARTNERS/i, category: 'internal' },
-  { field: 'beneficiary', pattern: /Izdeu|Jarnama/i, category: 'mkt_other' },
-  { field: 'beneficiary', pattern: /ЖК 4YOU/i, category: 'rent_premises' },
-  { field: 'beneficiary', pattern: /Абласанов/i, category: 'rent_premises' },   // арендодатель помещения
-  { field: 'beneficiary', pattern: /УГД|налоговое/i, category: 'tax_payroll' },
-  { field: 'beneficiary', pattern: /Государственная корпораци/i, category: 'tax_payroll' },
-]
+// Правила категоризации переехали в базу (таблицы `bank_rules` и
+// `bank_rule_conditions`, миграция 027). В коде их держать нельзя: там были
+// фамилии арендодателя, бухгалтера и учредителей, своё юрлицо, адрес и
+// поставщики Алматы — при продаже другому заведению всё это уехало бы к нему
+// (ADR-0010, правило 11).
+//
+// Применяются они в `buildImportRows`, где есть доступ к базе, и раньше
+// разбора файла ничего не категоризируют.
 
 /**
- * Auto-categorize a bank transaction
- * @param {{ beneficiary: string, purpose: string, debit: number, credit: number }} tx
- * @returns {{ category: string, confidence: 'high'|'medium'|'low', matchedRule: string|null }}
+ * Разбор файла категорию не определяет: правила живут в базе и применяются
+ * в `buildImportRows`. Функция оставлена, чтобы парсеры выписок не знали,
+ * откуда берутся правила.
  */
-export function categorizeTransaction(tx) {
-  const { beneficiary = '', purpose = '' } = tx
-  const txIsDebit = (Number(tx.debit) || 0) > 0
-
-  for (const rule of KEYWORD_RULES) {
-    // Правило с isDebit применяется только к своему направлению (дебет/кредит)
-    if (rule.isDebit !== undefined && rule.isDebit !== txIsDebit) continue
-    const text = rule.field === 'purpose' ? purpose : beneficiary
-    if (!rule.pattern.test(text)) continue
-    // Дополнительные условия правила: получатель и/или назначение (логика «и»)
-    if (rule.beneficiary && !rule.beneficiary.test(beneficiary)) continue
-    if (rule.purpose && !rule.purpose.test(purpose)) continue
-    const extra = [rule.beneficiary && `beneficiary: ${rule.beneficiary.source}`, rule.purpose && `purpose: ${rule.purpose.source}`]
-      .filter(Boolean).join(' + ')
-    return {
-      category: rule.category,
-      confidence: rule.field === 'purpose' ? 'high' : 'medium',
-      matchedRule: `${rule.field}: ${rule.pattern.source}${extra ? ` + ${extra}` : ''}`,
-    }
-  }
-
+export function categorizeTransaction() {
   return { category: 'uncategorized', confidence: 'low', matchedRule: null }
 }
 

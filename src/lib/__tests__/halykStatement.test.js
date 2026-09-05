@@ -2,6 +2,8 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { extractPdfText, itemsToLines } from '../pdfText.js'
 import { parseAmount, parseHalykStatement, parseHalykPdf } from '../halykStatement.js'
+import { applyDbRules } from '../bankImport.js'
+import { seededRules } from './fixtures.js'
 
 // --- сборка тестового PDF ------------------------------------------------
 // Повторяет то, как реально устроена выписка Halyk: Type0/Identity-H,
@@ -137,11 +139,16 @@ describe('Выписка Halyk (PDF) — разбор в транзакции', 
     assert.equal(settlement.purpose, 'Референс 4066993547 Пополнение с терминала 11070009')
   })
 
-  it('категоризует зачисление POS, комиссию и аренду', async () => {
+  // Разбор категорию не ставит: правила живут в базе (миграция 027) и
+  // применяются в buildImportRows. Здесь проверяем связку разбор → правила.
+  it('разобранные строки категоризуются правилами', async () => {
     const { rows } = await parseHalykPdf(buildPdf(statementItems()))
-    assert.equal(rows.find(r => !r.isDebit).category, 'acquiring_settlement')
-    assert.equal(rows.find(r => r.purpose.includes('Комиссия за операцию')).category, 'bank_fee')
-    assert.equal(rows.find(r => r.purpose.includes('аренду')).category, 'rent_premises')
+    const rules = seededRules()
+    const cat = (r) => applyDbRules({ ...r, is_debit: r.isDebit }, rules)?.category || 'uncategorized'
+    assert.equal(rows.find(r => !r.isDebit).category, 'uncategorized')
+    assert.equal(cat(rows.find(r => !r.isDebit)), 'acquiring_settlement')
+    assert.equal(cat(rows.find(r => r.purpose.includes('Комиссия за операцию'))), 'bank_fee')
+    assert.equal(cat(rows.find(r => r.purpose.includes('аренду'))), 'rent_premises')
   })
 
   it('НДС по комиссии не попадает в сумму операции', async () => {

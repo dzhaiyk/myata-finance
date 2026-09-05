@@ -37,6 +37,11 @@ export function matchCondition(tx, cond) {
   })()
   const val = String(cond.value ?? '')
   switch (cond.operator) {
+    // Регулярное выражение: правила, перенесённые из кода (миграция 027),
+    // хранятся как есть, чтобы поведение не поехало при переносе
+    case 'matches': {
+      try { return new RegExp(val, 'i').test(fieldVal) } catch { return false }
+    }
     case 'contains': return fieldVal.toLowerCase().includes(val.toLowerCase())
     case 'not_contains': return !fieldVal.toLowerCase().includes(val.toLowerCase())
     case 'equals': return fieldVal.toLowerCase() === val.toLowerCase()
@@ -72,7 +77,9 @@ export function applyDbRules(tx, rules) {
 
 export async function loadActiveRules(supabase) {
   const [rRes, cRes] = await Promise.all([
-    supabase.from('bank_rules').select('*').eq('is_active', true),
+    // Порядок обязателен: выигрывает первое совпавшее правило. Без сортировки
+    // приоритет зависел бы от того, как база вернёт строки.
+    supabase.from('bank_rules').select('*').eq('is_active', true).order('sort_order').order('id'),
     supabase.from('bank_rule_conditions').select('*'),
   ])
   return withConditions(rRes.data || [], cRes.data || [])

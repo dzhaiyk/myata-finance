@@ -7,7 +7,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { resolve, dirname } from 'node:path'
-import { CATEGORIES, KEYWORD_RULES } from '../categorize.js'
+import { CATEGORIES } from '../categorize.js'
+import { seededRules } from './fixtures.js'
 import { PAYROLL_CATEGORIES } from '../config.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
@@ -45,10 +46,13 @@ describe('categorize.js ↔ таблица categories', () => {
     }
   })
 
-  it('каждое KEYWORD_RULES-правило пишет код, существующий в БД', () => {
-    for (const rule of KEYWORD_RULES) {
-      assert.ok(dbCodes.has(rule.category),
-        `правило /${rule.pattern.source}/ → код ${rule.category} отсутствует в БД`)
+  // Правила живут в базе (миграция 027), читаем их из файла миграции
+  it('каждое перенесённое правило пишет код, существующий в БД', () => {
+    const rules = seededRules()
+    assert.equal(rules.length, 70)
+    for (const rule of rules) {
+      assert.ok(dbCodes.has(rule.category_code),
+        `правило ${rule.id} → код ${rule.category_code} отсутствует в БД`)
     }
   })
 })
