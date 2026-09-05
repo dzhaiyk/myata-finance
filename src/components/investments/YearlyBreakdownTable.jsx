@@ -65,7 +65,7 @@ export default function YearlyBreakdownTable({ investors, transactions }) {
             let yearNet = 0
             return (
               <tr key={year} className="border-b border-slate-700/50">
-                <td className="table-cell font-medium text-white">{year}</td>
+                <td className="table-cell font-medium text-slate-100">{year}</td>
                 {relevantInvestors.map(inv => {
                   const cell = data[year]?.[inv.id] || { in: 0, out: 0 }
                   yearNet += cell.out - cell.in

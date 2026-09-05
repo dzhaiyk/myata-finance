@@ -114,9 +114,9 @@ export default function StaffPage() {
           return (
             <button key={t.key} onClick={() => { setTab(t.key); resetForm() }}
               className={cn('flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium flex-1 justify-center transition-all',
-                tab === t.key ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300')}>
+                tab === t.key ? 'bg-slate-800 text-slate-100 shadow-sm' : 'text-slate-500 hover:text-slate-300')}>
               <Icon className="w-4 h-4" /> {t.label}
-              <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full', tab === t.key ? 'bg-brand-500/20 text-brand-400' : 'bg-slate-800 text-slate-500')}>{t.count}</span>
+              <span className={cn('text-2xs px-1.5 py-0.5 rounded-full', tab === t.key ? 'bg-brand-500/20 text-brand-400' : 'bg-slate-800 text-slate-500')}>{t.count}</span>
             </button>
           )
         })}
@@ -196,7 +196,7 @@ export default function StaffPage() {
                   <tr key={s.id} className={cn('hover:bg-slate-800/30', !s.is_active && 'opacity-50')}>
                     <td className="table-cell">
                       <div className="font-medium">{s.full_name}</div>
-                      {s.terminated_at && <div className="text-[10px] text-red-400">Уволен: {s.terminated_at}{s.termination_reason ? ` — ${s.termination_reason}` : ''}</div>}
+                      {s.terminated_at && <div className="text-2xs text-red-400">Уволен: {s.terminated_at}{s.termination_reason ? ` — ${s.termination_reason}` : ''}</div>}
                     </td>
                     <td className="table-cell text-slate-400">{departmentLabel(s.department)}</td>
                     <td className="table-cell text-slate-400">{pos?.name || '—'}</td>

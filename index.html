@@ -8,11 +8,22 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <meta name="theme-color" content="#166534" />
+  <meta name="color-scheme" content="light dark" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <!-- Текст интерфейса и цифры набираются системным шрифтом (на iPad это SF Pro):
+       выглядит роднее и не ждёт загрузки. Из сети берём только шрифт заголовков. -->
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <script>
+    // Тема ставится до первой отрисовки, иначе светлой теме мигнёт тёмный фон
+    try {
+      var s = JSON.parse(localStorage.getItem('myata_session') || 'null');
+      var t = localStorage.getItem('myata_theme_' + ((s && s.userId) || 'guest'));
+      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  </script>
 </head>
-<body class="bg-slate-925 text-slate-100 antialiased">
+<body class="antialiased">
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
 </body>

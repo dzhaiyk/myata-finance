@@ -98,7 +98,7 @@ export default function StatementUploadCard({ accounts, date, managerName, onFre
     <div className="card border-sky-500/20 bg-sky-500/5 space-y-3">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-sm font-display font-bold text-sky-300 flex items-center gap-2"><Landmark className="w-4 h-4" /> Выписки банков</h3>
-        <span className="text-[11px] text-slate-500">Выгрузите из приложения банка выписку за вчера и сегодня, повторы отбросятся сами</span>
+        <span className="text-2xs text-slate-500">Выгрузите из приложения банка выписку за вчера и сегодня, повторы отбросятся сами</span>
       </div>
 
       {operating.length === 0 && (
@@ -114,7 +114,7 @@ export default function StatementUploadCard({ accounts, date, managerName, onFre
               {never ? 'выписки нет' : `до ${shortDate(lastDates[account.id])} · ${daysAgo === 0 ? 'сегодня' : `${daysAgo} дн. назад`}`}
             </span>
             {date && (
-              <span className={cn('text-[11px] whitespace-nowrap', onDate[account.id] ? 'text-slate-400' : 'text-slate-600')}>
+              <span className={cn('text-2xs whitespace-nowrap', onDate[account.id] ? 'text-slate-400' : 'text-slate-600')}>
                 {onDate[account.id] ? `за ${shortDate(date)}: ${onDate[account.id].n} оп., −${fmt(onDate[account.id].debit)} / +${fmt(onDate[account.id].credit)}` : `за ${shortDate(date)}: нет операций`}
               </span>
             )}
@@ -132,7 +132,7 @@ export default function StatementUploadCard({ accounts, date, managerName, onFre
         <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-3 space-y-2 text-xs">
           <div className="flex items-center justify-between gap-2">
             <span className="text-slate-300 font-medium truncate">{staged.fileName} → {staged.account.name}</span>
-            <button onClick={() => setStaged(null)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+            <button onClick={() => setStaged(null)} className="text-slate-500 hover:text-slate-100"><X className="w-4 h-4" /></button>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <div><div className="text-slate-500">Период</div><div className="font-mono text-slate-200">{shortDate(staged.summary.from)} — {shortDate(staged.summary.to)}</div></div>

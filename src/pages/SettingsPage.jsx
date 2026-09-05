@@ -221,7 +221,7 @@ export default function SettingsPage() {
               <label className="label">{label}, {currencySymbol()}</label>
               <input value={thresholds[key]} disabled={!canEdit} inputMode="decimal" className="input text-sm w-full"
                 onChange={e => patchThr(key, e.target.value)} />
-              <div className="text-[11px] text-slate-500 mt-0.5">{hint}</div>
+              <div className="text-2xs text-slate-500 mt-0.5">{hint}</div>
             </div>
           ))}
         </div>
@@ -231,7 +231,7 @@ export default function SettingsPage() {
               <label className="label">{label}, %</label>
               <input value={getPath(thresholds, key)} disabled={!canEdit} inputMode="decimal" className="input text-sm w-full"
                 onChange={e => patchThr(key, e.target.value)} />
-              <div className="text-[11px] text-slate-500 mt-0.5">{hint}</div>
+              <div className="text-2xs text-slate-500 mt-0.5">{hint}</div>
             </div>
           ))}
         </div>

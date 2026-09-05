@@ -4,12 +4,15 @@ summary: пользователь (active/inactive), роль, право, на�
 read_when: меняешь поля пользователей, ролей или настроек
 domain: access
 status: inferred
-updated: 2026-09-04
+updated: 2026-09-06
 ---
 
 # Сущности
 
 ## Пользователь (`app_users`)
+
+Тема оформления: `theme` — `dark`, `light` или пусто (как в системе). Личная
+настройка: планшет в зале общий, а выбор у каждого свой (ADR-0013, миграция 033).
 `username` (уникален), `password_hash` (открытый пароль), `full_name`, `role_id`, `is_active`, `last_login`. Состояния: active ↔ inactive (админ).
 
 ## Роль (`roles`) и право (`permissions`)

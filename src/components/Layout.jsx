@@ -1,9 +1,10 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/lib/store'
-import { LayoutDashboard, FileText, TrendingUp, Wallet, Upload, Users, Shield, Settings, LogOut, Menu, X, Leaf, UserCheck, Calculator, Package, Landmark, HandCoins, BarChart2, ShieldCheck, ListTree, CalendarDays } from 'lucide-react'
-import { useState } from 'react'
+import { LayoutDashboard, FileText, TrendingUp, Wallet, Upload, Users, Shield, Settings, LogOut, Menu, X, Leaf, UserCheck, Calculator, Package, Landmark, HandCoins, BarChart2, ShieldCheck, ListTree, CalendarDays, Sun, Moon } from 'lucide-react'
+import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { appTitle, venueName, getBranding } from '@/lib/config'
+import { currentTheme, nextTheme, saveTheme } from '@/lib/theme'
 
 // Один список на меню и маршруты: право пункта — право страницы (BR-ACS-004)
 export const NAV = [
@@ -28,6 +29,23 @@ export const NAV = [
   { to: '/settings', icon: Settings, label: 'Настройки', perm: 'settings.view' },
 ]
 
+// Переключатель темы: подпись и значок говорят, что будет после нажатия
+function ThemeToggle({ userId, className }) {
+  const [theme, setTheme] = useState('dark')
+  useEffect(() => { setTheme(currentTheme(userId)) }, [userId])
+  const next = nextTheme(theme)
+  return (
+    <button
+      onClick={() => { setTheme(next); saveTheme(userId, next) }}
+      title={next === 'light' ? 'Светлая тема' : 'Тёмная тема'}
+      aria-label={next === 'light' ? 'Включить светлую тему' : 'Включить тёмную тему'}
+      className={cn('p-2 rounded-xl text-slate-500 hover:text-slate-200 hover:bg-slate-800 transition-transform duration-100 active:scale-[0.94]', className)}
+    >
+      {next === 'light' ? <Sun className="w-[18px] h-[18px]" /> : <Moon className="w-[18px] h-[18px]" />}
+    </button>
+  )
+}
+
 export default function Layout() {
   const { profile, signOut, hasPermission } = useAuthStore()
   const [open, setOpen] = useState(false)
@@ -45,7 +63,7 @@ export default function Layout() {
 
       {/* Sidebar */}
       <aside className={cn(
-        'fixed lg:static inset-y-0 left-0 z-40 w-64 bg-slate-900 border-r border-slate-800 flex flex-col transition-transform duration-300',
+        'fixed lg:static inset-y-0 left-0 z-40 w-64 glass border-r border-slate-800 flex flex-col transition-transform duration-300 ease-spring',
         open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       )}>
         {/* Logo */}
@@ -53,7 +71,7 @@ export default function Layout() {
           {getBranding().logo_url && <img src={getBranding().logo_url} alt="" className="w-9 h-9 rounded-xl" />}
           <div>
             <div className="font-display font-bold text-sm tracking-tight">{appTitle()}</div>
-            {venueName() && <div className="text-[10px] text-slate-500 font-medium tracking-wide uppercase">{venueName()}</div>}
+            {venueName() && <div className="text-2xs text-slate-500 font-medium tracking-wide uppercase">{venueName()}</div>}
           </div>
         </div>
 
@@ -69,7 +87,7 @@ export default function Layout() {
                 to={item.to}
                 onClick={() => setOpen(false)}
                 className={({ isActive }) => cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200',
+                  'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors duration-150',
                   isActive
                     ? 'bg-brand-600/15 text-brand-400 shadow-sm shadow-brand-500/5'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -90,10 +108,12 @@ export default function Layout() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate">{profile?.full_name || 'User'}</div>
-              <div className="text-[11px] text-slate-500 truncate">{profile?.roles?.name || 'Role'}</div>
+              <div className="text-2xs text-slate-500 truncate">{profile?.roles?.name || 'Role'}</div>
             </div>
-            <button onClick={handleSignOut} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-red-400 transition-colors">
-              <LogOut className="w-4 h-4" />
+            <ThemeToggle userId={profile?.id} />
+            <button onClick={handleSignOut} title="Выйти" aria-label="Выйти"
+              className="p-2 rounded-xl hover:bg-slate-800 text-slate-500 hover:text-red-400 transition-transform duration-100 active:scale-[0.94]">
+              <LogOut className="w-[18px] h-[18px]" />
             </button>
           </div>
         </div>
@@ -102,11 +122,13 @@ export default function Layout() {
       {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile header */}
-        <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-slate-800 bg-slate-900">
-          <button onClick={() => setOpen(true)} className="p-1.5 rounded-lg hover:bg-slate-800">
+        <div className="lg:hidden sticky top-0 z-20 flex items-center gap-3 px-4 py-3 border-b border-slate-800 glass">
+          <button onClick={() => setOpen(true)} aria-label="Меню"
+            className="p-2 rounded-xl hover:bg-slate-800 transition-transform duration-100 active:scale-[0.94]">
             <Menu className="w-5 h-5" />
           </button>
-          <div className="font-display font-bold text-sm">{appTitle()}</div>
+          <div className="font-display font-bold text-base flex-1">{appTitle()}</div>
+          <ThemeToggle userId={profile?.id} />
         </div>
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">

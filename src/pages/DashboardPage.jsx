@@ -42,7 +42,7 @@ const PieWithLegend = ({ title, data, total }) => (
                 <span className="text-xs text-slate-400 truncate">{d.name}</span>
               </div>
               <div className="flex items-center gap-2 shrink-0 ml-1">
-                <span className="font-mono text-[10px] text-slate-500">{fmtK(d.value)}</span>
+                <span className="font-mono text-2xs text-slate-500">{fmtK(d.value)}</span>
                 <span className="text-xs font-mono font-bold w-10 text-right" style={{ color: d.color }}>{pct}%</span>
               </div>
             </div>
@@ -273,7 +273,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {bestDay && (
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Лучшая смена</div>
+                <div className="text-2xs uppercase tracking-wider text-slate-500 mb-1">Лучшая смена</div>
                 <div className="text-lg font-mono font-bold text-yellow-400">{money(bestDay.total_revenue)}</div>
                 <div className="text-xs text-slate-500 mt-1">
                   {new Date(bestDay.report_date + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric', weekday: 'short' })}
@@ -282,7 +282,7 @@ export default function DashboardPage() {
             )}
             {bestWeek && (
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Лучшая средняя за неделю</div>
+                <div className="text-2xs uppercase tracking-wider text-slate-500 mb-1">Лучшая средняя за неделю</div>
                 <div className="text-lg font-mono font-bold text-green-400">{money(Math.round(bestWeek.avg))}/день</div>
                 <div className="text-xs text-slate-500 mt-1">
                   {new Date(bestWeek.from + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' })} – {new Date(bestWeek.to + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -292,7 +292,7 @@ export default function DashboardPage() {
             )}
             {bestMonth && (
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Лучшая средняя за месяц</div>
+                <div className="text-2xs uppercase tracking-wider text-slate-500 mb-1">Лучшая средняя за месяц</div>
                 <div className="text-lg font-mono font-bold text-blue-400">{money(Math.round(bestMonth.avg))}/день</div>
                 <div className="text-xs text-slate-500 mt-1">
                   {fmtMonthLabel(bestMonth.key)}
@@ -310,7 +310,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2 mb-4">
             <CalendarDays className="w-4 h-4 text-brand-400" />
             <h3 className="text-sm font-semibold text-slate-300">Средняя выручка по дням недели</h3>
-            <span className="text-[10px] text-slate-600 ml-auto">за всё время ({allReports.length} смен) · медиана {money(median)}</span>
+            <span className="text-2xs text-slate-600 ml-auto">за всё время ({allReports.length} смен) · медиана {money(median)}</span>
           </div>
           <div className="grid grid-cols-7 gap-1 sm:gap-2">
             {weekdayStats.map(w => {
@@ -320,7 +320,7 @@ export default function DashboardPage() {
               const medianPct = maxWeekdayAvg > 0 ? (median / maxWeekdayAvg) * 100 : 0
               return (
                 <div key={w.day} className="text-center">
-                  <div className="text-[10px] text-slate-500 mb-2">{w.short}</div>
+                  <div className="text-2xs text-slate-500 mb-2">{w.short}</div>
                   <div className="relative h-24 flex items-end justify-center mb-2">
                     <div className={`w-full max-w-[40px] rounded-t-lg border transition-all ${barColor}`}
                       style={{ height: `${Math.max((w.avg / maxWeekdayAvg) * 100, 4)}%` }} />
@@ -328,7 +328,7 @@ export default function DashboardPage() {
                       style={{ bottom: `${medianPct}%` }} />
                   </div>
                   <div className={`text-xs font-mono font-semibold ${textColor}`}>{fmtK(w.avg)}</div>
-                  <div className="text-[9px] text-slate-600">{w.count} смен</div>
+                  <div className="text-2xs text-slate-600">{w.count} смен</div>
                 </div>
               )
             })}

@@ -41,7 +41,7 @@ export default function InvestorCard({ investor, transactions, allInvestors, can
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-white font-semibold text-base">{investor.full_name}</h3>
+            <h3 className="text-slate-100 font-semibold text-base">{investor.full_name}</h3>
             <span className={cn(
               'badge text-xs',
               isActive ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
@@ -81,11 +81,11 @@ export default function InvestorCard({ investor, transactions, allInvestors, can
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div>
           <p className="text-xs text-slate-500">Вложено</p>
-          <p className="text-white font-medium">{money(stats.invested)}</p>
+          <p className="text-slate-100 font-medium">{money(stats.invested)}</p>
         </div>
         <div>
           <p className="text-xs text-slate-500">Выведено</p>
-          <p className="text-white font-medium">{money(stats.withdrawn)}</p>
+          <p className="text-slate-100 font-medium">{money(stats.withdrawn)}</p>
         </div>
         <div>
           <p className="text-xs text-slate-500">Чистая прибыль</p>
@@ -98,7 +98,7 @@ export default function InvestorCard({ investor, transactions, allInvestors, can
         </div>
         <div>
           <p className="text-xs text-slate-500">ROI</p>
-          <p className="text-white font-medium">
+          <p className="text-slate-100 font-medium">
             {stats.roi > 0 ? `${stats.roi.toFixed(1)}x` : '—'}
           </p>
         </div>
@@ -107,11 +107,11 @@ export default function InvestorCard({ investor, transactions, allInvestors, can
       {(stats.avgDivCurrent || stats.avgDivPrev) && (
         <div className="flex items-center gap-4 pt-2 border-t border-slate-800">
           <div className="flex-1">
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider">{stats.currentYear} ср./мес</p>
+            <p className="text-2xs text-slate-500 uppercase tracking-wider">{stats.currentYear} ср./мес</p>
             <p className="text-sm font-mono text-blue-400">{stats.avgDivCurrent ? `${money(stats.avgDivCurrent)}` : '—'}</p>
           </div>
           <div className="flex-1">
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider">{stats.currentYear - 1} ср./мес</p>
+            <p className="text-2xs text-slate-500 uppercase tracking-wider">{stats.currentYear - 1} ср./мес</p>
             <p className="text-sm font-mono text-slate-400">{stats.avgDivPrev ? `${money(stats.avgDivPrev)}` : '—'}</p>
           </div>
         </div>

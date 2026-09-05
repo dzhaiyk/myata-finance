@@ -269,7 +269,7 @@ export default function PnLPage() {
           <div className="flex bg-slate-900 rounded-lg p-0.5">
             {['month', 'ytd', 'year', 'overall'].map(mode => (
               <button key={mode} onClick={() => setViewMode(mode)}
-                className={cn('px-3 py-1.5 rounded-md text-xs font-medium', viewMode === mode ? 'bg-slate-700 text-white' : 'text-slate-500')}>
+                className={cn('px-3 py-1.5 rounded-md text-xs font-medium', viewMode === mode ? 'bg-slate-700 text-slate-100' : 'text-slate-500')}>
                 {{ month: 'Месяц', ytd: 'YTD', year: 'Год', overall: 'Обзор' }[mode]}
               </button>
             ))}
@@ -361,7 +361,7 @@ export default function PnLPage() {
                 <span className="text-sm font-display font-bold">{pnlLabel(line)}</span>
                 <div className="flex items-center gap-4">
                   <span className={cn('font-mono text-base font-bold', val >= 0 ? 'text-green-400' : 'text-red-400')}>{money(val)}</span>
-                  <span className="text-[10px] text-slate-500 w-12 text-right">{pct(val)}</span>
+                  <span className="text-2xs text-slate-500 w-12 text-right">{pct(val)}</span>
                 </div>
               </div>
             )
@@ -389,7 +389,7 @@ export default function PnLPage() {
                 </div>
                 <div className="flex items-center gap-4">
                   <span className={cn('font-mono text-sm font-bold', color)}>{money(val)}</span>
-                  <span className="text-[10px] text-slate-500 w-12 text-right">{pct(val)}</span>
+                  <span className="text-2xs text-slate-500 w-12 text-right">{pct(val)}</span>
                 </div>
               </button>
             )
@@ -415,7 +415,7 @@ export default function PnLPage() {
                     {Number(adjVal) > 0 ? '+' : ''}{fmt(Number(adjVal))}
                   </span>
                 )}
-                <span className="text-[10px] text-slate-500 w-12 text-right">{val > 0 ? pct(val, line.key) : '—'}</span>
+                <span className="text-2xs text-slate-500 w-12 text-right">{val > 0 ? pct(val, line.key) : '—'}</span>
               </div>
             </div>
           )

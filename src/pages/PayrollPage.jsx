@@ -4,6 +4,7 @@ import { useAuthStore } from '@/lib/store'
 import { cn, fmt, MONTHS_RU, money } from '@/lib/utils'
 import { formatLocalDate, yearsRange } from '@/lib/dates'
 import { timesheetTotals } from '@/lib/timesheetDb'
+import { departmentLabel } from '@/lib/config'
 import { Calculator, Save, CheckCircle2, DollarSign, Calendar, Users } from 'lucide-react'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -279,8 +280,8 @@ export default function PayrollPage() {
             {yearsRange(2025).map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           <div className="flex bg-slate-900 rounded-lg p-0.5">
-            <button onClick={() => setPeriod(1)} className={cn('px-3 py-1.5 rounded-md text-xs font-medium transition-all', period === 1 ? 'bg-slate-700 text-white' : 'text-slate-500')}>1–15</button>
-            <button onClick={() => setPeriod(2)} className={cn('px-3 py-1.5 rounded-md text-xs font-medium transition-all', period === 2 ? 'bg-slate-700 text-white' : 'text-slate-500')}>16–конец</button>
+            <button onClick={() => setPeriod(1)} className={cn('px-3 py-1.5 rounded-md text-xs font-medium transition-all', period === 1 ? 'bg-slate-700 text-slate-100' : 'text-slate-500')}>1–15</button>
+            <button onClick={() => setPeriod(2)} className={cn('px-3 py-1.5 rounded-md text-xs font-medium transition-all', period === 2 ? 'bg-slate-700 text-slate-100' : 'text-slate-500')}>16–конец</button>
           </div>
           {canManage && periodStatus !== 'paid' && (
             <button onClick={fillFromTimesheet} className="btn-secondary text-sm flex items-center gap-2" title="Смены и штрафы за период из табеля; поля остаются редактируемыми">
@@ -296,7 +297,7 @@ export default function PayrollPage() {
         <div className="card-hover text-center">
           <div className="stat-label">Период</div>
           <div className="stat-value text-lg">{periodLabel} {MONTHS_RU[month - 1]?.slice(0, 3)}</div>
-          <div className="text-[10px] text-slate-500 mt-1">Выплата: {payDate}</div>
+          <div className="text-2xs text-slate-500 mt-1">Выплата: {payDate}</div>
         </div>
         <div className="card-hover text-center">
           <div className="stat-label">Ставки</div>
@@ -331,7 +332,7 @@ export default function PayrollPage() {
         return (
           <div key={dept} className="card overflow-x-auto p-0">
             <div className="px-4 py-3 bg-slate-900/50 border-b border-slate-800">
-              <span className="text-sm font-bold text-slate-300">{dept}</span>
+              <span className="text-sm font-bold text-slate-300">{departmentLabel(dept)}</span>
               <span className="text-xs text-slate-500 ml-2">({deptRows.length} чел.)</span>
             </div>
             <table className="w-full text-sm min-w-[900px]">
@@ -374,14 +375,14 @@ export default function PayrollPage() {
                           className={cn('input text-xs text-right w-20 py-1 px-1 font-mono', r.advances_from_reports > 0 && '!border-yellow-500/40')} placeholder="0" />
                         {r.advances_details?.length > 0 && (
                           <div className="hidden group-hover:block absolute right-0 bottom-full mb-1 z-30 bg-slate-800 border border-slate-700 rounded-lg p-2 shadow-xl min-w-[200px]">
-                            <div className="text-[10px] font-semibold text-yellow-400 mb-1">Авансы из отчётов:</div>
+                            <div className="text-2xs font-semibold text-yellow-400 mb-1">Авансы из отчётов:</div>
                             {r.advances_details.map((d, i) => (
-                              <div key={i} className="text-[10px] text-slate-400 flex justify-between gap-3">
+                              <div key={i} className="text-2xs text-slate-400 flex justify-between gap-3">
                                 <span>{d.date}{d.comment ? ` — ${d.comment}` : ''}</span>
                                 <span className="font-mono">{money(d.amount)}</span>
                               </div>
                             ))}
-                            <div className="text-[10px] font-semibold text-yellow-300 mt-1 pt-1 border-t border-slate-700 flex justify-between">
+                            <div className="text-2xs font-semibold text-yellow-300 mt-1 pt-1 border-t border-slate-700 flex justify-between">
                               <span>Итого</span><span className="font-mono">{money(r.advances_from_reports)}</span>
                             </div>
                           </div>

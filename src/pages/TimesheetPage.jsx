@@ -1,16 +1,20 @@
 // Табель смен: сетка сотрудники × дни за полмесяца, штрафы, импорт из Excel (TASK-038).
 // Доля смены 1 / 0.7 / 0.5 — начисление = ставка × доля (BR-PAY).
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { useAuthStore } from '@/lib/store'
-import { cn, MONTHS_RU } from '@/lib/utils'
+import { cn, MONTHS_RU, money } from '@/lib/utils'
 import { yearsRange } from '@/lib/dates'
-import { departmentLabel } from '@/lib/config'
+import { departmentLabel, currencySymbol } from '@/lib/config'
 import { parseTimesheetWorkbook, matchStaff } from '@/lib/timesheet'
 import { loadTimesheet, saveTimesheet, importTimesheet, periodRange } from '@/lib/timesheetDb'
 import { Save, Upload, CalendarDays, AlertTriangle } from 'lucide-react'
 
 const SHARES = ['', '1', '0.7', '0.5']
+// Нажатие перебирает доли по кругу: на планшете это одно движение пальцем,
+// а не выбор из списка. Пустая ячейка — сотрудник не работал.
+const cycleShare = (v) => SHARES[(SHARES.indexOf(String(v || '')) + 1) % SHARES.length]
+const WEEKDAYS_SHORT = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб']
 const daysOf = ({ year, month, period }) => {
   const { from, to } = periodRange({ year, month, period })
   const a = Number(from.slice(-2)), b = Number(to.slice(-2))
@@ -42,6 +46,24 @@ export default function TimesheetPage() {
   useEffect(() => { load() }, [p.year, p.month, p.period])
 
   const totalOf = (sid) => Math.round(days.reduce((s, d) => s + (Number(cells[`${sid}|${d}`]) || 0), 0) * 100) / 100
+
+  // Строки сгруппированы по отделу: табель читается как ведомость, а не как
+  // один длинный список; порядок отделов — из справочника (staff уже отсортирован)
+  const groups = useMemo(() => {
+    const by = new Map()
+    for (const s of staff) {
+      const k = s.department || ''
+      if (!by.has(k)) by.set(k, [])
+      by.get(k).push(s)
+    }
+    return [...by.entries()]
+  }, [staff])
+  const totalShifts = useMemo(
+    () => Math.round(staff.reduce((sum, s) => sum + totalOf(s.id), 0) * 100) / 100,
+    [staff, cells, days])
+  const totalFines = useMemo(
+    () => staff.reduce((sum, s) => sum + (Number(fines[s.id]?.amount) || 0), 0),
+    [staff, fines])
 
   const save = async () => {
     setStatus('Сохранение...')
@@ -85,46 +107,83 @@ export default function TimesheetPage() {
             {canEdit && <button onClick={save} className="btn-primary text-sm flex items-center gap-2 ml-auto"><Save className="w-4 h-4" /> Сохранить</button>}
             {status && <span className="text-xs text-slate-400">{status}</span>}
           </div>
-          {loading ? <p className="text-xs text-slate-500">Загрузка...</p> : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead><tr>
-                  <th className="table-header text-left sticky left-0 bg-slate-900">Сотрудник</th>
-                  {days.map(d => <th key={d} className="table-header text-center w-10">{d}</th>)}
-                  <th className="table-header text-right">Смены</th>
-                  <th className="table-header text-right">Штраф</th>
-                </tr></thead>
+          {loading ? <p className="text-sm text-slate-500">Загрузка...</p> : (
+            <div className="-mx-5 overflow-x-auto">
+              <table className="w-full border-separate border-spacing-0">
+                <thead>
+                  <tr>
+                    <th className="table-header text-left sticky left-0 z-10 bg-slate-850 min-w-[190px]">Сотрудник</th>
+                    {days.map(d => {
+                      const dow = new Date(p.year, p.month - 1, d).getDay()
+                      const weekend = dow === 0 || dow === 6
+                      return (
+                        <th key={d} className={cn('table-header text-center w-11 px-0', weekend && 'text-brand-400/80')}>
+                          <div className="leading-none">{d}</div>
+                          <div className="text-2xs font-normal normal-case tracking-normal opacity-70 mt-0.5">{WEEKDAYS_SHORT[dow]}</div>
+                        </th>
+                      )
+                    })}
+                    <th className="table-header text-right w-20">Смены</th>
+                    <th className="table-header text-right w-32 pr-5">Штраф, {currencySymbol()}</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {staff.map(s => (
-                    <tr key={s.id} className="hover:bg-slate-800/30">
-                      <td className="table-cell sticky left-0 bg-slate-900 whitespace-nowrap">
-                        <div className="font-medium">{s.full_name}</div>
-                        <div className="text-[10px] text-slate-500">{departmentLabel(s.department)}</div>
-                      </td>
-                      {days.map(d => {
-                        const k = `${s.id}|${d}`
-                        return (
-                          <td key={d} className="table-cell p-0.5 text-center">
-                            <select value={cells[k] || ''} disabled={!canEdit}
-                              onChange={e => setCells(c => ({ ...c, [k]: e.target.value }))}
-                              className={cn('w-10 text-center text-xs rounded bg-transparent border border-transparent focus:border-brand-500', cells[k] && 'bg-brand-500/10 text-brand-300')}>
-                              {SHARES.map(v => <option key={v} value={v}>{v || '·'}</option>)}
-                            </select>
+                  {groups.map(([dept, list]) => (
+                    <Fragment key={dept}>
+                      <tr>
+                        <td colSpan={days.length + 3} className="sticky left-0 bg-slate-800/50 px-5 py-1.5 text-2xs font-semibold uppercase tracking-wide text-slate-500 border-t border-slate-800">
+                          {departmentLabel(dept)}
+                        </td>
+                      </tr>
+                      {list.map(s => (
+                        <tr key={s.id} className="group">
+                          <td className="table-cell sticky left-0 z-10 bg-slate-850 group-hover:bg-slate-800/60 whitespace-nowrap">
+                            <div className="font-medium">{s.full_name}</div>
                           </td>
-                        )
-                      })}
-                      <td className="table-cell text-right font-mono">{totalOf(s.id) || ''}</td>
-                      <td className="table-cell text-right">
-                        <input type="number" value={fines[s.id]?.amount || ''} disabled={!canEdit} placeholder="0"
-                          onChange={e => setFines(f => ({ ...f, [s.id]: { ...(f[s.id] || {}), amount: e.target.value } }))}
-                          className="input text-xs w-24 text-right" />
-                      </td>
-                    </tr>
+                          {days.map(d => {
+                            const k = `${s.id}|${d}`
+                            const v = cells[k] || ''
+                            const dow = new Date(p.year, p.month - 1, d).getDay()
+                            const weekend = dow === 0 || dow === 6
+                            return (
+                              <td key={d} className={cn('border-t border-slate-800 p-0.5 text-center', weekend && 'bg-slate-800/40')}>
+                                <button
+                                  type="button" disabled={!canEdit}
+                                  onClick={() => setCells(c => ({ ...c, [k]: cycleShare(v) }))}
+                                  aria-label={`${s.full_name}, ${d} число: ${v || 'не работал'}`}
+                                  className={cn(
+                                    'w-9 h-9 rounded-lg text-sm font-medium transition-transform duration-100 active:scale-[0.88] disabled:pointer-events-none',
+                                    v === '1' && 'bg-brand-500/20 text-brand-400',
+                                    v && v !== '1' && 'bg-amber-500/20 text-amber-400',
+                                    !v && 'text-slate-700 hover:bg-slate-800',
+                                  )}
+                                >{v || '·'}</button>
+                              </td>
+                            )
+                          })}
+                          <td className="table-cell text-right font-mono font-semibold">{totalOf(s.id) || <span className="text-slate-700">0</span>}</td>
+                          <td className="table-cell text-right pr-5">
+                            <input type="number" inputMode="decimal" value={fines[s.id]?.amount || ''} disabled={!canEdit} placeholder="0"
+                              onChange={e => setFines(f => ({ ...f, [s.id]: { ...(f[s.id] || {}), amount: e.target.value } }))}
+                              className="input text-sm w-28 text-right py-1.5" style={{ minHeight: '2.25rem' }} />
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr>
+                    <td className="sticky left-0 bg-slate-850 px-4 py-3 text-sm font-semibold border-t border-slate-750">Итого</td>
+                    <td colSpan={days.length} className="border-t border-slate-750" />
+                    <td className="px-4 py-3 text-right font-mono font-bold border-t border-slate-750">{totalShifts}</td>
+                    <td className="px-4 py-3 text-right font-mono border-t border-slate-750 pr-5">{totalFines ? money(totalFines) : ''}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}
+          <p className="text-xs text-slate-500">Нажатие на клетку меняет долю смены: пусто → 1 → 0.7 → 0.5.</p>
         </div>
       )}
 

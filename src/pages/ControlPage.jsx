@@ -325,9 +325,9 @@ export default function ControlPage() {
                     {a.delta != null ? `${a.delta > 0 ? '+' : ''}${money(a.delta)}` : '—'}
                   </td>
                   <td className="table-cell text-center">
-                    {a.ok === null ? <span className="badge text-[10px] bg-slate-700/40 text-slate-500">не сверен</span>
-                      : a.ok ? <span className="badge badge-green text-[10px]">сходится</span>
-                      : <span className="badge badge-red text-[10px]">расхождение</span>}
+                    {a.ok === null ? <span className="badge text-2xs bg-slate-700/40 text-slate-500">не сверен</span>
+                      : a.ok ? <span className="badge badge-green text-2xs">сходится</span>
+                      : <span className="badge badge-red text-2xs">расхождение</span>}
                   </td>
                 </tr>
               ))}

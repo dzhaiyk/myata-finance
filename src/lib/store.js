@@ -8,6 +8,7 @@ import { loadPnlStructure } from './pnlStructure'
 import { loadCfStructure } from './cashflowStructure'
 import { loadThresholds } from './thresholds'
 import { getBranding } from './config'
+import { applyTheme, readTheme } from './theme'
 
 const SESSION_KEY = 'myata_session'
 
@@ -74,6 +75,10 @@ export const useAuthStore = create((set, get) => ({
     if (isSuperuser) {
       Object.keys(ALL_PERMISSIONS).forEach(k => { perms[k] = true })
     }
+
+    // Тема — личная настройка: локальный выбор применяем сразу, иначе берём
+    // сохранённую в профиле (пользователь мог выбрать её на другом устройстве)
+    applyTheme(readTheme(user.id) || user.theme || null)
 
     await supabase.from('app_users').update({ last_login: new Date().toISOString() }).eq('id', user.id)
 

@@ -297,7 +297,7 @@ export default function AccountsPage() {
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={cn('px-4 py-2 rounded-lg text-sm font-medium flex-1 text-center transition-all',
-              tab === t.key ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300')}>
+              tab === t.key ? 'bg-slate-800 text-slate-100 shadow-sm' : 'text-slate-500 hover:text-slate-300')}>
             {t.label}
           </button>
         ))}
@@ -387,13 +387,13 @@ export default function AccountsPage() {
                       <span className="text-xl">{acct.icon}</span>
                       <div>
                         <div className="text-sm font-semibold">{acct.name}</div>
-                        <div className="text-[10px] text-slate-500 uppercase">{TYPES[acct.type]}{acct.bank_name ? ` · ${acct.bank_name}` : ''}</div>
+                        <div className="text-2xs text-slate-500 uppercase">{TYPES[acct.type]}{acct.bank_name ? ` · ${acct.bank_name}` : ''}</div>
                       </div>
                     </div>
                   </div>
                   <div className="text-xl font-mono font-bold" style={{ color: acct.color }}>{money(bal)}</div>
                   {lastBalance && (
-                    <div className="mt-2 text-[10px] text-slate-500">
+                    <div className="mt-2 text-2xs text-slate-500">
                       Сверка {lastBalance.balance_date}: {lastBalance.actual_balance != null ? (
                         hasDisc ? <span className="text-red-400">расхождение {money(lastBalance.discrepancy)}</span>
                           : <span className="text-green-400">✓ сходится</span>
@@ -436,7 +436,7 @@ export default function AccountsPage() {
                       <span className="text-sm">{acct?.icon || '?'}</span>
                       <div>
                         <div className="text-sm">{tx.counterparty || tx.description || TYPES[tx.type] || tx.type}</div>
-                        <div className="text-[10px] text-slate-500">{tx.transaction_date} · {acct?.name}</div>
+                        <div className="text-2xs text-slate-500">{tx.transaction_date} · {acct?.name}</div>
                       </div>
                     </div>
                     <span className={cn('font-mono text-sm font-semibold', isIn ? 'text-green-400' : 'text-red-400')}>
@@ -482,17 +482,17 @@ export default function AccountsPage() {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
                       <div>
-                        <div className="text-[10px] text-slate-500 uppercase mb-1">Ожидаемый</div>
+                        <div className="text-2xs text-slate-500 uppercase mb-1">Ожидаемый</div>
                         <div className="font-mono text-sm font-semibold">{money(expected)}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-500 uppercase mb-1">Фактический</div>
+                        <div className="text-2xs text-slate-500 uppercase mb-1">Фактический</div>
                         <input type="text" inputMode="decimal" value={actual}
                           onChange={e => setReconcileInputs(prev => ({...prev, [acct.id]: amountInput(e.target.value, { allowMinus: true })}))}
                           className="input text-sm font-mono w-full" placeholder="Введите остаток" />
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-500 uppercase mb-1">Расхождение</div>
+                        <div className="text-2xs text-slate-500 uppercase mb-1">Расхождение</div>
                         {disc !== null ? (
                           <div className={cn('font-mono text-sm font-bold', Math.abs(disc) > THRESHOLDS.accountBalanceTolerance ? 'text-red-400' : 'text-green-400')}>
                             {disc > 0 ? '+' : ''}{money(disc)}
@@ -525,7 +525,7 @@ export default function AccountsPage() {
                       {dayBals.map(b => {
                         const acct = accounts.find(a => a.id === b.account_id)
                         return (
-                          <div key={b.id} className="text-[10px] text-slate-500">
+                          <div key={b.id} className="text-2xs text-slate-500">
                             {acct?.icon} {acct?.name}: <span className={cn('font-mono', b.discrepancy && Math.abs(b.discrepancy) > THRESHOLDS.accountBalanceTolerance ? 'text-red-400' : 'text-green-400')}>
                               {b.discrepancy != null ? (b.discrepancy > 0 ? '+' : '') + money(b.discrepancy) : '✓'}
                             </span>
@@ -566,11 +566,11 @@ export default function AccountsPage() {
                     <td className="table-cell text-xs whitespace-nowrap">{tx.transaction_date}</td>
                     <td className="table-cell text-xs">{acct?.icon} {acct?.name}</td>
                     <td className="table-cell text-xs">{tx.counterparty || tx.description || '—'}</td>
-                    <td className="table-cell text-center"><span className={cn('badge text-[10px]', typeColors[tx.type])}>{typeLabels[tx.type]}</span></td>
+                    <td className="table-cell text-center"><span className={cn('badge text-2xs', typeColors[tx.type])}>{typeLabels[tx.type]}</span></td>
                     <td className={cn('table-cell text-right font-mono text-xs font-semibold', isIn ? 'text-green-400' : 'text-red-400')}>
                       {isIn ? '+' : '−'}{money(tx.amount)}
                     </td>
-                    <td className="table-cell text-center text-[10px] text-slate-500">{tx.reference_type || '—'}</td>
+                    <td className="table-cell text-center text-2xs text-slate-500">{tx.reference_type || '—'}</td>
                     <td className="table-cell">
                       {tx.reference_type === 'manual' && canOperate && (
                         <button onClick={() => deleteTransaction(tx.id)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -599,7 +599,7 @@ export default function AccountsPage() {
             <div className="card border-brand-500/30 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold text-brand-400">{editAcctId ? 'Редактировать счёт' : 'Новый счёт'}</div>
-                <button onClick={() => setShowAddAccount(false)} className="p-1 text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+                <button onClick={() => setShowAddAccount(false)} className="p-1 text-slate-500 hover:text-slate-100"><X className="w-4 h-4" /></button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <div><label className="label">Название *</label>
@@ -629,7 +629,7 @@ export default function AccountsPage() {
                     {parentOptions.map(a => <option key={a.id} value={String(a.id)}>{a.icon} {a.name}</option>)}
                   </select>
                   {selectedParentId && (
-                    <div className="text-[10px] text-brand-400 mt-1">
+                    <div className="text-2xs text-brand-400 mt-1">
                       Привязан к: {parentOptions.find(a => a.id === selectedParentId)?.name || `ID ${selectedParentId}`}
                     </div>
                   )}
@@ -662,7 +662,7 @@ export default function AccountsPage() {
                   <tr key={a.id} className={cn('hover:bg-slate-800/30', !a.is_active && 'opacity-50')}>
                     <td className="table-cell font-medium">
                       {a.parent_account_id ? <span className="text-slate-600 mr-1">└</span> : ''}{a.icon} {a.name}
-                      {a.parent_account_id && <span className="text-[10px] text-slate-600 ml-1">→ {accounts.find(p => p.id === a.parent_account_id)?.name}</span>}
+                      {a.parent_account_id && <span className="text-2xs text-slate-600 ml-1">→ {accounts.find(p => p.id === a.parent_account_id)?.name}</span>}
                     </td>
                     <td className="table-cell text-slate-400 text-xs">{TYPES[a.type]}</td>
                     <td className="table-cell text-slate-400 text-xs">{a.bank_name || '—'}</td>

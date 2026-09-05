@@ -7,7 +7,7 @@ import { sendTelegramNotification, formatDailyReportNotification, formatCashDisc
 import { getBusinessDate } from '@/lib/dates'
 import { loadModule, registerStaleReloadHook } from '@/lib/staleReload'
 import StatementUploadCard from '@/components/StatementUploadCard'
-import { Save, Send, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Plus, Trash2, Calendar, ArrowLeft, FileText, Eye, Clock, Check, Pencil, Download } from 'lucide-react'
+import { Save, Send, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Plus, Trash2, Calendar, ArrowLeft, FileText, Eye, Clock, Check, Pencil, Download, Wallet, ArrowUpRight, UtensilsCrossed, Wine, Wind, Users, Package, Banknote } from 'lucide-react'
 import jsPDF from 'jspdf'
 import { CAPEX_ROW_LABEL, THRESHOLDS, departmentsFor, departmentCode, departmentLabel, departmentByCode, documentTitle, codeFromName, venueName, currencySymbol, locale } from '@/lib/config'
 
@@ -44,12 +44,12 @@ const NameInput = ({ value, onChange, suggestions, placeholder, disabled = false
 }
 
 const SECTIONS = [
-  { key: 'suppliers_kitchen', label: 'Закуп Кухня', color: 'green', icon: '🍽', supplierCode: 'kitchen', dept: 'kitchen' },
-  { key: 'suppliers_bar', label: 'Закуп Бар', color: 'blue', icon: '🍸', supplierCode: 'bar', dept: 'bar' },
-  { key: 'tobacco', label: 'Закуп Кальян', color: 'amber', icon: '💨', fixed: true, dept: 'hookah' },
-  { key: 'payroll', label: 'Авансы персоналу', color: 'indigo', icon: '👥', isPayroll: true },
-  { key: 'other', label: 'Прочие расходы', color: 'rose', icon: '📦', fixed: true },
-  { key: 'cash_withdrawals', label: 'Изъятия из кассы', color: 'red', icon: '💸' },
+  { key: 'suppliers_kitchen', label: 'Закуп Кухня', color: 'green', Icon: UtensilsCrossed, supplierCode: 'kitchen', dept: 'kitchen' },
+  { key: 'suppliers_bar', label: 'Закуп Бар', color: 'blue', Icon: Wine, supplierCode: 'bar', dept: 'bar' },
+  { key: 'tobacco', label: 'Закуп Кальян', color: 'amber', Icon: Wind, fixed: true, dept: 'hookah' },
+  { key: 'payroll', label: 'Авансы персоналу', color: 'indigo', Icon: Users, isPayroll: true },
+  { key: 'other', label: 'Прочие расходы', color: 'rose', Icon: Package, fixed: true },
+  { key: 'cash_withdrawals', label: 'Изъятия из кассы', color: 'red', Icon: Banknote },
 ]
 const FIXED_ROWS = {
   tobacco: ['Табак', 'Угли', 'Расходники кальян', CAPEX_ROW_LABEL, 'Доставка'],
@@ -94,7 +94,7 @@ const JournalPagination = ({ page, total, pageSize, onChange }) => {
       {pages.map((d, i) =>
         d === '...' ? <span key={`dots-${i}`} className="text-slate-600 px-1">...</span> : (
           <button key={d} onClick={() => goToDisplay(d)}
-            className={`text-xs px-2.5 py-1.5 rounded-lg transition-colors ${d === displayPage ? 'bg-brand-500/20 text-brand-400 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+            className={`text-xs px-2.5 py-1.5 rounded-lg transition-colors ${d === displayPage ? 'bg-brand-500/20 text-brand-400 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'}`}>
             {d}
           </button>
         )
@@ -869,9 +869,9 @@ export default function DailyReportPage() {
                       <div className="text-sm font-medium flex flex-wrap items-center gap-2">
                         {new Date(r.report_date + 'T12:00:00').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
                         {isDraft ? (
-                          <span className="badge badge-yellow text-[10px] flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> Черновик</span>
+                          <span className="badge badge-yellow text-2xs flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> Черновик</span>
                         ) : (
-                          <span className="badge badge-green text-[10px] flex items-center gap-1"><Check className="w-2.5 h-2.5" /> Отправлен</span>
+                          <span className="badge badge-green text-2xs flex items-center gap-1"><Check className="w-2.5 h-2.5" /> Отправлен</span>
                         )}
                       </div>
                       <div className="text-xs text-slate-500">{r.manager_name || '—'}</div>
@@ -880,18 +880,18 @@ export default function DailyReportPage() {
                   <div className="flex items-center gap-3 sm:gap-6 w-full sm:w-auto justify-between sm:justify-end pl-[52px] sm:pl-0 shrink-0">
                     <div className="text-right">
                       <div className="text-sm font-mono font-semibold text-green-400">{money(r.total_revenue || 0)}</div>
-                      <div className="text-[10px] text-slate-500">выручка</div>
+                      <div className="text-2xs text-slate-500">выручка</div>
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-mono text-red-400">{money(r.total_withdrawals || 0)}</div>
-                      <div className="text-[10px] text-slate-500">расходы</div>
+                      <div className="text-2xs text-slate-500">расходы</div>
                     </div>
                     {hasDisc && !isDraft && (
                       <div className="text-right">
                         <div className="text-sm font-mono font-bold text-red-400 flex items-center gap-1">
                           <AlertTriangle className="w-3.5 h-3.5" />{money(disc)}
                         </div>
-                        <div className="text-[10px] text-red-500">расхождение</div>
+                        <div className="text-2xs text-red-500">расхождение</div>
                       </div>
                     )}
                     <div className="flex items-center gap-1 shrink-0">
@@ -922,7 +922,7 @@ export default function DailyReportPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <button onClick={() => setMode('journal')} className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
+          <button onClick={() => setMode('journal')} className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-slate-100 transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
@@ -941,7 +941,7 @@ export default function DailyReportPage() {
             </span>
           )}
           {lastSaved && (
-            <span className="text-[10px] text-slate-500">
+            <span className="text-2xs text-slate-500">
               Сохранено {lastSaved.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
@@ -1006,7 +1006,7 @@ export default function DailyReportPage() {
 
       {/* ══════════ БЛОК 1: ДОХОДЫ ══════════ */}
       <div className="space-y-4">
-        <h2 className="text-lg font-display font-bold text-green-400 flex items-center gap-2">💰 Доходы</h2>
+        <h2 className="text-lg font-display font-bold text-green-400 flex items-center gap-2"><Wallet className="w-5 h-5" /> Доходы</h2>
 
         {/* Выручка по отделам */}
         <div className="card border-green-500/20 bg-green-500/5">
@@ -1026,7 +1026,7 @@ export default function DailyReportPage() {
         <div className="card border-green-500/20 bg-green-500/5">
           <h3 className="text-sm font-display font-bold text-green-300 mb-3">Доходы по типам оплат</h3>
           <div className="space-y-2">
-            <div className="hidden sm:grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
+            <div className="hidden sm:grid grid-cols-12 gap-2 text-2xs font-medium text-slate-500 uppercase px-1">
               <div className="col-span-4">Тип оплаты</div><div className="col-span-4 text-right">Сумма ({currencySymbol()})</div>
               <div className="col-span-2 text-right">Чеков</div><div className="col-span-2 text-right">Ср. чек</div>
             </div>
@@ -1129,7 +1129,7 @@ export default function DailyReportPage() {
 
       {/* ══════════ БЛОК 2: РАСХОДЫ ══════════ */}
       <div className="space-y-4">
-        <h2 className="text-lg font-display font-bold text-red-400 flex items-center gap-2">📤 Расходы</h2>
+        <h2 className="text-lg font-display font-bold text-red-400 flex items-center gap-2"><ArrowUpRight className="w-5 h-5" /> Расходы</h2>
         {SECTIONS.map(sec => {
           const isOpen = expanded[sec.key]
           const total = sectionTotal(sec.key)
@@ -1143,7 +1143,7 @@ export default function DailyReportPage() {
             <div key={sec.key} className={cn('card border overflow-visible', colorMap[sec.color])}>
               <button onClick={() => setExpanded(prev => ({ ...prev, [sec.key]: !prev[sec.key] }))} className="flex items-center justify-between w-full text-left">
                 <div className="flex items-center gap-2">
-                  <span>{sec.icon}</span><h3 className="text-sm font-display font-bold">{sectionLabel(sec)}</h3>
+                  <sec.Icon className="w-[18px] h-[18px] opacity-80" /><h3 className="text-base font-display font-bold">{sectionLabel(sec)}</h3>
                   {total > 0 && <span className="badge-yellow">{money(total)}</span>}
                 </div>
                 {isOpen ? <ChevronDown className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
@@ -1152,7 +1152,7 @@ export default function DailyReportPage() {
                 <div className="mt-4 space-y-2">
                   {isCashW ? (
                     <>
-                      <div className="hidden sm:grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
+                      <div className="hidden sm:grid grid-cols-12 gap-2 text-2xs font-medium text-slate-500 uppercase px-1">
                         <div className="col-span-4 text-right">Сумма ({currencySymbol()})</div>
                         <div className="col-span-7">Комментарий</div>
                         <div className="col-span-1" />
@@ -1175,7 +1175,7 @@ export default function DailyReportPage() {
                     </>
                   ) : (
                     <>
-                      <div className="hidden sm:grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
+                      <div className="hidden sm:grid grid-cols-12 gap-2 text-2xs font-medium text-slate-500 uppercase px-1">
                         <div className="col-span-5">{isPayroll ? 'Сотрудник' : 'Поставщик'}</div>
                         <div className="col-span-3 text-right">Сумма ({currencySymbol()})</div>
                         <div className="col-span-3">Комментарий</div><div className="col-span-1" />

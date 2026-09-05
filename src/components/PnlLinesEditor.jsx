@@ -119,9 +119,9 @@ export default function PnlLinesEditor({ canEdit }) {
             className={cn('w-full text-left flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-800/40', !l.is_active && 'opacity-50')}
             style={{ paddingLeft: `${12 + (l.level || 0) * 16}px` }}>
             <span className={cn('text-sm flex-1', l.level === 0 && 'font-bold', l.calc === 'sum_children' && l.level > 0 && 'font-semibold')}>{l.label}</span>
-            <span className="text-[10px] text-slate-600">{SECTION_LABEL[l.section]}</span>
-            <span className="badge text-[10px]">{KIND_LABEL(l)}</span>
-            {l.category_code && <span className="text-[10px] font-mono text-slate-600">{l.category_code}</span>}
+            <span className="text-2xs text-slate-600">{SECTION_LABEL[l.section]}</span>
+            <span className="badge text-2xs">{KIND_LABEL(l)}</span>
+            {l.category_code && <span className="text-2xs font-mono text-slate-600">{l.category_code}</span>}
           </button>
         ))}
       </div>

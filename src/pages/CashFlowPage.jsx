@@ -217,7 +217,7 @@ export default function CashFlowPage() {
           <div className="flex bg-slate-900 rounded-lg p-0.5">
             {['month', 'ytd', 'year', 'overall'].map(mode => (
               <button key={mode} onClick={() => setViewMode(mode)}
-                className={cn('px-3 py-1.5 rounded-md text-xs font-medium', viewMode === mode ? 'bg-slate-700 text-white' : 'text-slate-500')}>
+                className={cn('px-3 py-1.5 rounded-md text-xs font-medium', viewMode === mode ? 'bg-slate-700 text-slate-100' : 'text-slate-500')}>
                 {{ month: 'Месяц', ytd: 'YTD', year: 'Год', overall: 'Обзор' }[mode]}
               </button>
             ))}

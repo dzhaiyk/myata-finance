@@ -86,7 +86,7 @@ function AvgMonthlyDividends({ investors, transactions }) {
 
   return (
     <div className="card overflow-hidden">
-      <h2 className="text-lg font-display font-semibold text-white mb-4">Средние дивиденды в месяц по годам</h2>
+      <h2 className="text-lg font-display font-semibold text-slate-100 mb-4">Средние дивиденды в месяц по годам</h2>
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
@@ -98,7 +98,7 @@ function AvgMonthlyDividends({ investors, transactions }) {
           <tbody>
             {data.rows.map(r => (
               <tr key={r.id} className={cn('hover:bg-slate-800/50', r.status === 'exited' && 'opacity-50')}>
-                <td className="table-cell font-medium text-white">{r.full_name}</td>
+                <td className="table-cell font-medium text-slate-100">{r.full_name}</td>
                 {DIVIDEND_YEARS.map(y => (
                   <td key={y} className="table-cell text-right font-mono text-sm" style={getColor(r.yearData[y], data.maxPerYear[y])}>
                     {r.yearData[y] ? `${money(r.yearData[y])}/мес` : '—'}
@@ -107,7 +107,7 @@ function AvgMonthlyDividends({ investors, transactions }) {
               </tr>
             ))}
             <tr className="border-t-2 border-slate-700">
-              <td className="table-cell font-bold text-white">ИТОГО</td>
+              <td className="table-cell font-bold text-slate-100">ИТОГО</td>
               {DIVIDEND_YEARS.map(y => (
                 <td key={y} className="table-cell text-right font-mono text-sm font-bold text-slate-200">
                   {data.totals[y] ? `${money(data.totals[y])}/мес` : '—'}
@@ -327,7 +327,7 @@ export default function InvestmentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-display font-bold text-white">Инвестиции</h1>
+          <h1 className="text-2xl font-display font-bold text-slate-100">Инвестиции</h1>
           <p className="text-sm text-slate-500 mt-1">Учёт вложений и дивидендов учредителей</p>
         </div>
       </div>
@@ -338,7 +338,7 @@ export default function InvestmentsPage() {
           <button key={t.key} onClick={() => setTab(t.key)}
             className={cn(
               'flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors',
-              tab === t.key ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-300'
+              tab === t.key ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:text-slate-300'
             )}>
             <t.icon size={16} />
             {t.label}
@@ -373,7 +373,7 @@ export default function InvestmentsPage() {
 
           {/* Investor breakdown table */}
           <div className="card overflow-hidden">
-            <h2 className="text-lg font-display font-semibold text-white mb-4">Показатели по учредителям</h2>
+            <h2 className="text-lg font-display font-semibold text-slate-100 mb-4">Показатели по учредителям</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
@@ -391,7 +391,7 @@ export default function InvestmentsPage() {
                 <tbody>
                   {investorMetrics.map(m => (
                     <tr key={m.id} className="hover:bg-slate-800/50">
-                      <td className="table-cell font-medium text-white">{m.full_name}</td>
+                      <td className="table-cell font-medium text-slate-100">{m.full_name}</td>
                       <td className="table-cell text-right font-mono text-slate-300">{m.share_pct != null ? `${m.share_pct}%` : '—'}</td>
                       <td className="table-cell text-right font-mono text-green-400">{fmt(m.invested)}</td>
                       <td className="table-cell text-right font-mono text-blue-400">{fmt(m.withdrawn)}</td>
@@ -505,7 +505,7 @@ export default function InvestmentsPage() {
                       <td className="table-cell text-slate-300 font-mono text-xs">
                         {tx.transaction_date ? new Date(tx.transaction_date).toLocaleDateString(locale()) : '—'}
                       </td>
-                      <td className="table-cell text-white">{tx.investors?.full_name || '—'}</td>
+                      <td className="table-cell text-slate-100">{tx.investors?.full_name || '—'}</td>
                       <td className="table-cell">
                         <span className={cn('badge', TX_TYPE_BADGES[tx.type])}>
                           {TX_TYPE_LABELS[tx.type] || tx.type}
@@ -517,7 +517,7 @@ export default function InvestmentsPage() {
                         <td className="table-cell text-center">
                           <div className="flex items-center justify-center gap-1">
                             <button onClick={() => { setEditTx(tx); setShowTxModal(true) }}
-                              className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors">
+                              className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-slate-100 transition-colors">
                               <Pencil size={14} />
                             </button>
                             <button onClick={() => deleteTx(tx.id)}
@@ -553,7 +553,7 @@ export default function InvestmentsPage() {
                       <button key={i} onClick={() => setPage(i)}
                         className={cn(
                           'text-xs px-2.5 py-1.5 rounded-lg transition-colors',
-                          i === page ? 'bg-brand-500/20 text-brand-400 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                          i === page ? 'bg-brand-500/20 text-brand-400 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
                         )}>
                         {i + 1}
                       </button>
@@ -588,7 +588,7 @@ export default function InvestmentsPage() {
 
           {showAddInvestor && (
             <div className="card">
-              <h3 className="text-sm font-semibold text-white mb-3">Новый учредитель</h3>
+              <h3 className="text-sm font-semibold text-slate-100 mb-3">Новый учредитель</h3>
               <div className="flex flex-wrap items-end gap-3">
                 <div>
                   <label className="label">ФИО</label>

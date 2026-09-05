@@ -153,7 +153,7 @@ export default function RolesPage() {
                       <span>{role.name}</span>
                     </div>
                     {!role.is_system && canManage && (
-                      <button onClick={() => removeRole(role.id)} className="text-[10px] text-red-500 hover:text-red-400">удалить</button>
+                      <button onClick={() => removeRole(role.id)} className="text-2xs text-red-500 hover:text-red-400">удалить</button>
                     )}
                   </div>
                 </th>
@@ -172,7 +172,7 @@ export default function RolesPage() {
                   <tr key={perm.key} className="hover:bg-slate-800/30">
                     <td className="px-4 py-2.5 border-t border-slate-800/50 sticky left-0 bg-slate-850 z-10">
                       <div className="text-xs text-slate-300">{perm.label}</div>
-                      <div className="text-[10px] text-slate-600 font-mono">{perm.key}</div>
+                      <div className="text-2xs text-slate-600 font-mono">{perm.key}</div>
                     </td>
                     {roles.map(role => {
                       const isAdmin = role.is_superuser === true

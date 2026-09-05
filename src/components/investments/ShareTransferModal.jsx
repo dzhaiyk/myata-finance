@@ -64,8 +64,8 @@ export default function ShareTransferModal({ open, onClose, onSave, investors })
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="card w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Передача доли</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white">
+          <h2 className="text-lg font-semibold text-slate-100">Передача доли</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-100">
             <X size={20} />
           </button>
         </div>

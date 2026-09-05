@@ -58,8 +58,8 @@ export default function CategoriesEditor({ canEdit }) {
       className={cn('w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-800/40', child && 'pl-8', !c.is_active && 'opacity-50')}>
       {child && <ChevronRight className="w-3 h-3 text-slate-600" />}
       <span className="text-sm flex-1">{categoryLabel(c)}</span>
-      <span className="text-[10px] font-mono text-slate-600">{c.code}</span>
-      {c.pnl_group && <span className="badge text-[10px]">{c.pnl_group}</span>}
+      <span className="text-2xs font-mono text-slate-600">{c.code}</span>
+      {c.pnl_group && <span className="badge text-2xs">{c.pnl_group}</span>}
     </button>
   )
 

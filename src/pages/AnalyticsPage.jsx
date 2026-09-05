@@ -354,7 +354,7 @@ export default function AnalyticsPage() {
             <tbody>
               {anomalies.map(a => (
                 <tr key={a.label} className={cn('hover:bg-slate-800/30', a.isAnomaly && 'bg-red-500/5')}>
-                  <td className="table-cell text-white font-medium">{a.label}</td>
+                  <td className="table-cell text-slate-100 font-medium">{a.label}</td>
                   <td className="table-cell text-right font-mono text-slate-400">{money(a.mean)}</td>
                   <td className="table-cell text-right font-mono text-slate-300">{money(a.current)}</td>
                   <td className={cn('table-cell text-right font-mono', Number(a.deviation) > 1.5 ? 'text-red-400' : 'text-slate-400')}>
@@ -419,7 +419,7 @@ export default function AnalyticsPage() {
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-slate-300">Сезонность выручки</h2>
-          <div className="flex items-center gap-2 text-[10px] text-slate-500">
+          <div className="flex items-center gap-2 text-2xs text-slate-500">
             <span className="inline-block w-3 h-3 rounded bg-red-500/15" /> Низкая
             <span className="inline-block w-3 h-3 rounded bg-yellow-500/15" /> Средняя
             <span className="inline-block w-3 h-3 rounded bg-green-500/15" /> Высокая

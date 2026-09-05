@@ -158,7 +158,7 @@ const PeriodEditor = ({ tx, onSave, disabled }) => {
     <div className="relative inline-block">
       <button ref={btnRef} onClick={() => { if (!disabled) setOpen(!open) }}
         disabled={disabled}
-        className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] font-medium transition-colors whitespace-nowrap',
+        className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-2xs font-medium transition-colors whitespace-nowrap',
           badgeClass, !disabled && 'cursor-pointer hover:brightness-125')}>
         <Calendar className="w-3 h-3" />{badge.label}
       </button>
@@ -179,7 +179,7 @@ const PeriodEditor = ({ tx, onSave, disabled }) => {
             </div>
           ) : (
             <div className="space-y-2 min-w-[220px]">
-              <div className="text-[10px] font-semibold text-slate-500 uppercase px-1">С</div>
+              <div className="text-2xs font-semibold text-slate-500 uppercase px-1">С</div>
               <div className="flex gap-1.5">
                 <select value={customFrom.month} onChange={e => setCustomFrom(p => ({ ...p, month: Number(e.target.value) }))} className="input text-xs py-1 px-1.5 flex-1">
                   {MONTHS_SHORT.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
@@ -188,7 +188,7 @@ const PeriodEditor = ({ tx, onSave, disabled }) => {
                   {years.map(y => <option key={y}>{y}</option>)}
                 </select>
               </div>
-              <div className="text-[10px] font-semibold text-slate-500 uppercase px-1">По</div>
+              <div className="text-2xs font-semibold text-slate-500 uppercase px-1">По</div>
               <div className="flex gap-1.5">
                 <select value={customTo.month} onChange={e => setCustomTo(p => ({ ...p, month: Number(e.target.value) }))} className="input text-xs py-1 px-1.5 flex-1">
                   {MONTHS_SHORT.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
@@ -198,8 +198,8 @@ const PeriodEditor = ({ tx, onSave, disabled }) => {
                 </select>
               </div>
               <div className="flex gap-1.5 pt-1">
-                <button onClick={handleCustomSave} className="btn-primary text-[11px] py-1 px-3 flex-1">OK</button>
-                <button onClick={() => setShowCustom(false)} className="btn-secondary text-[11px] py-1 px-3">Назад</button>
+                <button onClick={handleCustomSave} className="btn-primary text-2xs py-1 px-3 flex-1">OK</button>
+                <button onClick={() => setShowCustom(false)} className="btn-secondary text-2xs py-1 px-3">Назад</button>
               </div>
             </div>
           )}
@@ -488,7 +488,7 @@ export default function BankImportPage() {
           <h1 className="text-2xl font-display font-bold tracking-tight">Импорт выписки</h1>
           <p className="text-sm text-slate-500 mt-0.5">{txCount} записей за {MONTHS_SHORT[filterMonth - 1]} {filterYear}{uncatCount > 0 ? ` · ${uncatCount} не распознано` : ''}
             {reviewCount > 0 && (
-              <button onClick={() => setOnlyReview(v => !v)} className={cn('ml-2 badge text-[10px] cursor-pointer', onlyReview ? 'badge-yellow' : 'badge-red')}>
+              <button onClick={() => setOnlyReview(v => !v)} className={cn('ml-2 badge text-2xs cursor-pointer', onlyReview ? 'badge-yellow' : 'badge-red')}>
                 ⚠ {reviewCount} к проверке{onlyReview ? ' · показать все' : ''}
               </button>
             )}
@@ -562,7 +562,7 @@ export default function BankImportPage() {
                 <div className="space-y-2">
                   {newRule.conditions.map((cond, idx) => (
                     <div key={idx} className="flex items-center gap-2">
-                      {idx > 0 && <span className="text-[10px] font-bold text-brand-400 w-8 text-center">{newRule.logic === 'and' ? 'И' : 'ИЛИ'}</span>}
+                      {idx > 0 && <span className="text-2xs font-bold text-brand-400 w-8 text-center">{newRule.logic === 'and' ? 'И' : 'ИЛИ'}</span>}
                       {idx === 0 && newRule.conditions.length > 1 && <span className="w-8" />}
                       <select value={cond.field} onChange={e => updateCondition(idx, 'field', e.target.value)} className="input text-xs w-32">
                         {FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
@@ -635,7 +635,7 @@ export default function BankImportPage() {
                   <div className="space-y-2">
                     {editingRule.conditions.map((cond, idx) => (
                       <div key={idx} className="flex items-center gap-2">
-                        {idx > 0 && <span className="text-[10px] font-bold text-brand-400 w-8 text-center">{editingRule.logic === 'and' ? 'И' : 'ИЛИ'}</span>}
+                        {idx > 0 && <span className="text-2xs font-bold text-brand-400 w-8 text-center">{editingRule.logic === 'and' ? 'И' : 'ИЛИ'}</span>}
                         {idx === 0 && editingRule.conditions.length > 1 && <span className="w-8" />}
                         <select value={cond.field} onChange={e => updateEditCondition(idx, 'field', e.target.value)} className="input text-xs w-32">
                           {FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
@@ -675,7 +675,7 @@ export default function BankImportPage() {
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-medium">{rule.name}</span>
                     <span className="text-slate-500">→</span>
-                    {rule.action === 'hide' ? <span className="badge badge-red text-[10px]">Скрыть</span> : <span className="badge badge-green text-[10px]">{catName(rule.category_code)}</span>}
+                    {rule.action === 'hide' ? <span className="badge badge-red text-2xs">Скрыть</span> : <span className="badge badge-green text-2xs">{catName(rule.category_code)}</span>}
                   </div>
                   <div className="flex items-center gap-1">
                     <button onClick={() => startEdit(rule)} className="p-1 text-slate-600 hover:text-brand-400"><Pencil className="w-3.5 h-3.5" /></button>
@@ -685,8 +685,8 @@ export default function BankImportPage() {
                 <div className="flex flex-wrap items-center gap-1.5">
                   {rule.conditions.map((c, i) => (
                     <span key={c.id} className="flex items-center gap-1.5">
-                      {i > 0 && <span className="text-[10px] font-bold text-brand-400">{rule.logic === 'and' ? 'И' : 'ИЛИ'}</span>}
-                      <span className="text-[11px] bg-slate-800 rounded-lg px-2 py-1 font-mono">
+                      {i > 0 && <span className="text-2xs font-bold text-brand-400">{rule.logic === 'and' ? 'И' : 'ИЛИ'}</span>}
+                      <span className="text-2xs bg-slate-800 rounded-lg px-2 py-1 font-mono">
                         <span className="text-blue-400">{FIELDS.find(f => f.value === c.field)?.label}</span>
                         <span className="text-slate-500 mx-1">{OPERATORS[c.field]?.find(o => o.value === c.operator)?.label}</span>
                         <span className="text-amber-400">«{c.field === 'is_debit' ? (c.value === 'true' ? 'Дебет' : 'Кредит') : c.value}»</span>
@@ -770,7 +770,7 @@ export default function BankImportPage() {
                   <div className="flex items-center gap-1.5">
                     {tx.review_note && (
                       <button onClick={() => canManage && clearReview(tx.id)} title={`${tx.review_note}. Нажмите, чтобы снять пометку`}
-                        className="badge badge-red text-[10px] shrink-0">⚠</button>
+                        className="badge badge-red text-2xs shrink-0">⚠</button>
                     )}
                     <span className="truncate">{tx.beneficiary || '—'}</span>
                   </div>
@@ -784,7 +784,7 @@ export default function BankImportPage() {
                       </td>
                       <td className="table-cell text-center">
                         <select value={tx.category || 'uncategorized'} onChange={e => updateStagedCategory(tx._idx, e.target.value)}
-                          className={cn('input text-[11px] py-1 px-2 w-44', tx.category === 'uncategorized' && '!border-yellow-500/50 !bg-yellow-500/10')}>
+                          className={cn('input text-2xs py-1 px-2 w-44', tx.category === 'uncategorized' && '!border-yellow-500/50 !bg-yellow-500/10')}>
                           <option value="uncategorized">— Не распознано —</option>
                           {Object.entries(catGroups).map(([type, cats]) => (
                             <optgroup key={type} label={TYPE_LABELS[type] || type}>
@@ -833,7 +833,7 @@ export default function BankImportPage() {
                   <div className="flex items-center gap-1.5">
                     {tx.review_note && (
                       <button onClick={() => canManage && clearReview(tx.id)} title={`${tx.review_note}. Нажмите, чтобы снять пометку`}
-                        className="badge badge-red text-[10px] shrink-0">⚠</button>
+                        className="badge badge-red text-2xs shrink-0">⚠</button>
                     )}
                     <span className="truncate">{tx.beneficiary || '—'}</span>
                   </div>
@@ -848,7 +848,7 @@ export default function BankImportPage() {
                 <td className="table-cell text-center">
                   {canManage ? (
                     <select value={tx.category || ''} onChange={e => updateCategory(tx.id, e.target.value)}
-                      className={cn('input text-[11px] py-1 px-2 w-44', tx.category === 'uncategorized' && '!border-yellow-500/50 !bg-yellow-500/10')}>
+                      className={cn('input text-2xs py-1 px-2 w-44', tx.category === 'uncategorized' && '!border-yellow-500/50 !bg-yellow-500/10')}>
                       <option value="uncategorized">— Не распознано —</option>
                       {Object.entries(catGroups).map(([type, cats]) => (
                         <optgroup key={type} label={TYPE_LABELS[type] || type}>
@@ -857,7 +857,7 @@ export default function BankImportPage() {
                       ))}
                     </select>
                   ) : (
-                    <span className={cn('badge text-[10px]', tx.category === 'uncategorized' ? 'badge-yellow' : 'badge-blue')}>{catName(tx.category)}</span>
+                    <span className={cn('badge text-2xs', tx.category === 'uncategorized' ? 'badge-yellow' : 'badge-blue')}>{catName(tx.category)}</span>
                   )}
                 </td>
                 <td className="table-cell text-center">
