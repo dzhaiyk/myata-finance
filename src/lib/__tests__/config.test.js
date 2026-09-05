@@ -21,6 +21,7 @@ import {
   getNotifications,
   setNotifications,
   isNotificationEnabled,
+  codeFromName,
 } from '../config.js'
 import { FIXTURE_DEPARTMENTS } from './fixtures.js'
 
@@ -71,6 +72,21 @@ describe('config — справочник отделов (ADR-0010)', () => {
     setDepartments([{ id: 42, code: 'bakery', name: 'Пекарня', for_revenue: true, sort_order: 1 }])
     assert.equal(getDepartments()[0].id, 42)
     setDepartments(FIXTURE_DEPARTMENTS)
+  })
+
+  // Код создаётся из названия один раз: менять его нельзя, на него ссылаются данные
+  it('код получается из названия транслитерацией', () => {
+    assert.equal(codeFromName('Асхана'), 'ashana')
+    assert.equal(codeFromName('Летняя терраса'), 'letnyaya_terrasa')
+    assert.equal(codeFromName('Bakery #2'), 'bakery_2')
+    assert.equal(codeFromName('  Бар  '), 'bar')
+  })
+
+  it('занятый код получает суффикс, пустое название — пустой код', () => {
+    assert.equal(codeFromName('Асхана', ['ashana']), 'ashana_2')
+    assert.equal(codeFromName('Асхана', ['ashana', 'ashana_2']), 'ashana_3')
+    assert.equal(codeFromName('   '), '')
+    assert.equal(codeFromName('!!!'), '')
   })
 
   it('справочник отсортирован по порядку, а не по приходу из базы', () => {

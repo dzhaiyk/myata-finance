@@ -1,7 +1,7 @@
 // Справочник отделов: добавить, переименовать, включить-выключить, указать склад iiko.
 // До миграции 025 набор отделов был зашит в CHECK трёх таблиц (ADR-0010, TASK-018).
 import { useState } from 'react'
-import { getDepartments } from '@/lib/config'
+import { getDepartments, codeFromName } from '@/lib/config'
 import { saveDepartment } from '@/lib/departments'
 import { Save, Plus, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -26,12 +26,20 @@ export default function DepartmentsSettings({ canEdit }) {
 
   const save = async (i) => {
     const row = rows[i]
-    if (!row.code.trim() || !row.name.trim()) {
-      setStatus(s => ({ ...s, [i]: '❌ Нужны код и название' }))
+    const name = row.name.trim()
+    if (!name) {
+      setStatus(s => ({ ...s, [i]: '❌ Нужно название' }))
+      return
+    }
+    // Код создаётся один раз из названия и дальше не меняется: на него ссылаются
+    // отчёты, сотрудники и поставщики (ADR-0010).
+    const code = row.code || codeFromName(name, rows.map(r => r.code).filter(Boolean))
+    if (!code) {
+      setStatus(s => ({ ...s, [i]: '❌ Из названия не вышло кода — добавьте латиницу или цифры' }))
       return
     }
     setStatus(s => ({ ...s, [i]: 'Сохранение...' }))
-    const { error } = await saveDepartment({ ...row, code: row.code.trim(), name: row.name.trim() })
+    const { error } = await saveDepartment({ ...row, code, name })
     setStatus(s => ({ ...s, [i]: error ? '❌ ' + error.message : '✅ Сохранено' }))
     if (!error) setRows(getDepartments())
   }
@@ -45,7 +53,7 @@ export default function DepartmentsSettings({ canEdit }) {
         <div>
           <div className="text-sm font-semibold">Отделы</div>
           <div className="text-xs text-slate-500">
-            Общий справочник для выручки, персонала и закупа. Код менять не стоит — на него ссылаются отчёты
+            Общий справочник для выручки, персонала и закупа. Код создаётся из названия один раз и дальше не меняется — на него ссылаются отчёты, сотрудники и поставщики
           </div>
         </div>
       </div>
@@ -63,10 +71,11 @@ export default function DepartmentsSettings({ canEdit }) {
                 <input value={r.name} disabled={!canEdit} className="input w-full text-sm"
                   onChange={e => patch(i, 'name', e.target.value)} />
               </div>
-              <div className="w-32">
+              <div className="w-40">
                 <label className="label">Код</label>
-                <input value={r.code} disabled={!canEdit || !!r.id} className="input w-full text-sm font-mono"
-                  onChange={e => patch(i, 'code', e.target.value)} placeholder="bakery" />
+                <div className="input w-full text-sm font-mono text-slate-500" title="Создаётся из названия и не меняется: на него ссылаются отчёты">
+                  {r.code || codeFromName(r.name, rows.map(x => x.code).filter(Boolean)) || '—'}
+                </div>
               </div>
               <div className="w-48">
                 <label className="label">Склад в iiko</label>
@@ -112,7 +121,8 @@ export default function DepartmentsSettings({ canEdit }) {
       )}
 
       <p className="text-xs text-slate-500">
-        Отключённый отдел перестаёт предлагаться в формах, но остаётся в старых отчётах.
+        Название можно менять свободно — расчёты держатся на коде. Отключённый отдел
+        перестаёт предлагаться в формах, но остаётся в старых отчётах.
         Склад заполняется, если выручка подтягивается из iiko: отдел определяется складом списания.
       </p>
     </div>

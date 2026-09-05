@@ -75,6 +75,35 @@ export function departmentCode(value) {
 // она видна отдельно как unassigned.
 export const FALLBACK_DEPARTMENT_CODE = 'other'
 
+// Транслитерация для автоматического кода: код нельзя менять после создания,
+// поэтому его не вводят руками, а получают из названия (ADR-0010).
+const TRANSLIT = {
+  а:'a', б:'b', в:'v', г:'g', д:'d', е:'e', ё:'e', ж:'zh', з:'z', и:'i', й:'i',
+  к:'k', л:'l', м:'m', н:'n', о:'o', п:'p', р:'r', с:'s', т:'t', у:'u', ф:'f',
+  х:'h', ц:'c', ч:'ch', ш:'sh', щ:'sch', ъ:'', ы:'y', ь:'', э:'e', ю:'yu', я:'ya',
+  ә:'a', ғ:'g', қ:'k', ң:'n', ө:'o', ұ:'u', ү:'u', һ:'h', і:'i',
+}
+
+/**
+ * Код из названия: латиница, нижний регистр, подчёркивания.
+ * При совпадении с уже занятым добавляется числовой суффикс.
+ */
+export function codeFromName(name, taken = []) {
+  const base = [...normalize(name)]
+    .map(ch => (TRANSLIT[ch] !== undefined ? TRANSLIT[ch] : ch))
+    .join('')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40)
+  if (!base) return ''
+  const busy = new Set(taken)
+  if (!busy.has(base)) return base
+  for (let i = 2; i < 100; i++) {
+    if (!busy.has(`${base}_${i}`)) return `${base}_${i}`
+  }
+  return `${base}_${Date.now()}`
+}
+
 /** Код отдела по названию склада в iiko (BR-SHF-019). */
 export function departmentCodeByIikoStore(store) {
   const v = normalize(store)

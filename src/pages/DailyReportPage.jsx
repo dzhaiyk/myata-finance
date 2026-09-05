@@ -8,7 +8,7 @@ import { getBusinessDate } from '@/lib/dates'
 import StatementUploadCard from '@/components/StatementUploadCard'
 import { Save, Send, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Plus, Trash2, Calendar, ArrowLeft, FileText, Eye, Clock, Check, Pencil, Download } from 'lucide-react'
 import jsPDF from 'jspdf'
-import { CAPEX_ROW_LABEL, THRESHOLDS, departmentsFor, departmentCode } from '@/lib/config'
+import { CAPEX_ROW_LABEL, THRESHOLDS, departmentsFor, departmentCode, departmentLabel } from '@/lib/config'
 
 const MoneyInput = ({ value, onChange, className = '', disabled = false }) => (
   <input type="text" inputMode="decimal" value={value} disabled={disabled}
@@ -59,8 +59,13 @@ const PAYMENT_TYPES = ['Наличные', 'Kaspi', 'Halyk', 'Wolt', 'Glovo', 'Y
 // В строке хранится код: переименование отдела не должно менять расчёты.
 const emptyDepartments = () => departmentsFor('revenue').map(d => ({ code: d.code, name: d.name, amount: '' }))
 
-// У отчётов до миграции 025 кода нет — проставляем его по названию
-const withDepartmentCodes = (rows) => (rows || []).map(d => ({ ...d, code: d.code || departmentCode(d.name) || undefined }))
+// У отчётов до миграции 025 кода нет — проставляем его по названию.
+// Подпись берём из справочника: отдел могли переименовать после того, как
+// отчёт сохранили, и показывать старое название неверно.
+const withDepartmentCodes = (rows) => (rows || []).map(d => {
+  const code = d.code || departmentCode(d.name) || undefined
+  return { ...d, code, name: code ? departmentLabel(code) : d.name }
+})
 
 const JournalPagination = ({ page, total, pageSize, onChange }) => {
   const totalPages = Math.ceil(total / pageSize)
