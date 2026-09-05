@@ -6,12 +6,15 @@ import { cn, fmt, fmtK, MONTHS_RU, money } from '@/lib/utils'
 import { yearsRange } from '@/lib/dates'
 import { ChevronDown, ChevronRight, ChevronsUpDown, Info, FileText, Upload, Wallet } from 'lucide-react'
 import { currencySymbol } from '@/lib/config'
-import { CF_STRUCTURE, computeMonthCF } from '@/lib/cashflowCompute'
+import { computeMonthCF } from '@/lib/cashflowCompute'
+import { getCfStructure } from '@/lib/cashflowStructure'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const CURRENT_MONTH = new Date().getMonth() + 1
 
 export default function CashFlowPage() {
+  // структура из базы; скрытые строки остаются в расчёте, но не рисуются
+  const STRUCTURE = getCfStructure().filter(l => !l.hidden)
   const { hasPermission } = useAuthStore()
   const [year, setYear] = useState(CURRENT_YEAR)
   const [month, setMonth] = useState(CURRENT_MONTH)
@@ -24,7 +27,7 @@ export default function CashFlowPage() {
   const [allExpanded, setAllExpanded] = useState(false)
   const [collapsed, setCollapsed] = useState(() => {
     const c = {}
-    CF_STRUCTURE.filter(l => l.calc === 'sum_children' && l.level > 0).forEach(l => { c[l.key] = true })
+    STRUCTURE.filter(l => l.calc === 'sum_children' && l.level > 0).forEach(l => { c[l.key] = true })
     return c
   })
 
@@ -74,7 +77,7 @@ export default function CashFlowPage() {
       const totals = {}
       for (let m = 1; m <= month; m++) {
         const mv = computeMonthCF(year, m, dailyReports, bankTx, pnlData, investorTx)
-        CF_STRUCTURE.forEach(line => {
+        STRUCTURE.forEach(line => {
           totals[line.key] = (totals[line.key] || 0) + (mv[line.key] || 0)
         })
       }
@@ -93,13 +96,13 @@ export default function CashFlowPage() {
         values: computeMonthCF(year, i + 1, dailyReports, bankTx, pnlData, investorTx)
       }))
       const totals = {}
-      CF_STRUCTURE.forEach(line => {
+      STRUCTURE.forEach(line => {
         totals[line.key] = columns.reduce((s, col) => s + (col.values[line.key] || 0), 0)
       })
       columns.push({ label: 'Итого', values: totals, isTotal: true })
       const monthsWithData = columns.filter(c => !c.isTotal && (c.values.cf_cash_revenue || c.values.cf_bank_income)).length || 1
       const avg = {}
-      CF_STRUCTURE.forEach(line => { avg[line.key] = Math.round(totals[line.key] / monthsWithData) })
+      STRUCTURE.forEach(line => { avg[line.key] = Math.round(totals[line.key] / monthsWithData) })
       columns.push({ label: 'Среднее', values: avg, isAvg: true })
       return columns
     }
@@ -110,14 +113,14 @@ export default function CashFlowPage() {
       const yearValues = {}
       for (let m = 1; m <= 12; m++) {
         const mv = computeMonthCF(y, m, dailyReports, bankTx, pnlData, investorTx)
-        CF_STRUCTURE.forEach(line => {
+        STRUCTURE.forEach(line => {
           yearValues[line.key] = (yearValues[line.key] || 0) + (mv[line.key] || 0)
         })
       }
       return { label: String(y), values: yearValues }
     })
     const totals = {}
-    CF_STRUCTURE.forEach(line => {
+    STRUCTURE.forEach(line => {
       totals[line.key] = columns.reduce((s, col) => s + (col.values[line.key] || 0), 0)
     })
     columns.push({ label: 'Итого', values: totals, isTotal: true })
@@ -128,7 +131,7 @@ export default function CashFlowPage() {
     const newState = !allExpanded
     setAllExpanded(newState)
     const c = {}
-    CF_STRUCTURE.filter(l => l.calc === 'sum_children').forEach(l => { c[l.key] = !newState })
+    STRUCTURE.filter(l => l.calc === 'sum_children').forEach(l => { c[l.key] = !newState })
     setCollapsed(c)
   }
   const toggleSection = (key) => setCollapsed(p => ({ ...p, [key]: !p[key] }))
@@ -137,7 +140,7 @@ export default function CashFlowPage() {
     if (line.level === 0) return true
     let targetLevel = line.level
     for (let i = idx - 1; i >= 0; i--) {
-      const ancestor = CF_STRUCTURE[i]
+      const ancestor = STRUCTURE[i]
       if (ancestor.level < targetLevel && ancestor.calc === 'sum_children') {
         if (collapsed[ancestor.key]) return false
         targetLevel = ancestor.level
@@ -248,7 +251,7 @@ export default function CashFlowPage() {
       {/* Vertical table (month / ytd) */}
       {!isMultiPeriod && (
         <div className="card p-0 divide-y divide-slate-800">
-          {CF_STRUCTURE.map((line, idx) => {
+          {STRUCTURE.map((line, idx) => {
             if (!isVisible(line, idx)) return null
             const val = values[line.key] || 0
             const isGroup = line.calc === 'sum_children'
@@ -320,7 +323,7 @@ export default function CashFlowPage() {
               </tr>
             </thead>
             <tbody>
-              {CF_STRUCTURE.map((line, idx) => {
+              {STRUCTURE.map((line, idx) => {
                 if (!isVisible(line, idx)) return null
                 const isGroup = line.calc === 'sum_children'
                 const isNet = line.calc === 'net'

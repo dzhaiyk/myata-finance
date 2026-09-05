@@ -59,6 +59,14 @@ export const TAX_CATS = ['tax_retail', 'tax_payroll', 'tax_insurance', 'tax_alco
 export const OPEX_OTHER_CATS = ['household', 'bank_fee', 'opex_security', 'opex_software', 'opex_menu', 'opex_pest', 'opex_grease', 'opex_repair', 'opex_uniform', 'opex_music', 'opex_royalty', 'opex_misc']
 export const CAPEX_CATS = ['capex_repair', 'capex_furniture', 'capex_other']
 
+let bankGroups = () => ({
+  cf_bank_payroll: PAYROLL_CATS, cf_bank_cogs: COGS_CATS, cf_bank_rent: RENT_CATS, cf_bank_utilities: UTIL_CATS,
+  cf_bank_marketing: MKT_CATS, cf_bank_taxes: TAX_CATS, cf_bank_other_opex: OPEX_OTHER_CATS,
+  cf_capex_repair: ['capex_repair'], cf_capex_furniture: ['capex_furniture'], cf_capex_other: ['capex_other'],
+})
+/** Откуда брать привязку статей к строкам (cashflowStructure подставляет базу). */
+export function setBankGroupsSource(fn) { bankGroups = fn }
+
 export function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pnlData, investorTx) {
   const v = {}
 
@@ -156,24 +164,25 @@ export function computeMonthCF(targetYear, targetMonth, dailyReports, bankTx, pn
   v.cf_bank_income = bankCreditTotal
 
   // Bank OpEx categories (only debits)
-  const sumCats = (cats) => cats.reduce((s, c) => s + (bankDebitByCat[c] || 0), 0)
-
-  v.cf_bank_payroll = -sumCats(PAYROLL_CATS)
-  v.cf_bank_cogs = -sumCats(COGS_CATS)
-  v.cf_bank_rent = -sumCats(RENT_CATS)
-  v.cf_bank_utilities = -sumCats(UTIL_CATS)
-  v.cf_bank_marketing = -sumCats(MKT_CATS)
-  v.cf_bank_taxes = -sumCats(TAX_CATS)
-  v.cf_bank_other_opex = -sumCats(OPEX_OTHER_CATS)
+  const sumCats = (cats) => (cats || []).reduce((s, c) => s + (bankDebitByCat[c] || 0), 0)
+  // Привязка статей к строкам — из базы (cf_line_categories), иначе прежние списки
+  const g = bankGroups()
+  v.cf_bank_payroll = -sumCats(g.cf_bank_payroll)
+  v.cf_bank_cogs = -sumCats(g.cf_bank_cogs)
+  v.cf_bank_rent = -sumCats(g.cf_bank_rent)
+  v.cf_bank_utilities = -sumCats(g.cf_bank_utilities)
+  v.cf_bank_marketing = -sumCats(g.cf_bank_marketing)
+  v.cf_bank_taxes = -sumCats(g.cf_bank_taxes)
+  v.cf_bank_other_opex = -sumCats(g.cf_bank_other_opex)
   v.cf_bank_opex = v.cf_bank_payroll + v.cf_bank_cogs + v.cf_bank_rent + v.cf_bank_utilities + v.cf_bank_marketing + v.cf_bank_taxes + v.cf_bank_other_opex
 
   // Operating CF total
   v.cf_operating = v.cf_cash_revenue + v.cf_acquiring + v.cf_bank_income + v.cf_cash_expenses + v.cf_bank_opex
 
   // === INVESTING: CapEx (bank debits only) ===
-  v.cf_capex_repair = -(bankDebitByCat['capex_repair'] || 0)
-  v.cf_capex_furniture = -(bankDebitByCat['capex_furniture'] || 0)
-  v.cf_capex_other = -(bankDebitByCat['capex_other'] || 0)
+  v.cf_capex_repair = -sumCats(g.cf_capex_repair)
+  v.cf_capex_furniture = -sumCats(g.cf_capex_furniture)
+  v.cf_capex_other = -sumCats(g.cf_capex_other)
 
   // Hookah equipment from daily reports (cash capex)
   let cashHookahCapex = 0

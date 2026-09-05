@@ -25,6 +25,7 @@ updated: 2026-09-05
 | `account_transactions` | accounts | движение по счёту; каждая строка выписки создаёт запись (`reference_type='bank_import'`) | type income/expense/transfer_in/transfer_out; reference_type CHECK |
 | `account_balances` | accounts | сверка остатка на дату; `discrepancy` — GENERATED = actual − expected | UNIQUE(account_id, balance_date) |
 | `pnl_lines` | reporting | структура P&L: ключ, подпись, уровень, раздел, источник (`daily`/`bank`/`both`), статья, отдел, префикс, `parent_key`, порядок, видимость; формулы — в `pnlCompute.js` по ключу (ADR-0011) | key UNIQUE; seed = `src/lib/pnlSeed.js`, миграция 029; экран «Справочники → Строки P&L» |
+| `cf_lines`, `cf_line_categories` | reporting | структура Cash Flow: ключ, подпись, уровень, раздел, `calc`, порядок, видимость; привязка статей банка к строке — своя, независимая от P&L (миграция 030) | key UNIQUE; UNIQUE(cf_key, category_code); seed = `CF_STRUCTURE` в `cashflowCompute.js`; экран «Справочники → Строки Cash Flow» |
 | `pnl_data` | reporting | `type='historical'` — импорт Excel 2022–2025 (заменяет расчёт); иначе ручная корректировка (прибавляется) | UNIQUE снят в 020: historical и корректировка сосуществуют |
 | `cashflow_data` | reporting | создана в 001, кодом не используется | UNIQUE(year, month, category) |
 | `positions`, `staff` | payroll | должности (ставка, %), сотрудники (override, увольнение) | `department` → `departments.code` (до 025 был CHECK со списком названий) |
