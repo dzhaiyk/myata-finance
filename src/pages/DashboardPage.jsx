@@ -4,7 +4,7 @@ import { fetchAll } from '@/lib/fetchAll'
 import { fmt, fmtK, fmtPct, MONTHS_RU, money } from '@/lib/utils'
 import { bankTxRangeFilter } from '@/lib/pnl'
 import { yearsRange } from '@/lib/dates'
-import { sumMonths } from '@/lib/pnlCompute'
+import { dashboardSummary } from '@/lib/dashboardCompute'
 import { foodCostLevel, marginLevel, THRESHOLDS, departmentLabel, venueName, currencySymbol, locale } from '@/lib/config'
 import { DollarSign, TrendingDown, ShoppingCart, CirclePercent, AlertTriangle, FileText, Trophy, CalendarDays } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts'
@@ -56,11 +56,6 @@ const PieWithLegend = ({ title, data, total }) => (
   </div>
 )
 
-// Compute PnL values for a set of daily reports + bank transactions + adjustments
-// Same logic as PnLPage.jsx values computation.
-// months — Set 0-based месяцев года, по которым распределяются банковские суммы
-// (period allocation, как в PnLPage — иначе цифры расходятся с P&L)
-
 export default function DashboardPage() {
   const [year, setYear] = useState(new Date().getFullYear())
   const [reports, setReports] = useState([])
@@ -92,34 +87,12 @@ export default function DashboardPage() {
     setLoading(false)
   }
 
-  // Completed months: past month + has bank import data
-  const now = new Date()
-  const currentMonth = now.getFullYear() === year ? now.getMonth() : 12
-  // Месяц считается закрытым, если по нему есть банковская выписка ИЛИ
-  // исторические данные (2022–2025 живут только в pnl_data, выписок в базе нет)
-  const monthsWithBank = new Set()
-  bankTx.forEach(tx => {
-    // Только транзакции с датой в выбранном году: period-overlap подгружает соседние годы
-    const d = new Date(tx.transaction_date)
-    if (d.getFullYear() !== year) return
-    const m = d.getMonth()
-    if (m < currentMonth) monthsWithBank.add(m)
-  })
-  adjustments.forEach(a => {
-    if (a.type === 'historical' && a.month - 1 < currentMonth) monthsWithBank.add(a.month - 1)
-  })
-
+  // Закрытые месяцы, итоги и группы — одной функцией с P&L (BR-RPT-015, BR-RPT-023)
+  const summary = dashboardSummary({ year, reports, bankTx, adjustments })
+  const monthsWithBank = new Set(summary.months)
   const completedReports = reports.filter(r => monthsWithBank.has(new Date(r.report_date).getMonth()))
-
-  // Расчёт — той же функцией, что и на странице P&L
-  const pnl = sumMonths(year, [...monthsWithBank].map(m => m + 1), reports, bankTx, adjustments)
-
-  // Monthly breakdown
-  const monthlyData = MONTHS_RU.map((name, i) => {
-    if (!monthsWithBank.has(i)) return { month: name.slice(0, 3), revenue: 0, expenses: 0 }
-    const mPnl = sumMonths(year, [i + 1], reports, bankTx, adjustments)
-    return { month: name.slice(0, 3), revenue: mPnl.revenue, expenses: mPnl.expenses }
-  })
+  const pnl = summary.totals
+  const monthlyData = summary.monthly.map(m => ({ month: MONTHS_RU[m.month].slice(0, 3), revenue: m.revenue, expenses: m.expenses }))
 
   // Department revenue
   const deptData = [
@@ -135,21 +108,12 @@ export default function DashboardPage() {
     { name: departmentLabel('bar'), value: pnl.fc_bar, color: '#3b82f6' },
     { name: departmentLabel('hookah'), value: pnl.fc_hookah, color: '#f59e0b' },
   ].filter(d => d.value > 0)
-  const fcTotal = fcData.reduce((s, d) => s + d.value, 0)
-  const fcPct = pnl.revenue > 0 ? fcTotal / pnl.revenue : 0
+  const fcPct = pnl.fc_pct || 0
   const fcColor = foodCostLevel(fcPct)
 
-  // Expense categories
-  const expData = [
-    { name: 'ФОТ', value: pnl.payroll, color: '#818cf8' },
-    { name: 'Food Cost', value: pnl.foodcost, color: '#f59e0b' },
-    { name: 'Маркетинг', value: pnl.marketing, color: '#ec4899' },
-    { name: 'Аренда', value: pnl.rent, color: '#8b5cf6' },
-    { name: 'Коммунальные', value: pnl.utilities, color: '#06b6d4' },
-    { name: 'OpEx прочее', value: pnl.opex_other, color: '#f472b6' },
-    { name: 'Налоги', value: pnl.taxes, color: '#ef4444' },
-    { name: 'CapEx', value: pnl.capex, color: '#fb923c' },
-  ].filter(d => d.value > 0)
+  // Группы расходов — подписи из структуры P&L, не литералы (BR-RPT-021)
+  const GROUP_COLORS = {'payroll': '#818cf8', 'foodcost': '#f59e0b', 'marketing': '#ec4899', 'rent': '#8b5cf6', 'utilities': '#06b6d4', 'opex_other': '#f472b6', 'taxes': '#ef4444', 'capex': '#fb923c'}
+  const expData = summary.expenseGroups.map(g => ({ name: g.label, value: g.value, color: GROUP_COLORS[g.key] || '#94a3b8' }))
 
   // Margin
   const opMargin = pnl.revenue > 0 ? pnl.op_profit / pnl.revenue : 0
@@ -257,7 +221,7 @@ export default function DashboardPage() {
           <div className={`stat-value ${fcColor === 'green' ? 'text-green-400' : fcColor === 'yellow' ? 'text-yellow-400' : 'text-red-400'}`}>
             {fcPct > 0 ? fmtPct(fcPct) : '—'}
           </div>
-          <div className="text-xs text-slate-500 mt-2">{fcTotal > 0 ? fmtK(fcTotal) + ' ' + currencySymbol() : 'Нет данных'}</div>
+          <div className="text-xs text-slate-500 mt-2">{(pnl.foodcost || 0) > 0 ? fmtK(pnl.foodcost) + ' ' + currencySymbol() : 'Нет данных'}</div>
         </div>
 
         <div className={`card-hover bg-gradient-to-br ${marginColor === 'green' ? 'from-green-500/20 to-green-600/5 border-green-500/20' : marginColor === 'yellow' ? 'from-yellow-500/20 to-yellow-600/5 border-yellow-500/20' : 'from-red-500/20 to-red-600/5 border-red-500/20'}`}>
@@ -295,7 +259,7 @@ export default function DashboardPage() {
       {/* Three pie charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {deptData.length > 0 && <PieWithLegend title="Выручка по отделам" data={deptData} total={deptTotal} />}
-        {fcData.length > 0 && <PieWithLegend title="Food Cost по отделам" data={fcData} total={fcTotal} />}
+        {fcData.length > 0 && <PieWithLegend title="Food Cost по отделам" data={fcData} total={pnl.foodcost || 0} />}
         {expData.length > 0 && <PieWithLegend title="Расходы по категориям (% от выручки)" data={expData} total={pnl.revenue} />}
       </div>
 
