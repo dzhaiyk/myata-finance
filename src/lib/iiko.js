@@ -147,25 +147,97 @@ export function toDailyReportShape(day) {
   }
 }
 
-// --- кассовые смены: внесения и изъятия (TASK-037) ------------------------
+// --- изъятия из кассы: OLAP-отчёт TRANSACTIONS (TASK-037) -----------------
+//
+// Методов /resto/api/v2/cashshifts/* в этом API нет — iiko отвечал на них 404
+// (проверено 06.09.2026). Кассовые операции берём отчётом TRANSACTIONS с того
+// же эндпоинта, что и выручку. Имена полей в разных версиях iiko отличаются,
+// поэтому сначала спрашиваем у сервера список доступных полей и выбираем из
+// него; если список не отдался — работаем по кандидатам по умолчанию.
 
-const asArray = (res) => (Array.isArray(res) ? res
-  : (res?.data || res?.items || res?.payments || res?.sessions || res?.cashShifts || []))
+export const TRANSACTION_FIELDS = {
+  date: ['DateTime.Typed', 'DateTime.DateTyped', 'DateTime.OperDayFilter', 'OpenDate.Typed'],
+  type: ['TransactionType', 'Transaction.Type', 'OperationType'],
+  comment: ['TransactionComment', 'Comment', 'Description', 'Transaction.Comment'],
+  account: ['Account.Name', 'Account.StoreOrAccount', 'CounteragentAccount.Name'],
+  session: ['Session.Number', 'CashRegister.Number', 'Session.CashRegister.Number'],
+  out: ['Sum.Outcoming', 'Sum.Out'],
+  in: ['Sum.Incoming', 'Sum.In'],
+  sum: ['Sum.ResignedSum', 'Sum', 'Amount'],
+}
+
+/** Первое из имён-кандидатов, которое сервер назвал доступным. */
+export function pickOlapField(columns, candidates) {
+  const names = Array.isArray(columns) ? columns.map(c => c?.name ?? c) : Object.keys(columns || {})
+  const set = new Set(names.map(String))
+  return candidates.find(c => set.has(c)) || null
+}
+
+/** Разбор ответа `olap/columns` в набор полей отчёта транзакций. */
+export function pickTransactionFields(columns) {
+  const has = columns && (Array.isArray(columns) ? columns.length : Object.keys(columns).length)
+  if (!has) return { ...defaultTransactionFields(), discovered: false }
+  const f = {}
+  for (const [key, candidates] of Object.entries(TRANSACTION_FIELDS)) f[key] = pickOlapField(columns, candidates)
+  // без даты и суммы отчёт не построить — падаем на умолчания
+  if (!f.date || !(f.out || f.sum)) return { ...defaultTransactionFields(), discovered: false }
+  return { ...f, discovered: true }
+}
+
+function defaultTransactionFields() {
+  const first = {}
+  for (const [key, candidates] of Object.entries(TRANSACTION_FIELDS)) first[key] = candidates[0]
+  return first
+}
+
+/** Тело запроса OLAP TRANSACTIONS за одну операционную дату. */
+export function buildTransactionsRequest({ from, to, fields }) {
+  const rowFields = [fields.date, fields.type, fields.comment, fields.account, fields.session].filter(Boolean)
+  const aggregate = [fields.out, fields.in, fields.sum].filter(Boolean)
+  return {
+    reportType: 'TRANSACTIONS',
+    buildSummary: false,
+    groupByRowFields: rowFields,
+    groupByColFields: [],
+    aggregateFields: aggregate,
+    filters: {
+      [fields.date]: { filterType: 'DateRange', periodType: 'CUSTOM', from, to, includeLow: true, includeHigh: true },
+    },
+  }
+}
 
 /**
- * Платежи кассовых смен, открытых в указанную операционную дату.
- * Каждый вызов прокси — отдельная сессия iiko, поэтому запросы идут по очереди.
- * @param {{date: string}} params YYYY-MM-DD
- * @returns {Promise<{shifts: object[], payments: object[]}>}
+ * Строки отчёта → платежи в общем виде: сумма отрицательна, когда деньги ушли
+ * из кассы, — по этому знаку `isPayOut` отличит изъятие от внесения, даже если
+ * название типа операции незнакомое.
+ */
+export function mapTransactionRows(rows, fields) {
+  return (rows || []).map(row => {
+    const outSum = fields.out ? num(row[fields.out]) : 0
+    const inSum = fields.in ? num(row[fields.in]) : 0
+    const plain = fields.sum ? num(row[fields.sum]) : 0
+    const signed = (fields.out || fields.in) ? inSum - outSum : plain
+    return {
+      type: String(row[fields.type] ?? ''),
+      sum: signed,
+      comment: String(row[fields.comment] ?? '').trim(),
+      date: String(row[fields.date] ?? ''),
+      account: fields.account ? String(row[fields.account] ?? '') : '',
+      raw: row,
+    }
+  })
+}
+
+/**
+ * Кассовые операции за операционную дату.
+ * @param {{date: string}} params дата YYYY-MM-DD
+ * @returns {Promise<{payments: object[], fields: object, rows: number}>}
  */
 export async function fetchCashPayments({ date }) {
-  const shifts = asArray(await iikoRequest('cashshifts', {}, { openDateFrom: date, openDateTo: date, status: 'ANY' }))
-  const payments = []
-  for (const s of shifts) {
-    const id = s?.id ?? s?.sessionId
-    if (!id) continue
-    const list = asArray(await iikoRequest('cashshift_payments', {}, { sessionId: id }))
-    payments.push(...list.map(p => ({ ...p, _session: s.sessionNumber ?? id })))
-  }
-  return { shifts, payments }
+  let columns = null
+  try { columns = await iikoRequest('olap_columns', {}, { reportType: 'TRANSACTIONS' }) } catch { /* спросим по умолчанию */ }
+  const fields = pickTransactionFields(columns)
+  const res = await iikoRequest('olap', buildTransactionsRequest({ from: date, to: date, fields }))
+  const rows = res?.data || []
+  return { payments: mapTransactionRows(rows, fields), fields, rows: rows.length }
 }

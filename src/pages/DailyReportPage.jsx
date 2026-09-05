@@ -769,10 +769,11 @@ export default function DailyReportPage() {
         loadModule(() => import('@/lib/iikoWithdrawalRules')),
       ])
       const rules = await loadWithdrawalRules()
-      const { shifts, payments } = await fetchCashPayments({ date })
-      if (!shifts.length) throw new Error(`за ${date} в iiko нет кассовых смен`)
+      const { payments, fields, rows } = await fetchCashPayments({ date })
+      if (!rows) throw new Error(`за ${date} в iiko нет кассовых операций`)
       const split = splitPayments(payments, rules)
-      const info = { ...summarize(split), shifts: shifts.length, payments: payments.length }
+      const usedFields = [fields.date, fields.type, fields.comment, fields.account, fields.out, fields.in, fields.sum].filter(Boolean)
+      const info = { ...summarize(split), rows, payments: payments.length, discovered: fields.discovered, usedFields }
       const hasManual = SECTIONS.some(sec => (withdrawals[sec.key] || []).some(r => num(r.amount) > 0 && r.source !== 'iiko'))
       if (hasManual && !confirm('Расходы уже введены вручную. Добавить строки из iiko поверх? Ручные строки не тронутся.')) return
       setWithdrawals(prev => mergeWithdrawals(prev, split.rows))
@@ -1103,10 +1104,12 @@ export default function DailyReportPage() {
         {iikoCashInfo && (
           <div className="card border border-amber-500/20 bg-amber-500/5 text-xs space-y-1">
             <div>
-              iiko: смен {iikoCashInfo.shifts}, платежей {iikoCashInfo.payments}; подставлено строк {iikoCashInfo.added} на {money(iikoCashInfo.total)};
+              iiko: операций {iikoCashInfo.rows}; подставлено строк {iikoCashInfo.added} на {money(iikoCashInfo.total)};
               не распознано {iikoCashInfo.unmatched} (в «Прочих расходах» с пометкой); пропущено внесений {iikoCashInfo.skipped}.
             </div>
-            {iikoCashInfo.fields.length > 0 && <div className="text-slate-500">Поля платежа iiko: {iikoCashInfo.fields.join(', ')}</div>}
+            <div className="text-slate-500">
+              Поля отчёта: {iikoCashInfo.usedFields.join(', ')}{iikoCashInfo.discovered ? '' : ' (список полей iiko не отдал — взяты по умолчанию)'}
+            </div>
             <div className="text-slate-500">Проверьте суммы и секции — отправка отчёта остаётся за вами.</div>
           </div>
         )}

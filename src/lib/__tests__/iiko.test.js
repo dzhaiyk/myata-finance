@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   normalizeDepartment, normalizePaymentType, mapOlapRows, buildSalesRequest,
   toDailyReportShape, OLAP_FIELDS,
+  pickOlapField, pickTransactionFields, buildTransactionsRequest, mapTransactionRows,
 } from '../iiko.js'
 import { setDepartments } from '../config.js'
 import { FIXTURE_DEPARTMENTS } from './fixtures.js'
@@ -116,5 +117,69 @@ describe('iiko — тело запроса OLAP', () => {
   it('без организаций фильтр по подразделению не добавляется', () => {
     const body = buildSalesRequest({ from: '2026-09-01', to: '2026-09-01' })
     assert.equal(body.filters['Department.Id'], undefined)
+  })
+})
+
+// TASK-037: методов /resto/api/v2/cashshifts/* в этом API нет — iiko отвечал на
+// них 404 (06.09.2026). Изъятия берём отчётом TRANSACTIONS с того же эндпоинта,
+// что и выручку, а имена полей спрашиваем у сервера.
+describe('iiko — изъятия из кассы через OLAP TRANSACTIONS', () => {
+  const COLUMNS = {
+    'DateTime.Typed': { name: 'DateTime.Typed' },
+    TransactionType: { name: 'TransactionType' },
+    TransactionComment: { name: 'TransactionComment' },
+    'Account.Name': { name: 'Account.Name' },
+    'Session.Number': { name: 'Session.Number' },
+    'Sum.Outcoming': { name: 'Sum.Outcoming' },
+    'Sum.Incoming': { name: 'Sum.Incoming' },
+  }
+
+  it('поле выбирается из того, что сервер назвал доступным', () => {
+    assert.equal(pickOlapField(COLUMNS, ['Нет.Такого', 'TransactionType']), 'TransactionType')
+    assert.equal(pickOlapField(COLUMNS, ['Нет.Такого']), null)
+    // сервер может отдать список массивом
+    assert.equal(pickOlapField([{ name: 'Sum.ResignedSum' }], ['Sum.Outcoming', 'Sum.ResignedSum']), 'Sum.ResignedSum')
+  })
+
+  it('набор полей: из ответа сервера, иначе по умолчанию', () => {
+    const f = pickTransactionFields(COLUMNS)
+    assert.equal(f.discovered, true)
+    assert.equal(f.date, 'DateTime.Typed')
+    assert.equal(f.out, 'Sum.Outcoming')
+    assert.equal(f.comment, 'TransactionComment')
+    // пустой ответ или список без даты — работаем по умолчанию, а не падаем
+    assert.equal(pickTransactionFields(null).discovered, false)
+    assert.equal(pickTransactionFields({}).discovered, false)
+    assert.equal(pickTransactionFields({ Foo: {} }).date, 'DateTime.Typed')
+  })
+
+  it('запрос строится на одну дату и только по существующим полям', () => {
+    const body = buildTransactionsRequest({ from: '2026-09-05', to: '2026-09-05', fields: pickTransactionFields(COLUMNS) })
+    assert.equal(body.reportType, 'TRANSACTIONS')
+    assert.deepEqual(body.groupByRowFields, ['DateTime.Typed', 'TransactionType', 'TransactionComment', 'Account.Name', 'Session.Number'])
+    // Sum.ResignedSum сервер не назвал — в запрос не попадает
+    assert.deepEqual(body.aggregateFields, ['Sum.Outcoming', 'Sum.Incoming'])
+    assert.equal(body.filters['DateTime.Typed'].from, '2026-09-05')
+  })
+
+  it('деньги из кассы — отрицательная сумма, внесение — положительная', () => {
+    const fields = pickTransactionFields(COLUMNS)
+    const rows = [
+      { 'DateTime.Typed': '2026-09-05', TransactionType: 'Изъятие денег', TransactionComment: 'закуп кухня', 'Sum.Outcoming': 45000, 'Sum.Incoming': 0 },
+      { 'DateTime.Typed': '2026-09-05', TransactionType: 'Внесение денег', TransactionComment: 'размен', 'Sum.Outcoming': 0, 'Sum.Incoming': 50000 },
+    ]
+    const [out, inc] = mapTransactionRows(rows, fields)
+    assert.equal(out.sum, -45000)
+    assert.equal(out.comment, 'закуп кухня')
+    assert.equal(out.type, 'Изъятие денег')
+    assert.equal(inc.sum, 50000)
+  })
+
+  it('одно поле суммы вместо пары приход/расход тоже понимается', () => {
+    const fields = pickTransactionFields({ 'DateTime.Typed': {}, 'Sum.ResignedSum': {}, TransactionType: {} })
+    assert.equal(fields.out, null)
+    assert.equal(fields.sum, 'Sum.ResignedSum')
+    const [row] = mapTransactionRows([{ 'DateTime.Typed': '2026-09-05', TransactionType: 'Изъятие', 'Sum.ResignedSum': -7000 }], fields)
+    assert.equal(row.sum, -7000)
   })
 })
