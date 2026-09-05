@@ -51,23 +51,80 @@ export function checkCashDiscrepancies(reports, threshold = THRESHOLDS.cashDiscr
     .map(t => ({ date: t.date, manager: t.manager, discrepancy: t.discrepancy }))
 }
 
+/** Фактическая комиссия за период, % от оборота по терминалу. */
+export function acquiringFeePct(base, settled) {
+  if (!(base > 0)) return null
+  return Number((((base - settled) / base) * 100).toFixed(2))
+}
+
+const median = (values) => {
+  const a = [...values].sort((x, y) => x - y)
+  if (!a.length) return null
+  const n = a.length
+  return n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2
+}
+
+/**
+ * Фактическая комиссия по месяцам — основа для истории банка.
+ * @returns {{month: string, banks: Array, base: number, settled: number, feePct: number|null}[]}
+ */
+export function acquiringByMonth(reports, bankTx, accounts = null) {
+  const monthOf = (d) => String(d ?? '').slice(0, 7)
+  const months = new Set()
+  ;(reports || []).forEach(r => months.add(monthOf(r.report_date)))
+  ;(bankTx || []).forEach(t => months.add(monthOf(t.transaction_date)))
+  return [...months].filter(Boolean).sort().map(month => {
+    const rs = (reports || []).filter(r => monthOf(r.report_date) === month)
+    const tx = (bankTx || []).filter(t => monthOf(t.transaction_date) === month)
+    const res = checkAcquiring(rs, tx, { accounts, baselines: null })
+    return { month, banks: res.banks || [], base: res.terminalsTotal, settled: res.settled, feePct: res.feePct }
+  })
+}
+
+/**
+ * История комиссии по банкам: медиана помесячных значений.
+ * Пока не используется для вердикта — помесячные значения на нынешних данных
+ * слишком шумные (задержка зачислений, незаполненные терминалы). Оставлено как
+ * готовая основа, когда терминалы будут заполнены (TASK-004).
+ */
+export const ACQUIRING_MIN_MONTHS = 3
+
+export function acquiringBaselines(monthly) {
+  const byBank = {}
+  ;(monthly || []).forEach(m => (m.banks || []).forEach(b => {
+    if (b.base > 0 && b.settled > 0 && b.feePct != null) (byBank[b.bank] = byBank[b.bank] || []).push(b.feePct)
+  }))
+  const out = {}
+  for (const [bank, values] of Object.entries(byBank)) {
+    if (values.length >= ACQUIRING_MIN_MONTHS) out[bank] = Number(median(values).toFixed(2))
+  }
+  return out
+}
+
 /**
  * Сверка №3 — эквайринг: суммы терминалов из отчётов ↔ зачисления банка.
  * Банк зачисляет с задержкой (D+1..D+3) и за вычетом комиссии, поэтому
- * сверяем НАКОПИТЕЛЬНО за период с допуском по проценту комиссии.
+ * сверяем НАКОПИТЕЛЬНО за период.
+ *
+ * Ставка комиссии не задаётся (BR-CTL-018): она считается из данных. Раньше в
+ * коде было 1,5 % для всех, тогда как по POS-выписке Halyk выходит около 0,8 %.
+ *
+ * Вердикт «сошлось / не сошлось» не выносится, и это осознанно. Проверка на
+ * данных за 2026 показала: в нормальных месяцах фактическая комиссия Kaspi
+ * скачет от −0,8 % до +0,5 % и регулярно отрицательна. Отрицательная — не
+ * ошибка банка, а следствие задержки D+1..D+3: в месяц попадают зачисления за
+ * хвост предыдущего. Плюс терминалы заполнены не везде (январь–февраль пустые,
+ * Halyk — только с сентября, TASK-004). Пока это не исправлено, любой порог
+ * давал бы ложные тревоги, поэтому показывается факт: оборот, зачисление и
+ * фактический процент.
  */
-export function checkAcquiring(reports, bankTx, { feePct = 1.5, tolerancePct = 1, accounts = null } = {}) {
+export function checkAcquiring(reports, bankTx, { accounts = null } = {}) {
   const signed = (t) => (t.is_debit ? -num(t.amount) : num(t.amount))
   const settledRows = bankTx.filter(t => t.category === 'acquiring_settlement')
-  const judge = (base, settled) => {
-    const expected = base * (1 - feePct / 100)
-    const delta = settled - expected
-    const deltaPct = base > 0 ? (delta / base) * 100 : 0
-    return {
-      expected: Math.round(expected), delta: Math.round(delta), deltaPct: Number(deltaPct.toFixed(2)),
-      ok: base === 0 || Math.abs(deltaPct) <= tolerancePct,
-    }
-  }
+  // Вердикта нет намеренно: проверка показывает факт, а не судит.
+  // Ставку задавать нельзя (BR-CTL-018), а сравнивать с собственной историей
+  // на нынешних данных бессмысленно — см. комментарий к функции.
+  const judge = (base, settled) => ({ feePct: acquiringFeePct(base, settled), ok: true })
 
   if (!accounts) {
     const terminalsTotal = reports.reduce((s, r) => s + reportTotals(r).terminals, 0)

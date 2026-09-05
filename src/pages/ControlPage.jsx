@@ -167,8 +167,7 @@ export default function ControlPage() {
   const blockers = [
     missing.length > 0, open.drafts > 0, open.uncategorized > 0, !freshness.ok, review.length > 0,
     revenue.length > 0, cashDisc.length > 0,
-    acquiring.hasData && !acquiring.ok,
-    payroll.accrued > 0 && !payroll.ok,
+        payroll.accrued > 0 && !payroll.ok,
     !owners.ok,
     accountChecks.some(a => a.ok === false),
   ].filter(Boolean).length
@@ -249,11 +248,11 @@ export default function ControlPage() {
             value={cashDisc.length === 0 ? 'без расхождений' : `${cashDisc.length} смен`}
             detail={cashDisc.length > 0 ? `худшая: ${cashDisc[0].date}, ${fmt(cashDisc[0].discrepancy)} ₸` : null} />
           <Check title="Эквайринг" subtitle="Терминалы ↔ зачисления банка"
-            state={!acquiring.hasData ? 'none' : acquiring.ok ? 'ok' : 'fail'}
-            value={!acquiring.hasData ? 'нет данных' : `${acquiring.deltaPct > 0 ? '+' : ''}${acquiring.deltaPct}%`}
+            state={!acquiring.hasData ? 'none' : 'ok'}
+            value={!acquiring.hasData ? 'нет данных' : acquiring.feePct == null ? '—' : `комиссия ${acquiring.feePct}%`}
             detail={acquiring.hasData
               ? (acquiring.banks?.length
-                ? acquiring.banks.map(b => `${b.bank}: ${fmt(b.base)} → ${fmt(b.settled)} ₸ (${b.deltaPct > 0 ? '+' : ''}${b.deltaPct}%)`).join(' · ')
+                ? acquiring.banks.map(b => `${b.bank}: ${fmt(b.base)} → ${fmt(b.settled)} ₸ (${b.feePct == null ? '—' : `${b.feePct}%`})`).join(' · ')
                 : `терминалы ${fmt(acquiring.terminalsTotal)} → зачислено ${fmt(acquiring.settled)} ₸`)
               : 'нужны терминалы в отчётах и выписка'} />
           <Check title="ФОТ" subtitle="Ведомость ↔ выдано из кассы и по банку"
@@ -392,7 +391,7 @@ export default function ControlPage() {
         </div>
         <div className="text-xs text-slate-400 space-y-1">
           <p><b className="text-slate-300">Ежедневно:</b> менеджер сдаёт отчёт смены, бухгалтер загружает выписку за день.</p>
-          <p><b className="text-slate-300">Эквайринг</b> сверяется накопительно за месяц: банк зачисляет с задержкой и минус комиссия (~1.5%). Отклонение больше 1% — повод разбираться.</p>
+          <p><b className="text-slate-300">Эквайринг</b> сверяется накопительно за месяц: банк зачисляет с задержкой и минус комиссия банка. Ставка не задаётся: показывается фактическая комиссия за период. Пока терминалы заполнены не за все месяцы (TASK-004), вердикт по ней не выносится.</p>
           <p><b className="text-slate-300">Остатки счетов</b> сверяйте на вкладке «Счета → Сверка»: расчётный остаток должен совпадать с банковским приложением.</p>
           <p><b className="text-slate-300">ФОТ и наличные учредителей:</b> выдачу ЗП из кассы проводите как инкассацию с комментарием «зп»; снятия со счетов (банкомат, карта) и возвраты («Взнос наличных», «Фин помощь») берутся из выписки. Остаток «на руках» больше 500 тыс. — деньги вне контура.</p>
         </div>

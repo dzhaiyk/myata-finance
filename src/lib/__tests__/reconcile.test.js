@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import {
   reportTotals, checkRevenueConsistency, checkCashDiscrepancies, checkAcquiring,
   checkAccountBalance, checkPayroll, findMissingShifts, checkStatementFreshness,
-  countOpenIssues,
+  countOpenIssues, acquiringByMonth,
 } from '../reconcile.js'
 
 const mkReport = (date, over = {}) => ({
@@ -97,22 +97,41 @@ describe('Сверка №2 — расхождения кассы', () => {
 describe('Сверка №3 — эквайринг: терминалы ↔ зачисления', () => {
   const reports = [mkReport('2026-08-20'), mkReport('2026-08-21')] // терминалы 300000
 
-  it('зачисление за вычетом комиссии 1.5% → ok', () => {
+  // BR-CTL-018: ставка не задаётся, комиссия считается по факту
+  it('считает фактическую комиссию, а не сравнивает с нормативом', () => {
     const r = checkAcquiring(reports, [
       { category: 'acquiring_settlement', is_debit: false, amount: 295500 },
     ])
     assert.equal(r.terminalsTotal, 300000)
     assert.equal(r.settled, 295500)
+    assert.equal(r.feePct, 1.5)
     assert.equal(r.ok, true)
   })
 
-  it('недозачисление 30к → расхождение', () => {
+  it('недозачисление видно как высокая фактическая комиссия', () => {
     const r = checkAcquiring(reports, [
       { category: 'acquiring_settlement', is_debit: false, amount: 265500 },
     ])
-    assert.equal(r.ok, false)
-    assert.equal(r.delta, -30000)
-    assert.ok(r.deltaPct < -9)
+    assert.equal(r.feePct, 11.5)
+  })
+
+  // Зачислено больше оборота — обычное дело из-за задержки D+1..D+3:
+  // в период попадает хвост предыдущего. Тревогу по этому не поднимаем.
+  it('зачисление больше оборота даёт отрицательную комиссию, а не ошибку', () => {
+    const r = checkAcquiring(reports, [
+      { category: 'acquiring_settlement', is_debit: false, amount: 310000 },
+    ])
+    assert.equal(r.feePct, -3.33)
+    assert.equal(r.ok, true)
+  })
+
+  it('фактическая комиссия считается по банкам помесячно', () => {
+    const months = acquiringByMonth(reports, [
+      { transaction_date: '2026-08-20', category: 'acquiring_settlement', is_debit: false, amount: 295500 },
+    ])
+    assert.equal(months.length, 1)
+    assert.equal(months[0].month, '2026-08')
+    assert.equal(months[0].feePct, 1.5)
   })
 
   it('другие категории игнорируются', () => {
@@ -311,18 +330,18 @@ describe('Сверка №3 по банкам (Kaspi/Halyk, 03.09.2026)', () => 
     assert.equal(r.terminalsTotal, 390000); assert.equal(r.ok, true)
   })
 
-  it('недозачисление по одному банку валит общую сверку', () => {
+  it('фактическая комиссия считается по каждому банку отдельно', () => {
     const r = checkAcquiring(reports, [
       { account_id: 2, category: 'acquiring_settlement', is_debit: false, amount: 300000 },
       { account_id: 15, category: 'acquiring_settlement', is_debit: false, amount: 50000 },
-    ], { accounts, feePct: 0 })
-    assert.equal(r.ok, false)
-    assert.equal(r.banks.find(b => b.bank === 'Halyk').ok, false)
-    assert.equal(r.banks.find(b => b.bank === 'Kaspi').ok, true)
+    ], { accounts })
+    // Вердикта нет — сверка показывает фактическую комиссию по каждому банку
+    assert.ok(r.banks.find(b => b.bank === 'Halyk').feePct > 0)
+    assert.equal(r.banks.find(b => b.bank === 'Kaspi').feePct, 0)
   })
 
   it('без списка счетов — прежнее поведение (одна сумма)', () => {
-    const r = checkAcquiring(reports, [{ category: 'acquiring_settlement', is_debit: false, amount: 340000 }], { feePct: 0 })
+    const r = checkAcquiring(reports, [{ category: 'acquiring_settlement', is_debit: false, amount: 340000 }])
     assert.equal(r.terminalsTotal, 340000)
     assert.equal(r.banks, undefined)
     assert.equal(r.ok, true)
