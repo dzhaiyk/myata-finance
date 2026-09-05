@@ -26,6 +26,10 @@ const SERVER_ACTIONS = {
   olap_columns: { method: 'GET', path: '/resto/api/v2/reports/olap/columns' },
   departments: { method: 'GET', path: '/resto/api/corporation/departments' },
   terminals: { method: 'GET', path: '/resto/api/corporation/terminals' },
+  // Кассовые смены и их платежи (внесения/изъятия) — TASK-037. Параметры
+  // (openDateFrom, openDateTo, status, sessionId) уходят как query.
+  cashshifts: { method: 'GET', path: '/resto/api/v2/cashshifts/list' },
+  cashshift_payments: { method: 'GET', path: '/resto/api/v2/cashshifts/payments/list' },
 }
 
 const CLOUD_ACTIONS = {

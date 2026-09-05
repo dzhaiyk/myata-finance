@@ -146,3 +146,26 @@ export function toDailyReportShape(day) {
     total: day.total,
   }
 }
+
+// --- кассовые смены: внесения и изъятия (TASK-037) ------------------------
+
+const asArray = (res) => (Array.isArray(res) ? res
+  : (res?.data || res?.items || res?.payments || res?.sessions || res?.cashShifts || []))
+
+/**
+ * Платежи кассовых смен, открытых в указанную операционную дату.
+ * Каждый вызов прокси — отдельная сессия iiko, поэтому запросы идут по очереди.
+ * @param {{date: string}} params YYYY-MM-DD
+ * @returns {Promise<{shifts: object[], payments: object[]}>}
+ */
+export async function fetchCashPayments({ date }) {
+  const shifts = asArray(await iikoRequest('cashshifts', {}, { openDateFrom: date, openDateTo: date, status: 'ANY' }))
+  const payments = []
+  for (const s of shifts) {
+    const id = s?.id ?? s?.sessionId
+    if (!id) continue
+    const list = asArray(await iikoRequest('cashshift_payments', {}, { sessionId: id }))
+    payments.push(...list.map(p => ({ ...p, _session: s.sessionNumber ?? id })))
+  }
+  return { shifts, payments }
+}

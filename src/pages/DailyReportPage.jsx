@@ -156,6 +156,8 @@ export default function DailyReportPage() {
   const [withdrawals, setWithdrawals] = useState(emptyWithdrawals())
   const [iikoLoading, setIikoLoading] = useState(false)
   const [iikoError, setIikoError] = useState('')
+  const [iikoCashLoading, setIikoCashLoading] = useState(false)
+  const [iikoCashInfo, setIikoCashInfo] = useState(null)
   const [revenue, setRevenue] = useState(PAYMENT_TYPES.map(t => ({ type: t, amount: '', checks: '' })))
   const [departments, setDepartments] = useState(emptyDepartments)
   const [allAccounts, setAllAccounts] = useState([]) // all accounts for parent lookup
@@ -743,6 +745,31 @@ export default function DailyReportPage() {
     }
   }
 
+  // Расходы из iiko: изъятия кассовой смены раскладываются по секциям по правилам
+  // справочника; менеджер проверяет и правит (BR-SHF-021). Повтор не дублирует.
+  const fillExpensesFromIiko = async () => {
+    setIikoError('')
+    setIikoCashLoading(true)
+    try {
+      const [{ fetchCashPayments }, { splitPayments, mergeWithdrawals, summarize }, { loadWithdrawalRules }] = await Promise.all([
+        import('@/lib/iiko'), import('@/lib/iikoCash'), import('@/lib/iikoWithdrawalRules'),
+      ])
+      const rules = await loadWithdrawalRules()
+      const { shifts, payments } = await fetchCashPayments({ date })
+      if (!shifts.length) throw new Error(`за ${date} в iiko нет кассовых смен`)
+      const split = splitPayments(payments, rules)
+      const info = { ...summarize(split), shifts: shifts.length, payments: payments.length }
+      const hasManual = SECTIONS.some(sec => (withdrawals[sec.key] || []).some(r => num(r.amount) > 0 && r.source !== 'iiko'))
+      if (hasManual && !confirm('Расходы уже введены вручную. Добавить строки из iiko поверх? Ручные строки не тронутся.')) return
+      setWithdrawals(prev => mergeWithdrawals(prev, split.rows))
+      setIikoCashInfo(info)
+    } catch (err) {
+      setIikoError(String(err.message || err))
+    } finally {
+      setIikoCashLoading(false)
+    }
+  }
+
   // ============ JOURNAL VIEW ============
   if (mode === 'journal') {
     return (
@@ -1050,7 +1077,25 @@ export default function DailyReportPage() {
 
       {/* ══════════ БЛОК 2: РАСХОДЫ ══════════ */}
       <div className="space-y-4">
-        <h2 className="text-lg font-display font-bold text-red-400 flex items-center gap-2">📤 Расходы</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-display font-bold text-red-400 flex items-center gap-2">📤 Расходы</h2>
+          {!isLocked && (
+            <button onClick={fillExpensesFromIiko} disabled={iikoCashLoading}
+              className="btn-secondary text-xs flex items-center gap-1.5">
+              <Download className="w-3.5 h-3.5" />{iikoCashLoading ? 'Загрузка из iiko...' : 'Расходы из iiko'}
+            </button>
+          )}
+        </div>
+        {iikoCashInfo && (
+          <div className="card border border-amber-500/20 bg-amber-500/5 text-xs space-y-1">
+            <div>
+              iiko: смен {iikoCashInfo.shifts}, платежей {iikoCashInfo.payments}; подставлено строк {iikoCashInfo.added} на {money(iikoCashInfo.total)};
+              не распознано {iikoCashInfo.unmatched} (в «Прочих расходах» с пометкой); пропущено внесений {iikoCashInfo.skipped}.
+            </div>
+            {iikoCashInfo.fields.length > 0 && <div className="text-slate-500">Поля платежа iiko: {iikoCashInfo.fields.join(', ')}</div>}
+            <div className="text-slate-500">Проверьте суммы и секции — отправка отчёта остаётся за вами.</div>
+          </div>
+        )}
 
         {SECTIONS.map(sec => {
           const isOpen = expanded[sec.key]
