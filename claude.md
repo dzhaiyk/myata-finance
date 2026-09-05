@@ -6,7 +6,8 @@
 **Цель — SaaS.** Приложение доводится на «Мяте», но продаваться будет другим заведениям. Значит всё, что зависит от конкретного клиента, настраивается, а не зашивается в код (правило 11, ADR-0010). Подробно: `docs/00-project/overview.md`.
 
 ## Стек и команды
-- Стек: React 18 + Vite 6 + Tailwind, Zustand, Supabase (PostgreSQL/PostgREST, RLS открыт), Netlify (SPA + функция `/api/iiko`), тесты `node:test`.
+- Стек сейчас: React 18 + Vite 6 + Tailwind, Zustand, Supabase (PostgreSQL/PostgREST, RLS открыт), Netlify (SPA + функция `/api/iiko`), тесты `node:test`.
+- Стек-цель (ADR-0012, переход идёт): Postgres на VPS в Алматы, Node-сервис перед базой, фронтенд ходит только в наш API, nginx отдаёт SPA. Ничего, что трогает доступ к данным, не пишется под Supabase без оглядки на переход.
 - Запуск: `npm run dev` · Сборка: `npm run build` · Тесты: `npm test` · Типы/линт: нет · Миграции: вручную в SQL-редакторе Supabase
 - Полное описание окружения: `docs/50-ops/setup.md`
 
