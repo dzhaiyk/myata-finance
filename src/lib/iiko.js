@@ -40,7 +40,11 @@ export const getOlapColumns = (reportType = 'SALES') =>
 export const OLAP_FIELDS = {
   date: 'OpenDate.Typed',
   department: 'Store.Name',
-  payType: 'PayTypes.Combo',
+  // PayTypes, а не PayTypes.Combo: чек, оплаченный картой и наличными, приходит
+  // одной строкой «Банковские карты, Наличные», и правило узнаёт в ней слово
+  // «налич» — весь чек засчитывался наличными (BR-SHF-022, проверено на данных
+  // 01.08–05.09.2026: 396 294 ₸ картой считались наличными).
+  payType: 'PayTypes',
   sum: 'DishDiscountSumInt',
   orders: 'UniqOrderId.OrdersCount',
 }

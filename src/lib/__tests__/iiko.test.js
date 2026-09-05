@@ -37,6 +37,27 @@ describe('iiko — справочники под отчёт смены', () => {
     assert.equal(normalizeDepartment('СКЛАД БАНКЕТ'), 'Прочее')
   })
 
+  // BR-SHF-022. Проверено на живых данных 01.08–05.09.2026: при группировке по
+  // PayTypes.Combo чек, оплаченный картой и наличными, приходил строкой
+  // «Банковские карты, Наличные», и правило узнавало в ней слово «налич» —
+  // 396 294 ₸, оплаченные картой, считались наличной выручкой.
+  it('чек, оплаченный частями, делится по фактическим типам оплаты', () => {
+    assert.equal(OLAP_FIELDS.payType, 'PayTypes')
+    assert.ok(buildSalesRequest({ from: '2026-09-01', to: '2026-09-01' }).groupByRowFields.includes('PayTypes'))
+    // ловушка, ради которой поле и поменяли: комбинированную строку правило
+    // считает наличными целиком, поэтому возвращаться к Combo нельзя
+    assert.equal(normalizePaymentType('Банковские карты, Наличные'), 'Наличные')
+
+    // iiko отдаёт две строки на один чек — суммы расходятся по своим типам
+    const day = mapOlapRows([
+      { 'OpenDate.Typed': '2026-09-01', 'Store.Name': 'СКЛАД БАР МЯТА', PayTypes: 'Наличные', DishDiscountSumInt: 667605, 'UniqOrderId.OrdersCount': 1 },
+      { 'OpenDate.Typed': '2026-09-01', 'Store.Name': 'СКЛАД БАР МЯТА', PayTypes: 'Банковские карты', DishDiscountSumInt: 396294, 'UniqOrderId.OrdersCount': 0 },
+    ])['2026-09-01']
+    assert.equal(day.payments['Наличные'], 667605)
+    assert.equal(day.payments['Прочее'], 396294)   // карты, пока типы в iiko не разделены
+    assert.equal(day.total, 1063899)
+  })
+
   it('типы оплат приводятся к типам приложения', () => {
     assert.equal(normalizePaymentType('Наличные'), 'Наличные')
     assert.equal(normalizePaymentType('CASH'), 'Наличные')
@@ -53,10 +74,10 @@ describe('iiko — справочники под отчёт смены', () => {
 describe('iiko — разбор OLAP-ответа', () => {
   // Отдел приходит складом списания (BR-SHF-019)
   const rows = [
-    { 'OpenDate.Typed': '2026-09-01', 'Store.Name': 'СКЛАД КУХНЯ МЯТА', 'PayTypes.Combo': 'Наличные', DishDiscountSumInt: 100000, 'UniqOrderId.OrdersCount': 10 },
-    { 'OpenDate.Typed': '2026-09-01', 'Store.Name': 'СКЛАД БАР МЯТА', 'PayTypes.Combo': 'Kaspi QR', DishDiscountSumInt: 80000.5, 'UniqOrderId.OrdersCount': 8 },
-    { 'OpenDate.Typed': '2026-09-01', 'Store.Name': 'СКЛАД КАЛЬЯН МЯТА', 'PayTypes.Combo': 'Halyk POS', DishDiscountSumInt: 70000, 'UniqOrderId.OrdersCount': 7 },
-    { 'OpenDate.Typed': '2026-09-02', 'Store.Name': 'СКЛАД КУХНЯ МЯТА', 'PayTypes.Combo': 'Наличные', DishDiscountSumInt: 50000, 'UniqOrderId.OrdersCount': 5 },
+    { 'OpenDate.Typed': '2026-09-01', 'Store.Name': 'СКЛАД КУХНЯ МЯТА', PayTypes: 'Наличные', DishDiscountSumInt: 100000, 'UniqOrderId.OrdersCount': 10 },
+    { 'OpenDate.Typed': '2026-09-01', 'Store.Name': 'СКЛАД БАР МЯТА', PayTypes: 'Kaspi QR', DishDiscountSumInt: 80000.5, 'UniqOrderId.OrdersCount': 8 },
+    { 'OpenDate.Typed': '2026-09-01', 'Store.Name': 'СКЛАД КАЛЬЯН МЯТА', PayTypes: 'Halyk POS', DishDiscountSumInt: 70000, 'UniqOrderId.OrdersCount': 7 },
+    { 'OpenDate.Typed': '2026-09-02', 'Store.Name': 'СКЛАД КУХНЯ МЯТА', PayTypes: 'Наличные', DishDiscountSumInt: 50000, 'UniqOrderId.OrdersCount': 5 },
   ]
 
   it('складывает выручку по дням, отделам и оплатам', () => {
@@ -88,7 +109,7 @@ describe('iiko — разбор OLAP-ответа', () => {
   })
 
   it('дата с временем обрезается до дня', () => {
-    const days = mapOlapRows([{ 'OpenDate.Typed': '2026-09-01T21:30:00', DishCategory: 'Кухня', 'PayTypes.Combo': 'Наличные', DishDiscountSumInt: 1000 }])
+    const days = mapOlapRows([{ 'OpenDate.Typed': '2026-09-01T21:30:00', DishCategory: 'Кухня', PayTypes: 'Наличные', DishDiscountSumInt: 1000 }])
     assert.ok(days['2026-09-01'])
   })
 
