@@ -11,6 +11,7 @@ import BankImportPage from '@/pages/BankImportPage'
 import UsersPage from '@/pages/UsersPage'
 import RolesPage from '@/pages/RolesPage'
 import SettingsPage from '@/pages/SettingsPage'
+import DictionariesPage from '@/pages/DictionariesPage'
 import StaffPage from '@/pages/StaffPage'
 import PayrollPage from '@/pages/PayrollPage'
 import SuppliersPage from '@/pages/SuppliersPage'
@@ -66,6 +67,7 @@ export default function App() {
           <Route path="control" element={<ControlPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="roles" element={<RolesPage />} />
+          <Route path="dictionaries" element={<DictionariesPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Routes>

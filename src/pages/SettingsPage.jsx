@@ -3,7 +3,6 @@ import { sendTelegramNotification, saveNotifications, maskedBotToken, telegramCh
 import { getNotifications, THRESHOLDS } from '@/lib/config'
 import { getCutoffHour, saveCutoffHour } from '@/lib/dates'
 import { useAuthStore } from '@/lib/store'
-import DepartmentsSettings from '@/components/DepartmentsSettings'
 import BrandingSettings from '@/components/BrandingSettings'
 import { Save, Send, Bell, Bot, Moon } from 'lucide-react'
 import { money } from '@/lib/utils'
@@ -90,8 +89,6 @@ export default function SettingsPage() {
       </div>
 
       <BrandingSettings canEdit={canEdit} />
-
-      <DepartmentsSettings canEdit={canEdit} />
 
       {/* Telegram Bot */}
       <div className="card space-y-5">

@@ -133,6 +133,8 @@ export const ALL_PERMISSIONS = {
   'investments.view': 'Просмотр инвестиций',
   'investments.edit': 'Добавление операций',
   'investments.manage': 'Управление учредителями',
+  'dictionaries.view': 'Просмотр справочников',
+  'dictionaries.manage': 'Управление справочниками',
   'settings.view': 'Просмотр настроек',
   'settings.edit': 'Редактирование настроек',
   'telegram.manage': 'Управление Telegram уведомлениями',

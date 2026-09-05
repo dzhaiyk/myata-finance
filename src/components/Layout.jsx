@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/lib/store'
-import { LayoutDashboard, FileText, TrendingUp, Wallet, Upload, Users, Shield, Settings, LogOut, Menu, X, Leaf, UserCheck, Calculator, Package, Landmark, HandCoins, BarChart2, ShieldCheck } from 'lucide-react'
+import { LayoutDashboard, FileText, TrendingUp, Wallet, Upload, Users, Shield, Settings, LogOut, Menu, X, Leaf, UserCheck, Calculator, Package, Landmark, HandCoins, BarChart2, ShieldCheck, ListTree } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { appTitle, venueName, getBranding } from '@/lib/config'
@@ -22,6 +22,7 @@ const NAV = [
   { divider: true },
   { to: '/users', icon: Users, label: 'Пользователи', perm: 'users.view' },
   { to: '/roles', icon: Shield, label: 'Роли и права', perm: 'roles.view' },
+  { to: '/dictionaries', icon: ListTree, label: 'Справочники', perm: 'dictionaries.view' },
   { to: '/settings', icon: Settings, label: 'Настройки', perm: 'settings.view' },
 ]
 

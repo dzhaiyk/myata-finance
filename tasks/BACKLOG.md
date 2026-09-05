@@ -14,8 +14,7 @@
 | TASK-010 | Мёртвый код: `checkPayroll`, `formatBankImportNotification`, `getDepartments/getOlapColumns`; дубли распределения по периодам в BankImportPage; миграция 016 `CREATE POLICY IF NOT EXISTS` | — | P3 | |
 | TASK-011 | Модуль «Зарплаты» по методике ФОТ (табель, проценты по должностям, пул кальянов, удержания) | payroll | P2 | после /discover payroll |
 | TASK-026 | `CATEGORIES` (60 кодов) в `categorize.js` дублирует таблицу `categories` и служит каноном для контрактного теста — свести к одному источнику | bank | P3 | остаток TASK-022 |
-| TASK-027 | Модуль «Справочники», этап 1 ADR-0011: навигация, отделы переезжают из настроек, экран статей с подкатегориями и правом `dictionaries.manage` | reporting | P1 | план в `tasks/active/` |
-| TASK-028 | Структура P&L в базе, этап 2 ADR-0011: таблица строк отчёта, `PNL_STRUCTURE` → seed, тест эквивалентности цифр | reporting | P1 | после TASK-027 |
+| TASK-028 | Структура P&L в базе, этап 2 ADR-0011: таблица строк отчёта, `PNL_STRUCTURE` → seed, тест эквивалентности цифр | reporting | P1 | готова к работе |
 | TASK-029 | Cash Flow: вынести расчёт в `src/lib` с тестами (вопрос reporting #1), затем структуру в базу — этап 3 ADR-0011 | reporting | P2 | после TASK-028 |
 | TASK-021 | Пороги и ставки из `src/lib/config.js` в таблицу `settings` и на экран настроек | — | P2 | SaaS, готова к работе |
 | TASK-012 | SaaS: мультиарендность (несколько заведений), границы продукта — сначала вопросы владельцу | — | P3 | question |
