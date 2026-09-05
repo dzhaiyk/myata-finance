@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
-import { cn, fmt, MONTHS_RU } from '@/lib/utils'
+import { cn, fmt, MONTHS_RU, money } from '@/lib/utils'
 import { formatLocalDate, yearsRange } from '@/lib/dates'
 import { Calculator, Save, CheckCircle2, DollarSign, Calendar, Users } from 'lucide-react'
 
@@ -273,19 +273,19 @@ export default function PayrollPage() {
         </div>
         <div className="card-hover text-center">
           <div className="stat-label">Ставки</div>
-          <div className="stat-value text-lg text-blue-400">{fmt(totalDailyPart)} ₸</div>
+          <div className="stat-value text-lg text-blue-400">{money(totalDailyPart)}</div>
         </div>
         <div className="card-hover text-center">
           <div className="stat-label">% от продаж</div>
-          <div className="stat-value text-lg text-purple-400">{fmt(totalSalesBonus)} ₸</div>
+          <div className="stat-value text-lg text-purple-400">{money(totalSalesBonus)}</div>
         </div>
         <div className="card-hover text-center">
           <div className="stat-label">Авансы</div>
-          <div className="stat-value text-lg text-yellow-400">−{fmt(totalAdvances)} ₸</div>
+          <div className="stat-value text-lg text-yellow-400">−{money(totalAdvances)}</div>
         </div>
         <div className="card-hover text-center bg-brand-500/5 border-brand-500/20">
           <div className="stat-label">К выплате</div>
-          <div className="stat-value text-lg text-brand-400">{fmt(totalPayout)} ₸</div>
+          <div className="stat-value text-lg text-brand-400">{money(totalPayout)}</div>
         </div>
       </div>
 
@@ -351,18 +351,18 @@ export default function PayrollPage() {
                             {r.advances_details.map((d, i) => (
                               <div key={i} className="text-[10px] text-slate-400 flex justify-between gap-3">
                                 <span>{d.date}{d.comment ? ` — ${d.comment}` : ''}</span>
-                                <span className="font-mono">{fmt(d.amount)} ₸</span>
+                                <span className="font-mono">{money(d.amount)}</span>
                               </div>
                             ))}
                             <div className="text-[10px] font-semibold text-yellow-300 mt-1 pt-1 border-t border-slate-700 flex justify-between">
-                              <span>Итого</span><span className="font-mono">{fmt(r.advances_from_reports)} ₸</span>
+                              <span>Итого</span><span className="font-mono">{money(r.advances_from_reports)}</span>
                             </div>
                           </div>
                         )}
                       </div>
                     </td>
                     <td className={cn('table-cell text-right font-mono text-xs font-bold', r.total_payout < 0 ? 'text-red-400' : 'text-brand-400')}>
-                      {fmt(r.total_payout)} ₸
+                      {money(r.total_payout)}
                     </td>
                   </tr>
                 ))}

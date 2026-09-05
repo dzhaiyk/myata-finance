@@ -11,6 +11,9 @@ const FIELDS = [
   { key: 'restaurant_name', label: 'Название заведения', hint: 'Подставляется в отчёты, уведомления и копирайт' },
   { key: 'company', label: 'Юридическое лицо', hint: 'Показывается в копирайте на экране входа' },
   { key: 'logo_url', label: 'Ссылка на логотип', hint: 'Например /logo-192.png. Пусто — логотип не показывается' },
+  { key: 'currency', label: 'Валюта', hint: 'Код по ISO: KZT, RUB, USD, EUR. Знак подставляется автоматически' },
+  { key: 'locale', label: 'Локаль', hint: 'Формат чисел и дат: ru-RU, en-US, kk-KZ' },
+  { key: 'timezone', label: 'Часовой пояс', hint: 'Например Asia/Almaty. Пусто — пояс браузера. От него зависит, к какой смене отнести ночную операцию' },
 ]
 
 export default function BrandingSettings({ canEdit }) {
@@ -61,7 +64,8 @@ export default function BrandingSettings({ canEdit }) {
 
       <p className="text-xs text-slate-500">
         Пустое название приложения — показывается нейтральное «Финансовый учёт».
-        Изменения видны сразу, кроме уже выгруженных PDF.
+        Изменения видны сразу, кроме уже выгруженных PDF. Часовой пояс влияет на
+        операционную дату: смените его только вместе с переездом заведения.
       </p>
     </div>
   )

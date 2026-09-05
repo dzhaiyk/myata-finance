@@ -249,11 +249,23 @@ export function isNotificationEnabled(key) {
 // (ADR-0010). Пока настройки не загружены, показываются нейтральные подписи —
 // чужого названия пользователь не увидит ни на секунду.
 
+// Валюта, локаль и часовой пояс — тоже настройки заведения (ADR-0010).
+// Пустой часовой пояс означает «как у браузера»: так работало до TASK-020,
+// и для одного заведения в одном городе это верно.
 const BRANDING_FALLBACK = {
   app_title: 'Финансовый учёт',
   restaurant_name: '',
   company: '',
   logo_url: '',
+  currency: 'KZT',
+  locale: 'ru-RU',
+  timezone: '',
+}
+
+// Символы для валют, которые пишутся знаком. Для остальных показывается код.
+const CURRENCY_SYMBOLS = {
+  KZT: '₸', RUB: '₽', USD: '$', EUR: '€', GBP: '£', UAH: '₴',
+  KGS: 'с', AZN: '₼', TRY: '₺', GEL: '₾', AMD: '֏', JPY: '¥', CNY: '¥',
 }
 
 let branding = { ...BRANDING_FALLBACK }
@@ -270,8 +282,33 @@ export function setBranding(value) {
     restaurant_name: pick('restaurant_name'),
     company: pick('company'),
     logo_url: pick('logo_url'),
+    currency: pick('currency'),
+    locale: pick('locale'),
+    timezone: pick('timezone'),
   }
   return getBranding()
+}
+
+/** Код валюты заведения, например KZT. */
+export const currencyCode = () => branding.currency
+
+/** Знак валюты; для валюты без знака — её код. */
+export const currencySymbol = () => CURRENCY_SYMBOLS[branding.currency] || branding.currency
+
+/** Локаль для форматирования чисел и дат. */
+export const locale = () => branding.locale
+
+/**
+ * Часовой пояс заведения. Пусто — берётся пояс браузера: для одного заведения
+ * это верно, но менеджер в поездке получил бы чужую операционную дату.
+ */
+export const timezone = () => branding.timezone || undefined
+
+/** Десятичный разделитель локали: в русской нотации запятая. */
+export function decimalSeparator(loc = branding.locale) {
+  try {
+    return new Intl.NumberFormat(loc).formatToParts(1.1).find(p => p.type === 'decimal')?.value || '.'
+  } catch { return '.' }
 }
 
 /** Название приложения для вкладки, сайдбара и экрана входа. */

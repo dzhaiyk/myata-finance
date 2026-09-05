@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
-import { fmt, cn } from '@/lib/utils'
+import { fmt, cn, money, amountInput } from '@/lib/utils'
 import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { sendTelegramNotification, formatDailyReportNotification, formatCashDiscrepancyAlert } from '@/lib/telegram'
@@ -8,11 +8,11 @@ import { getBusinessDate } from '@/lib/dates'
 import StatementUploadCard from '@/components/StatementUploadCard'
 import { Save, Send, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Plus, Trash2, Calendar, ArrowLeft, FileText, Eye, Clock, Check, Pencil, Download } from 'lucide-react'
 import jsPDF from 'jspdf'
-import { CAPEX_ROW_LABEL, THRESHOLDS, departmentsFor, departmentCode, departmentLabel, departmentByCode, documentTitle, codeFromName, venueName } from '@/lib/config'
+import { CAPEX_ROW_LABEL, THRESHOLDS, departmentsFor, departmentCode, departmentLabel, departmentByCode, documentTitle, codeFromName, venueName, currencySymbol, locale } from '@/lib/config'
 
 const MoneyInput = ({ value, onChange, className = '', disabled = false }) => (
   <input type="text" inputMode="decimal" value={value} disabled={disabled}
-    onChange={e => onChange(e.target.value.replace(/[^0-9.,]/g, '').replace('.', ','))}
+    onChange={e => onChange(amountInput(e.target.value))}
     className={`input text-right font-mono text-sm tabular-nums w-full ${className} ${disabled ? 'opacity-50' : ''}`}
     placeholder="0" />
 )
@@ -571,10 +571,10 @@ export default function DailyReportPage() {
 
     subHeader('Выручка по отделам')
     departments.forEach(d => {
-      if (num(d.amount) > 0) row(d.name, `${fmt(num(d.amount))} ₸`)
+      if (num(d.amount) > 0) row(d.name, `${money(num(d.amount))}`)
     })
     divider()
-    row('Итого по отделам', `${fmt(totalDeptRevenue)} ₸`, { bold: true })
+    row('Итого по отделам', `${money(totalDeptRevenue)}`, { bold: true })
     y += 3
 
     subHeader('Доходы по типам оплат')
@@ -582,18 +582,18 @@ export default function DailyReportPage() {
       if (num(r.amount) > 0) {
         const checks = num(r.checks)
         const label = checks > 0 ? `${r.type} (${checks} чек.)` : r.type
-        row(label, `${fmt(num(r.amount))} ₸`)
+        row(label, `${money(num(r.amount))}`)
       }
     })
     divider()
-    row('Итого по типам оплат', `${fmt(totalRevenue)} ₸`, { bold: true })
+    row('Итого по типам оплат', `${money(totalRevenue)}`, { bold: true })
     y += 2
 
     // Сверка выручки
     if (totalRevenue > 0 || totalDeptRevenue > 0) {
       divider()
       if (revenueDiscrepancy !== 0) {
-        row('Расхождение выручки', `${fmt(revenueDiscrepancy)} ₸`, { bold: true, color: [220, 53, 69] })
+        row('Расхождение выручки', `${money(revenueDiscrepancy)}`, { bold: true, color: [220, 53, 69] })
       } else {
         setNormal(9); doc.setTextColor(34, 139, 34)
         doc.text('Выручка сходится', L + 4, y)
@@ -612,9 +612,9 @@ export default function DailyReportPage() {
         setNormal(9); doc.setTextColor(120)
         doc.text(parent?.name || 'Счёт', L + 4, y); y += 5; doc.setTextColor(30)
         group.accounts.forEach(ta => {
-          if (num(terminals[ta.id]) > 0) row(`  ${ta.name}`, `${fmt(num(terminals[ta.id]))} ₸`)
+          if (num(terminals[ta.id]) > 0) row(`  ${ta.name}`, `${money(num(terminals[ta.id]))}`)
         })
-        row(`  Итого`, `${fmt(group.total)} ₸`, { bold: true })
+        row(`  Итого`, `${money(group.total)}`, { bold: true })
       })
     }
     y += 4
@@ -633,10 +633,10 @@ export default function DailyReportPage() {
       rows.forEach(r => {
         const label = r.name || r.comment || '—'
         const comment = r.comment && r.name ? `  (${r.comment})` : ''
-        row(`${label}${comment}`, `${fmt(num(r.amount))} ₸`)
+        row(`${label}${comment}`, `${money(num(r.amount))}`)
       })
       divider()
-      row(`Итого ${sectionLabel(sec)}`, `${fmt(secTotal)} ₸`, { bold: true })
+      row(`Итого ${sectionLabel(sec)}`, `${money(secTotal)}`, { bold: true })
       y += 2
     })
 
@@ -644,7 +644,7 @@ export default function DailyReportPage() {
     setBold(11)
     doc.text('ИТОГО РАСХОДОВ', L + 4, y)
     doc.setTextColor(220, 53, 69)
-    doc.text(`${fmt(totalWithdrawals)} ₸`, R - 2, y, { align: 'right' })
+    doc.text(`${money(totalWithdrawals)}`, R - 2, y, { align: 'right' })
     doc.setTextColor(30)
     y += 8
 
@@ -652,12 +652,12 @@ export default function DailyReportPage() {
     checkPage(80)
     sectionHeader('КАССА', [59, 130, 246])
 
-    row('Остаток на начало', `${fmt(num(cashStart))} ₸`)
-    row('+ Наличные продажи', `${fmt(cashSales)} ₸`, { color: [34, 139, 34] })
-    row('− Расходы наличными', `${fmt(totalWithdrawals)} ₸`, { color: [220, 53, 69] })
+    row('Остаток на начало', `${money(num(cashStart))}`)
+    row('+ Наличные продажи', `${money(cashSales)}`, { color: [34, 139, 34] })
+    row('− Расходы наличными', `${money(totalWithdrawals)}`, { color: [220, 53, 69] })
     divider()
-    row('Ожидаемый остаток', `${fmt(cashExpected)} ₸`, { bold: true, color: [59, 130, 246] })
-    row('Фактический остаток', `${fmt(num(cashEnd))} ₸`, { bold: true, color: [34, 139, 34] })
+    row('Ожидаемый остаток', `${money(cashExpected)}`, { bold: true, color: [59, 130, 246] })
+    row('Фактический остаток', `${money(num(cashEnd))}`, { bold: true, color: [34, 139, 34] })
     boldDivider()
 
     if (discrepancy === 0) {
@@ -666,18 +666,18 @@ export default function DailyReportPage() {
     } else if (Math.abs(discrepancy) <= THRESHOLDS.cashDiscrepancy) {
       setBold(12); doc.setTextColor(245, 158, 11)
       doc.text('РАСХОЖДЕНИЕ', L + 4, y)
-      doc.text(`${discrepancy > 0 ? '+' : ''}${fmt(discrepancy)} ₸`, R - 2, y, { align: 'right' })
+      doc.text(`${discrepancy > 0 ? '+' : ''}${money(discrepancy)}`, R - 2, y, { align: 'right' })
     } else {
       setBold(12); doc.setTextColor(220, 53, 69)
       doc.text('РАСХОЖДЕНИЕ', L + 4, y)
-      doc.text(`${discrepancy > 0 ? '+' : ''}${fmt(discrepancy)} ₸`, R - 2, y, { align: 'right' })
+      doc.text(`${discrepancy > 0 ? '+' : ''}${money(discrepancy)}`, R - 2, y, { align: 'right' })
     }
     doc.setTextColor(30)
     y += 8
 
     // ── FOOTER on every page ──
     const totalPages = doc.getNumberOfPages()
-    const generated = `Сформирован: ${new Date().toLocaleString('ru-RU')}`
+    const generated = `Сформирован: ${new Date().toLocaleString(locale())}`
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i)
       doc.setFont('Roboto', 'normal'); doc.setFontSize(8); doc.setTextColor(150)
@@ -691,29 +691,29 @@ export default function DailyReportPage() {
 
   const buildWhatsAppText = () => {
     let text = `📊 ${documentTitle(`Отчёт за ${date}`)}\n👤 ${profile?.full_name}\n\n`
-    text += `💰 Выручка по отделам: ${fmt(totalDeptRevenue)} ₸\n`
-    departments.forEach(d => { if (num(d.amount)) text += `  ${d.name}: ${fmt(num(d.amount))} ₸\n` })
-    text += `💰 По типам оплат: ${fmt(totalRevenue)} ₸\n`
+    text += `💰 Выручка по отделам: ${money(totalDeptRevenue)}\n`
+    departments.forEach(d => { if (num(d.amount)) text += `  ${d.name}: ${money(num(d.amount))}\n` })
+    text += `💰 По типам оплат: ${money(totalRevenue)}\n`
     if (terminalAccounts.length > 0 && Object.values(terminals).some(v => num(v) > 0)) {
       text += `\n📱 Терминалы:\n`
       Object.entries(terminalsByParent).forEach(([parentId, group]) => {
         const parent = allAccounts.find(a => a.id === Number(parentId))
         group.accounts.forEach(ta => {
-          if (num(terminals[ta.id]) > 0) text += `  ${ta.name}: ${fmt(num(terminals[ta.id]))} ₸\n`
+          if (num(terminals[ta.id]) > 0) text += `  ${ta.name}: ${money(num(terminals[ta.id]))}\n`
         })
-        text += `  Итого (${parent?.name || '?'}): ${fmt(group.total)} ₸\n`
+        text += `  Итого (${parent?.name || '?'}): ${money(group.total)}\n`
       })
     }
-    text += `\n📤 Расходы: ${fmt(totalWithdrawals)} ₸\n`
-    text += `💵 Касса начало: ${fmt(num(cashStart))} ₸\n`
-    text += `💵 Касса конец: ${fmt(num(cashEnd))} ₸\n`
-    text += `💵 Ожидаемый: ${fmt(cashExpected)} ₸\n`
+    text += `\n📤 Расходы: ${money(totalWithdrawals)}\n`
+    text += `💵 Касса начало: ${money(num(cashStart))}\n`
+    text += `💵 Касса конец: ${money(num(cashEnd))}\n`
+    text += `💵 Ожидаемый: ${money(cashExpected)}\n`
     if (discrepancy === 0) {
       text += `✅ Расхождений нет`
     } else if (Math.abs(discrepancy) <= THRESHOLDS.cashDiscrepancy) {
-      text += `⚠️ Расхождение: ${fmt(discrepancy)} ₸`
+      text += `⚠️ Расхождение: ${money(discrepancy)}`
     } else {
-      text += `🚨 Расхождение: ${fmt(discrepancy)} ₸`
+      text += `🚨 Расхождение: ${money(discrepancy)}`
     }
     text += `\n\n📎 PDF отчёт скачан — прикрепите файл к сообщению`
     return text
@@ -808,7 +808,7 @@ export default function DailyReportPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium flex flex-wrap items-center gap-2">
-                        {new Date(r.report_date + 'T12:00:00').toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                        {new Date(r.report_date + 'T12:00:00').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
                         {isDraft ? (
                           <span className="badge badge-yellow text-[10px] flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> Черновик</span>
                         ) : (
@@ -820,17 +820,17 @@ export default function DailyReportPage() {
                   </button>
                   <div className="flex items-center gap-3 sm:gap-6 w-full sm:w-auto justify-between sm:justify-end pl-[52px] sm:pl-0 shrink-0">
                     <div className="text-right">
-                      <div className="text-sm font-mono font-semibold text-green-400">{fmt(r.total_revenue || 0)} ₸</div>
+                      <div className="text-sm font-mono font-semibold text-green-400">{money(r.total_revenue || 0)}</div>
                       <div className="text-[10px] text-slate-500">выручка</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-mono text-red-400">{fmt(r.total_withdrawals || 0)} ₸</div>
+                      <div className="text-sm font-mono text-red-400">{money(r.total_withdrawals || 0)}</div>
                       <div className="text-[10px] text-slate-500">расходы</div>
                     </div>
                     {hasDisc && !isDraft && (
                       <div className="text-right">
                         <div className="text-sm font-mono font-bold text-red-400 flex items-center gap-1">
-                          <AlertTriangle className="w-3.5 h-3.5" />{fmt(disc)} ₸
+                          <AlertTriangle className="w-3.5 h-3.5" />{money(disc)}
                         </div>
                         <div className="text-[10px] text-red-500">расхождение</div>
                       </div>
@@ -883,7 +883,7 @@ export default function DailyReportPage() {
           )}
           {lastSaved && (
             <span className="text-[10px] text-slate-500">
-              Сохранено {lastSaved.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+              Сохранено {lastSaved.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
           <input type="date" value={date} onChange={e => { if (!isLocked) setDate(e.target.value) }} disabled={isLocked}
@@ -939,7 +939,7 @@ export default function DailyReportPage() {
           </div>
           <div className="flex items-center justify-between pt-3 mt-3 border-t border-green-500/20">
             <span className="text-sm font-bold">Итого по отделам</span>
-            <span className="text-lg font-mono font-bold">{fmt(totalDeptRevenue)} ₸</span>
+            <span className="text-lg font-mono font-bold">{money(totalDeptRevenue)}</span>
           </div>
         </div>
 
@@ -948,7 +948,7 @@ export default function DailyReportPage() {
           <h3 className="text-sm font-display font-bold text-green-300 mb-3">Доходы по типам оплат</h3>
           <div className="space-y-2">
             <div className="hidden sm:grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
-              <div className="col-span-4">Тип оплаты</div><div className="col-span-4 text-right">Сумма (₸)</div>
+              <div className="col-span-4">Тип оплаты</div><div className="col-span-4 text-right">Сумма ({currencySymbol()})</div>
               <div className="col-span-2 text-right">Чеков</div><div className="col-span-2 text-right">Ср. чек</div>
             </div>
             {revenue.map((r, i) => (
@@ -973,7 +973,7 @@ export default function DailyReportPage() {
             ))}
             <div className="flex items-center justify-between pt-3 border-t border-green-500/20">
               <span className="text-sm font-bold">Итого по типам оплат</span>
-              <span className="text-lg font-mono font-bold">{fmt(totalRevenue)} ₸</span>
+              <span className="text-lg font-mono font-bold">{money(totalRevenue)}</span>
             </div>
           </div>
         </div>
@@ -982,13 +982,13 @@ export default function DailyReportPage() {
         {(totalRevenue > 0 || totalDeptRevenue > 0) && (
           <div className={cn('card border', revenueDiscrepancy !== 0 ? 'border-red-500/30 bg-red-500/5' : 'border-green-500/30 bg-green-500/5')}>
             <div className="space-y-1.5 text-sm">
-              <div className="flex justify-between"><span className="text-slate-400">Итого по отделам</span><span className="font-mono">{fmt(totalDeptRevenue)} ₸</span></div>
-              <div className="flex justify-between"><span className="text-slate-400">Итого по типам оплат</span><span className="font-mono">{fmt(totalRevenue)} ₸</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Итого по отделам</span><span className="font-mono">{money(totalDeptRevenue)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Итого по типам оплат</span><span className="font-mono">{money(totalRevenue)}</span></div>
               <div className="h-px bg-slate-700 my-1" />
               {revenueDiscrepancy !== 0 ? (
                 <div className="flex items-center justify-between text-red-400 font-bold">
                   <span className="flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> Расхождение выручки</span>
-                  <span className="font-mono">{fmt(revenueDiscrepancy)} ₸</span>
+                  <span className="font-mono">{money(revenueDiscrepancy)}</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5 text-green-400 font-bold">
@@ -1032,13 +1032,13 @@ export default function DailyReportPage() {
                   </div>
                   <div className="flex items-center justify-between pt-2 mt-2 border-t border-orange-500/20">
                     <span className="text-sm font-bold">Итого {parent?.name || ''}</span>
-                    <span className="text-sm font-mono font-bold">{fmt(group.total)} ₸</span>
+                    <span className="text-sm font-mono font-bold">{money(group.total)}</span>
                   </div>
                   {isLastForPt && terminalDiscrepancy !== null && (
                     <div className={cn('flex items-center justify-between mt-1 text-xs',
                       terminalDiscrepancy === 0 ? 'text-green-400' : 'text-red-400')}>
                       <span>{terminalDiscrepancy === 0 ? '✅ Сходится с «' : '⚠️ Расхождение с «'}{matchingPaymentType?.type || '?'}»</span>
-                      {terminalDiscrepancy !== 0 && <span className="font-mono font-bold">{terminalDiscrepancy > 0 ? '+' : ''}{fmt(terminalDiscrepancy)} ₸</span>}
+                      {terminalDiscrepancy !== 0 && <span className="font-mono font-bold">{terminalDiscrepancy > 0 ? '+' : ''}{money(terminalDiscrepancy)}</span>}
                     </div>
                   )}
                 </div>
@@ -1066,7 +1066,7 @@ export default function DailyReportPage() {
               <button onClick={() => setExpanded(prev => ({ ...prev, [sec.key]: !prev[sec.key] }))} className="flex items-center justify-between w-full text-left">
                 <div className="flex items-center gap-2">
                   <span>{sec.icon}</span><h3 className="text-sm font-display font-bold">{sectionLabel(sec)}</h3>
-                  {total > 0 && <span className="badge-yellow">{fmt(total)} ₸</span>}
+                  {total > 0 && <span className="badge-yellow">{money(total)}</span>}
                 </div>
                 {isOpen ? <ChevronDown className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
               </button>
@@ -1075,7 +1075,7 @@ export default function DailyReportPage() {
                   {isCashW ? (
                     <>
                       <div className="hidden sm:grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
-                        <div className="col-span-4 text-right">Сумма (₸)</div>
+                        <div className="col-span-4 text-right">Сумма ({currencySymbol()})</div>
                         <div className="col-span-7">Комментарий</div>
                         <div className="col-span-1" />
                       </div>
@@ -1099,7 +1099,7 @@ export default function DailyReportPage() {
                     <>
                       <div className="hidden sm:grid grid-cols-12 gap-2 text-[11px] font-medium text-slate-500 uppercase px-1">
                         <div className="col-span-5">{isPayroll ? 'Сотрудник' : 'Поставщик'}</div>
-                        <div className="col-span-3 text-right">Сумма (₸)</div>
+                        <div className="col-span-3 text-right">Сумма ({currencySymbol()})</div>
                         <div className="col-span-3">Комментарий</div><div className="col-span-1" />
                       </div>
                       {withdrawals[sec.key].map((row, idx) => (
@@ -1120,7 +1120,7 @@ export default function DailyReportPage() {
                       {!isFixed && !isLocked && <button onClick={() => addRow(sec.key)} className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 mt-2 px-1"><Plus className="w-3.5 h-3.5" /> Добавить строку</button>}
                     </>
                   )}
-                  <div className="flex justify-end pt-2 border-t border-slate-800"><span className="text-sm font-semibold font-mono">{fmt(total)} ₸</span></div>
+                  <div className="flex justify-end pt-2 border-t border-slate-800"><span className="text-sm font-semibold font-mono">{money(total)}</span></div>
                 </div>
               )}
             </div>
@@ -1131,7 +1131,7 @@ export default function DailyReportPage() {
         <div className="card bg-red-500/5 border-red-500/20">
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold text-red-400">ИТОГО РАСХОДОВ</span>
-            <span className="text-lg font-mono font-bold text-red-400">{fmt(totalWithdrawals)} ₸</span>
+            <span className="text-lg font-mono font-bold text-red-400">{money(totalWithdrawals)}</span>
           </div>
         </div>
       </div>
@@ -1155,17 +1155,17 @@ export default function DailyReportPage() {
           {/* Сверка кассы */}
           <div className="pt-4 border-t border-blue-500/20 space-y-2 text-sm">
             <div className="text-xs font-semibold text-slate-500 uppercase mb-2">Сверка кассы</div>
-            <div className="flex justify-between"><span className="text-slate-400">Остаток на начало</span><span className="font-mono">{fmt(num(cashStart))} ₸</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">+ Наличные продажи</span><span className="font-mono text-green-400">{fmt(cashSales)} ₸</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">− Расходы наличными</span><span className="font-mono text-red-400">{fmt(totalWithdrawals)} ₸</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Остаток на начало</span><span className="font-mono">{money(num(cashStart))}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">+ Наличные продажи</span><span className="font-mono text-green-400">{money(cashSales)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">− Расходы наличными</span><span className="font-mono text-red-400">{money(totalWithdrawals)}</span></div>
             <div className="h-px bg-slate-700 my-2" />
-            <div className="flex justify-between font-bold"><span>Ожидаемый остаток</span><span className="font-mono text-blue-400">{fmt(cashExpected)} ₸</span></div>
-            <div className="flex justify-between font-bold"><span>Фактический остаток</span><span className="font-mono text-green-400">{fmt(num(cashEnd))} ₸</span></div>
+            <div className="flex justify-between font-bold"><span>Ожидаемый остаток</span><span className="font-mono text-blue-400">{money(cashExpected)}</span></div>
+            <div className="flex justify-between font-bold"><span>Фактический остаток</span><span className="font-mono text-green-400">{money(num(cashEnd))}</span></div>
             <div className="h-px bg-slate-700 my-2" />
             <div className={cn('flex justify-between text-lg font-bold',
               Math.abs(discrepancy) <= THRESHOLDS.cashDiscrepancy ? 'text-green-400' : 'text-red-400')}>
               <span>{Math.abs(discrepancy) <= THRESHOLDS.cashDiscrepancy ? '✅ Расхождений нет' : '⚠️ Расхождение'}</span>
-              {discrepancy !== 0 && <span className="font-mono">{discrepancy > 0 ? '+' : ''}{fmt(discrepancy)} ₸</span>}
+              {discrepancy !== 0 && <span className="font-mono">{discrepancy > 0 ? '+' : ''}{money(discrepancy)}</span>}
             </div>
           </div>
         </div>

@@ -2,11 +2,11 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchAll } from '@/lib/fetchAll'
 import { useAuthStore } from '@/lib/store'
-import { cn, fmt, fmtK, MONTHS_RU } from '@/lib/utils'
+import { cn, fmt, fmtK, MONTHS_RU, money } from '@/lib/utils'
 import { yearsRange } from '@/lib/dates'
 import { ChevronDown, ChevronRight, ChevronsUpDown, Info, FileText, Upload, Wallet } from 'lucide-react'
 import { cashPayrollOf } from '@/lib/reconcile'
-import { isCapexRow, PAYROLL_CATEGORIES } from '@/lib/config'
+import { isCapexRow, PAYROLL_CATEGORIES, currencySymbol } from '@/lib/config'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const CURRENT_MONTH = new Date().getMonth() + 1
@@ -406,12 +406,12 @@ export default function CashFlowPage() {
     : values
 
   const fmtM = (v) => {
-    if (!v) return '0 ₸'
+    if (!v) return `0 ${currencySymbol()}`
     const abs = Math.abs(v)
     const sign = v < 0 ? '-' : '+'
-    if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(1)}М ₸`
-    if (abs >= 1e3) return `${sign}${(abs / 1e3).toFixed(0)}К ₸`
-    return `${sign}${fmt(abs)} ₸`
+    if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(1)}М {currencySymbol()}`
+    if (abs >= 1e3) return `${sign}${(abs / 1e3).toFixed(0)}К ${currencySymbol()}`
+    return `${sign}${money(abs)}`
   }
 
   const fmtCF = (v) => {
@@ -495,7 +495,7 @@ export default function CashFlowPage() {
               return (
                 <div key={line.key} className={cn('flex items-center justify-between px-4 py-3', val >= 0 ? 'bg-green-500/5' : 'bg-red-500/5')}>
                   <span className="text-sm font-display font-bold">{line.label}</span>
-                  <span className={cn('font-mono text-base font-bold', colorCF(val))}>{fmtCF(val)} ₸</span>
+                  <span className={cn('font-mono text-base font-bold', colorCF(val))}>{fmtCF(val)}</span>
                 </div>
               )
             }
@@ -511,7 +511,7 @@ export default function CashFlowPage() {
                     {collapsed[line.key] ? <ChevronRight className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
                     <span className={cn('text-sm font-bold', sectionColor)}>{line.label}</span>
                   </div>
-                  <span className={cn('font-mono text-sm font-bold', sectionColor)}>{fmtCF(val)} ₸</span>
+                  <span className={cn('font-mono text-sm font-bold', sectionColor)}>{fmtCF(val)}</span>
                 </button>
               )
             }
@@ -524,7 +524,7 @@ export default function CashFlowPage() {
                     {collapsed[line.key] ? <ChevronRight className="w-3.5 h-3.5 text-slate-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />}
                     <span className="text-sm font-semibold text-slate-300">{line.label}</span>
                   </div>
-                  <span className={cn('font-mono text-sm font-semibold', colorCF(val))}>{fmtCF(val)} ₸</span>
+                  <span className={cn('font-mono text-sm font-semibold', colorCF(val))}>{fmtCF(val)}</span>
                 </button>
               )
             }
@@ -534,7 +534,7 @@ export default function CashFlowPage() {
             return (
               <div key={line.key} className={cn('flex items-center justify-between px-4 py-2', padClass)}>
                 <span className="text-sm text-slate-400">{line.label}</span>
-                <span className={cn('font-mono text-sm', colorCF(val))}>{fmtCF(val)} ₸</span>
+                <span className={cn('font-mono text-sm', colorCF(val))}>{fmtCF(val)}</span>
               </div>
             )
           })}

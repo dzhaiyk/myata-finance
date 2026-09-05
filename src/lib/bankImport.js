@@ -11,6 +11,7 @@
 
 import { parseBankStatement, parseStatementBalances } from './categorize.js'
 import { checkStatementFreshness } from './reconcile.js'
+import { money } from './utils.js'
 
 // Хеш для дедупликации — по КАЛЕНДАРНОЙ дате (dateRaw), а не по операционной:
 // иначе уже загруженные строки при повторном импорте становятся «новыми».
@@ -220,7 +221,7 @@ export async function commitImport(supabase, rows, { reviewNote = null } = {}) {
 export function balanceReviewNote(balanceCheck, fileName = '') {
   if (!balanceCheck || balanceCheck.ok) return null
   const delta = Math.round(balanceCheck.delta)
-  return `Остатки в файле не сошлись на ${delta.toLocaleString('ru-RU')} ₸ (${fileName || 'файл'})`
+  return `Остатки в файле не сошлись на ${money(delta)} (${fileName || 'файл'})`
 }
 
 export function summarizeImport(rows) {

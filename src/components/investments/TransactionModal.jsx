@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, amountInput } from '@/lib/utils'
 import { getBusinessDate } from '@/lib/dates'
+import { currencySymbol } from '@/lib/config'
 
 const TYPE_OPTIONS = [
   { value: 'investment', label: 'Внесение' },
@@ -27,7 +28,7 @@ export default function TransactionModal({ open, onClose, onSave, investors, edi
         transaction_date: editTx.transaction_date || today(),
         investor_id: editTx.investor_id || '',
         type: editTx.type || 'investment',
-        amount: editTx.amount != null ? String(editTx.amount).replace('.', ',') : '',
+        amount: editTx.amount != null ? amountInput(editTx.amount) : '',
         notes: editTx.notes || '',
       })
     } else {
@@ -46,7 +47,7 @@ export default function TransactionModal({ open, onClose, onSave, investors, edi
   const activeInvestors = (investors || []).filter(i => i.status === 'active')
 
   const handleAmountChange = (e) => {
-    const val = e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',')
+    const val = amountInput(e.target.value)
     setForm(f => ({ ...f, amount: val }))
   }
 
@@ -115,7 +116,7 @@ export default function TransactionModal({ open, onClose, onSave, investors, edi
           </div>
 
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Сумма, ₸</label>
+            <label className="block text-sm text-slate-400 mb-1">Сумма, {currencySymbol()}</label>
             <input
               type="text"
               className="input w-full"

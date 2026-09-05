@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
-import { cn, fmt } from '@/lib/utils'
+import { cn, fmt, money } from '@/lib/utils'
 import { stageStatement, commitImport } from '@/lib/bankImport'
 import { getCutoffHour, yearsRange } from '@/lib/dates'
 import { Upload, Trash2, Settings, Plus, X, Save, Calendar, Pencil, Check, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
@@ -716,8 +716,8 @@ export default function BankImportPage() {
               {stagedMeta.balanceCheck ? (
                 <p className={cn('text-xs mt-1', stagedMeta.balanceCheck.ok ? 'text-green-400' : 'text-red-400')}>
                   {stagedMeta.balanceCheck.ok
-                    ? `✅ Выписка полная: ${fmt(stagedMeta.balanceCheck.opening)} + обороты = ${fmt(stagedMeta.balanceCheck.closing)} ₸`
-                    : `⚠️ Выписка неполная! Расхождение ${fmt(stagedMeta.balanceCheck.delta)} ₸ (остаток начала ${fmt(stagedMeta.balanceCheck.opening)}, конца ${fmt(stagedMeta.balanceCheck.closing)}). Файл обрезан или изменён — проверьте перед сохранением.`}
+                    ? `✅ Выписка полная: ${fmt(stagedMeta.balanceCheck.opening)} + обороты = ${money(stagedMeta.balanceCheck.closing)}`
+                    : `⚠️ Выписка неполная! Расхождение ${money(stagedMeta.balanceCheck.delta)} (остаток начала ${fmt(stagedMeta.balanceCheck.opening)}, конца ${fmt(stagedMeta.balanceCheck.closing)}). Файл обрезан или изменён — проверьте перед сохранением.`}
                 </p>
               ) : (
                 <p className="text-xs text-slate-600 mt-1">Остатки в шапке файла не найдены — полнота выписки не проверена</p>
@@ -777,7 +777,7 @@ export default function BankImportPage() {
                 </td>
                       <td className="table-cell text-xs max-w-[200px] truncate text-slate-500" title={tx.purpose}>{tx.purpose || '—'}</td>
                       <td className={cn('table-cell text-right font-mono text-xs font-semibold', tx.is_debit ? 'text-red-400' : 'text-green-400')}>
-                        {tx.is_debit ? '-' : '+'}{fmt(tx.amount)} ₸
+                        {tx.is_debit ? '-' : '+'}{money(tx.amount)}
                       </td>
                       <td className="table-cell text-center">
                         <PeriodEditor tx={{ ...tx, transaction_date: tx.transaction_date }} onSave={(_, from, to) => updateStagedPeriod(tx._idx, from, to)} disabled={false} />
@@ -840,7 +840,7 @@ export default function BankImportPage() {
                 </td>
                 <td className="table-cell text-xs max-w-[200px] truncate text-slate-500" title={tx.purpose}>{tx.purpose || '—'}</td>
                 <td className={cn('table-cell text-right font-mono text-xs font-semibold', tx.is_debit ? 'text-red-400' : 'text-green-400')}>
-                  {tx.is_debit ? '-' : '+'}{fmt(tx.amount)} ₸
+                  {tx.is_debit ? '-' : '+'}{money(tx.amount)}
                 </td>
                 <td className="table-cell text-center">
                   <PeriodEditor tx={tx} onSave={updatePeriod} disabled={!canManage} />

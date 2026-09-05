@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchAll } from '@/lib/fetchAll'
 import { useAuthStore } from '@/lib/store'
-import { cn, fmt, MONTHS_RU } from '@/lib/utils'
+import { cn, fmt, MONTHS_RU, money, amountInput } from '@/lib/utils'
 import { yearsRange } from '@/lib/dates'
 import { Plus, HandCoins, Users, List, BarChart3, Trash2, Pencil } from 'lucide-react'
 import TransactionModal from '@/components/investments/TransactionModal'
@@ -10,6 +10,7 @@ import BulkOperationModal from '@/components/investments/BulkOperationModal'
 import ShareTransferModal from '@/components/investments/ShareTransferModal'
 import InvestorCard from '@/components/investments/InvestorCard'
 import YearlyBreakdownTable from '@/components/investments/YearlyBreakdownTable'
+import { currencySymbol, locale } from '@/lib/config'
 
 const TABS = [
   { key: 'dashboard', label: 'Дашборд', icon: BarChart3 },
@@ -100,7 +101,7 @@ function AvgMonthlyDividends({ investors, transactions }) {
                 <td className="table-cell font-medium text-white">{r.full_name}</td>
                 {DIVIDEND_YEARS.map(y => (
                   <td key={y} className="table-cell text-right font-mono text-sm" style={getColor(r.yearData[y], data.maxPerYear[y])}>
-                    {r.yearData[y] ? `${fmt(r.yearData[y])} ₸/мес` : '—'}
+                    {r.yearData[y] ? `${money(r.yearData[y])}/мес` : '—'}
                   </td>
                 ))}
               </tr>
@@ -109,7 +110,7 @@ function AvgMonthlyDividends({ investors, transactions }) {
               <td className="table-cell font-bold text-white">ИТОГО</td>
               {DIVIDEND_YEARS.map(y => (
                 <td key={y} className="table-cell text-right font-mono text-sm font-bold text-slate-200">
-                  {data.totals[y] ? `${fmt(data.totals[y])} ₸/мес` : '—'}
+                  {data.totals[y] ? `${money(data.totals[y])}/мес` : '—'}
                 </td>
               ))}
             </tr>
@@ -352,16 +353,16 @@ export default function InvestmentsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="card">
               <p className="stat-label">Всего вложено</p>
-              <p className="stat-value text-green-400">{(totalInvested / 1e6).toFixed(1)}М ₸</p>
+              <p className="stat-value text-green-400">{(totalInvested / 1e6).toFixed(1)}М {currencySymbol()}</p>
             </div>
             <div className="card">
               <p className="stat-label">Всего выведено</p>
-              <p className="stat-value text-blue-400">{(totalWithdrawn / 1e6).toFixed(1)}М ₸</p>
+              <p className="stat-value text-blue-400">{(totalWithdrawn / 1e6).toFixed(1)}М {currencySymbol()}</p>
             </div>
             <div className="card">
               <p className="stat-label">Прибыль</p>
               <p className={cn('stat-value', totalProfit >= 0 ? 'text-green-400' : 'text-red-400')}>
-                {(totalProfit / 1e6).toFixed(1)}М ₸
+                {(totalProfit / 1e6).toFixed(1)}М {currencySymbol()}
               </p>
             </div>
             <div className="card">
@@ -502,7 +503,7 @@ export default function InvestmentsPage() {
                   {pagedTx.map(tx => (
                     <tr key={tx.id} className="hover:bg-slate-800/50">
                       <td className="table-cell text-slate-300 font-mono text-xs">
-                        {tx.transaction_date ? new Date(tx.transaction_date).toLocaleDateString('ru-RU') : '—'}
+                        {tx.transaction_date ? new Date(tx.transaction_date).toLocaleDateString(locale()) : '—'}
                       </td>
                       <td className="table-cell text-white">{tx.investors?.full_name || '—'}</td>
                       <td className="table-cell">
@@ -510,7 +511,7 @@ export default function InvestmentsPage() {
                           {TX_TYPE_LABELS[tx.type] || tx.type}
                         </span>
                       </td>
-                      <td className="table-cell text-right font-mono text-slate-200">{fmt(tx.amount)} ₸</td>
+                      <td className="table-cell text-right font-mono text-slate-200">{money(tx.amount)}</td>
                       <td className="table-cell text-slate-400 text-sm max-w-xs truncate">{tx.note || '—'}</td>
                       {canManage && (
                         <td className="table-cell text-center">
@@ -598,7 +599,7 @@ export default function InvestmentsPage() {
                 <div>
                   <label className="label">Доля (%)</label>
                   <input value={investorForm.share_pct} inputMode="decimal"
-                    onChange={e => setInvestorForm({ ...investorForm, share_pct: e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',') })}
+                    onChange={e => setInvestorForm({ ...investorForm, share_pct: amountInput(e.target.value) })}
                     className="input text-sm w-24" placeholder="25" />
                 </div>
                 <div>

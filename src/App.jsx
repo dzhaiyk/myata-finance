@@ -18,7 +18,7 @@ import AccountsPage from '@/pages/AccountsPage'
 import InvestmentsPage from '@/pages/InvestmentsPage'
 import AnalyticsPage from '@/pages/AnalyticsPage'
 import ControlPage from '@/pages/ControlPage'
-import { appTitle } from '@/lib/config'
+import { appTitle, locale } from '@/lib/config'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuthStore()
@@ -42,6 +42,8 @@ export default function App() {
   // Заголовок вкладки — из настроек: в index.html названия заведения нет (ADR-0010)
   useEffect(() => {
     document.title = appTitle()
+    // язык документа — из локали: в index.html он был жёстко «ru»
+    document.documentElement.lang = String(locale()).split('-')[0]
   }, [branding])
 
   return (

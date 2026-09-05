@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchAll } from '@/lib/fetchAll'
-import { fmt, fmtK, fmtPct, MONTHS_RU } from '@/lib/utils'
+import { fmt, fmtK, fmtPct, MONTHS_RU, money } from '@/lib/utils'
 import { bankTxRangeFilter } from '@/lib/pnl'
 import { yearsRange } from '@/lib/dates'
 import { sumMonths } from '@/lib/pnlCompute'
-import { foodCostLevel, marginLevel, THRESHOLDS, departmentLabel, venueName } from '@/lib/config'
+import { foodCostLevel, marginLevel, THRESHOLDS, departmentLabel, venueName, currencySymbol, locale } from '@/lib/config'
 import { DollarSign, TrendingDown, ShoppingCart, CirclePercent, AlertTriangle, FileText, Trophy, CalendarDays } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts'
 
@@ -26,7 +26,7 @@ const PieWithLegend = ({ title, data, total }) => (
             <Pie data={data} cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={3} dataKey="value">
               {data.map((d, i) => <Cell key={i} fill={d.color} />)}
             </Pie>
-            <Tooltip formatter={(v) => [fmt(v) + ' ₸']} contentStyle={{ background: '#172033', border: '1px solid #293548', borderRadius: 12, fontSize: 12 }} />
+            <Tooltip formatter={(v) => [money(v)]} contentStyle={{ background: '#172033', border: '1px solid #293548', borderRadius: 12, fontSize: 12 }} />
           </PieChart>
         </ResponsiveContainer>
       </div>
@@ -236,7 +236,7 @@ export default function DashboardPage() {
             <div className="stat-label">Доходы</div>
             <DollarSign className="w-4 h-4 text-green-500" />
           </div>
-          <div className="stat-value text-green-400">{(pnl.revenue / 1e6).toFixed(1)}М ₸</div>
+          <div className="stat-value text-green-400">{(pnl.revenue / 1e6).toFixed(1)}М {currencySymbol()}</div>
           <div className="text-xs text-slate-500 mt-2">{completedReports.length} отчётов</div>
         </div>
 
@@ -245,7 +245,7 @@ export default function DashboardPage() {
             <div className="stat-label">Расходы</div>
             <TrendingDown className="w-4 h-4 text-red-500" />
           </div>
-          <div className="stat-value text-red-400">{(pnl.expenses / 1e6).toFixed(1)}М ₸</div>
+          <div className="stat-value text-red-400">{(pnl.expenses / 1e6).toFixed(1)}М {currencySymbol()}</div>
           <div className="text-xs text-slate-500 mt-2">OpEx + CapEx</div>
         </div>
 
@@ -257,7 +257,7 @@ export default function DashboardPage() {
           <div className={`stat-value ${fcColor === 'green' ? 'text-green-400' : fcColor === 'yellow' ? 'text-yellow-400' : 'text-red-400'}`}>
             {fcPct > 0 ? fmtPct(fcPct) : '—'}
           </div>
-          <div className="text-xs text-slate-500 mt-2">{fcTotal > 0 ? fmtK(fcTotal) + ' ₸' : 'Нет данных'}</div>
+          <div className="text-xs text-slate-500 mt-2">{fcTotal > 0 ? fmtK(fcTotal) + ' ' + currencySymbol() : 'Нет данных'}</div>
         </div>
 
         <div className={`card-hover bg-gradient-to-br ${marginColor === 'green' ? 'from-green-500/20 to-green-600/5 border-green-500/20' : marginColor === 'yellow' ? 'from-yellow-500/20 to-yellow-600/5 border-yellow-500/20' : 'from-red-500/20 to-red-600/5 border-red-500/20'}`}>
@@ -268,7 +268,7 @@ export default function DashboardPage() {
           <div className={`stat-value ${marginColor === 'green' ? 'text-green-400' : marginColor === 'yellow' ? 'text-yellow-400' : 'text-red-400'}`}>
             {pnl.revenue > 0 ? fmtPct(opMargin) : '—'}
           </div>
-          <div className="text-xs text-slate-500 mt-2">{pnl.revenue > 0 ? fmtK(pnl.op_profit) + ' ₸ прибыль' : 'Нет данных'}</div>
+          <div className="text-xs text-slate-500 mt-2">{pnl.revenue > 0 ? fmtK(pnl.op_profit) + ' ' + currencySymbol() + ' прибыль' : 'Нет данных'}</div>
         </div>
       </div>
 
@@ -281,7 +281,7 @@ export default function DashboardPage() {
             <XAxis dataKey="month" tick={{ fill: '#64748b', fontSize: 11 }} />
             <YAxis tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={v => fmtM(v)} />
             <Tooltip contentStyle={{ background: '#172033', border: '1px solid #293548', borderRadius: 12, fontSize: 12 }}
-              formatter={(v) => [fmt(v) + ' ₸']} labelStyle={{ color: '#94a3b8' }} />
+              formatter={(v) => [money(v)]} labelStyle={{ color: '#94a3b8' }} />
             <Bar dataKey="revenue" fill="#22c55e" radius={[4, 4, 0, 0]} name="Доходы">
               <LabelList dataKey="revenue" position="top" formatter={fmtM} style={{ fill: '#86efac', fontSize: 10, fontFamily: 'JetBrains Mono' }} />
             </Bar>
@@ -310,18 +310,18 @@ export default function DashboardPage() {
             {bestDay && (
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
                 <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Лучшая смена</div>
-                <div className="text-lg font-mono font-bold text-yellow-400">{fmt(bestDay.total_revenue)} ₸</div>
+                <div className="text-lg font-mono font-bold text-yellow-400">{money(bestDay.total_revenue)}</div>
                 <div className="text-xs text-slate-500 mt-1">
-                  {new Date(bestDay.report_date + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric', weekday: 'short' })}
+                  {new Date(bestDay.report_date + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric', weekday: 'short' })}
                 </div>
               </div>
             )}
             {bestWeek && (
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
                 <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Лучшая средняя за неделю</div>
-                <div className="text-lg font-mono font-bold text-green-400">{fmt(Math.round(bestWeek.avg))} ₸/день</div>
+                <div className="text-lg font-mono font-bold text-green-400">{money(Math.round(bestWeek.avg))}/день</div>
                 <div className="text-xs text-slate-500 mt-1">
-                  {new Date(bestWeek.from + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} – {new Date(bestWeek.to + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  {new Date(bestWeek.from + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' })} – {new Date(bestWeek.to + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' })}
                   <span className="text-slate-600 ml-1">({bestWeek.count} смен)</span>
                 </div>
               </div>
@@ -329,10 +329,10 @@ export default function DashboardPage() {
             {bestMonth && (
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
                 <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Лучшая средняя за месяц</div>
-                <div className="text-lg font-mono font-bold text-blue-400">{fmt(Math.round(bestMonth.avg))} ₸/день</div>
+                <div className="text-lg font-mono font-bold text-blue-400">{money(Math.round(bestMonth.avg))}/день</div>
                 <div className="text-xs text-slate-500 mt-1">
                   {fmtMonthLabel(bestMonth.key)}
-                  <span className="text-slate-600 ml-1">({bestMonth.count} смен, итого {fmtK(bestMonth.sum)} ₸)</span>
+                  <span className="text-slate-600 ml-1">({bestMonth.count} смен, итого {fmtK(bestMonth.sum)} {currencySymbol()})</span>
                 </div>
               </div>
             )}
@@ -346,7 +346,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2 mb-4">
             <CalendarDays className="w-4 h-4 text-brand-400" />
             <h3 className="text-sm font-semibold text-slate-300">Средняя выручка по дням недели</h3>
-            <span className="text-[10px] text-slate-600 ml-auto">за всё время ({allReports.length} смен) · медиана {fmt(median)} ₸</span>
+            <span className="text-[10px] text-slate-600 ml-auto">за всё время ({allReports.length} смен) · медиана {money(median)}</span>
           </div>
           <div className="grid grid-cols-7 gap-1 sm:gap-2">
             {weekdayStats.map(w => {
@@ -389,7 +389,7 @@ export default function DashboardPage() {
             {discrepancies.map(r => (
               <div key={r.id} className="flex items-center justify-between text-sm">
                 <span className="text-slate-400">{r.report_date} — {r.manager_name}</span>
-                <span className="font-mono text-red-400 font-semibold">{fmt(r.cash_discrepancy)} ₸</span>
+                <span className="font-mono text-red-400 font-semibold">{money(r.cash_discrepancy)}</span>
               </div>
             ))}
           </div>

@@ -2,11 +2,11 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchAll } from '@/lib/fetchAll'
 import { useAuthStore } from '@/lib/store'
-import { cn, fmt, fmtK, MONTHS_RU } from '@/lib/utils'
+import { cn, fmt, fmtK, MONTHS_RU, money } from '@/lib/utils'
 import { isPnlCategory } from '@/lib/categories'
 import { yearsRange } from '@/lib/dates'
 import { PNL_STRUCTURE, computeMonthValues, sumMonths, pnlLabel } from '@/lib/pnlCompute'
-import { foodCostLevel, marginLevel } from '@/lib/config'
+import { foodCostLevel, marginLevel, currencySymbol, locale } from '@/lib/config'
 import { ChevronDown, ChevronRight, Plus, Trash2, Info, FileText, Upload, ChevronsUpDown, Pencil, Save, AlertCircle } from 'lucide-react'
 
 // Цвет показателя по уровню из config: зелёный / жёлтый / красный (BR-RPT-018)
@@ -317,7 +317,7 @@ export default function PnLPage() {
         const kpiValues = (viewMode === 'year' || viewMode === 'overall')
           ? (multiPeriodData?.find(c => c.isTotal)?.values || {})
           : values
-        const fmtM = (v) => (v / 1e6).toFixed(1) + 'М ₸'
+        const fmtM = (v) => (v / 1e6).toFixed(1) + 'М ' + currencySymbol()
         const marginPct = kpiValues.revenue > 0 ? (kpiValues.op_profit / kpiValues.revenue * 100).toFixed(1) : 0
         const marginColor = LEVEL_CLASS[marginLevel(marginPct / 100)]
         return (
@@ -356,7 +356,7 @@ export default function PnLPage() {
               <div key={line.key} className={cn('flex items-center justify-between px-4 py-3', val >= 0 ? 'bg-green-500/5' : 'bg-red-500/5')}>
                 <span className="text-sm font-display font-bold">{pnlLabel(line)}</span>
                 <div className="flex items-center gap-4">
-                  <span className={cn('font-mono text-base font-bold', val >= 0 ? 'text-green-400' : 'text-red-400')}>{fmt(val)} ₸</span>
+                  <span className={cn('font-mono text-base font-bold', val >= 0 ? 'text-green-400' : 'text-red-400')}>{money(val)}</span>
                   <span className="text-[10px] text-slate-500 w-12 text-right">{pct(val)}</span>
                 </div>
               </div>
@@ -384,7 +384,7 @@ export default function PnLPage() {
                   <span className={cn('text-sm font-bold', color)}>{pnlLabel(line)}</span>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className={cn('font-mono text-sm font-bold', color)}>{fmt(val)} ₸</span>
+                  <span className={cn('font-mono text-sm font-bold', color)}>{money(val)}</span>
                   <span className="text-[10px] text-slate-500 w-12 text-right">{pct(val)}</span>
                 </div>
               </button>
@@ -399,7 +399,7 @@ export default function PnLPage() {
             <div key={line.key} className={cn('flex items-center justify-between px-4 py-2', leafPad)}>
               <span className="text-sm text-slate-400">{pnlLabel(line)}</span>
               <div className="flex items-center gap-3">
-                <span className="font-mono text-sm text-slate-300">{fmt(val)} ₸</span>
+                <span className="font-mono text-sm text-slate-300">{money(val)}</span>
                 {editMode && (
                   <input type="text" inputMode="numeric" value={adjVal}
                     onChange={e => setAdjEdits(prev => ({ ...prev, [line.key]: e.target.value.replace(/[^0-9-]/g, '') }))}
@@ -512,7 +512,7 @@ export default function PnLPage() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0 text-slate-600">
                     {a.created_by && <span>{a.created_by}</span>}
-                    {dt && <span>{dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })} {dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>}
+                    {dt && <span>{dt.toLocaleDateString(locale(), { day: '2-digit', month: '2-digit' })} {dt.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</span>}
                   </div>
                 </div>
               )

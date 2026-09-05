@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { ArrowRightLeft } from 'lucide-react'
-import { fmt, fmtDate, cn } from '@/lib/utils'
+import { fmt, fmtDate, cn, money } from '@/lib/utils'
 
 export default function InvestorCard({ investor, transactions, allInvestors, canManage, onTransfer }) {
   const stats = useMemo(() => {
@@ -72,7 +72,7 @@ export default function InvestorCard({ investor, transactions, allInvestors, can
             {investor.exit_type && <p>Тип выхода: {investor.exit_type}</p>}
             {successor && <p>Преемник: {successor.full_name}</p>}
             {investor.purchase_price != null && (
-              <p>Цена выкупа: {fmt(investor.purchase_price)} ₸</p>
+              <p>Цена выкупа: {money(investor.purchase_price)}</p>
             )}
           </>
         )}
@@ -81,11 +81,11 @@ export default function InvestorCard({ investor, transactions, allInvestors, can
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div>
           <p className="text-xs text-slate-500">Вложено</p>
-          <p className="text-white font-medium">{fmt(stats.invested)} ₸</p>
+          <p className="text-white font-medium">{money(stats.invested)}</p>
         </div>
         <div>
           <p className="text-xs text-slate-500">Выведено</p>
-          <p className="text-white font-medium">{fmt(stats.withdrawn)} ₸</p>
+          <p className="text-white font-medium">{money(stats.withdrawn)}</p>
         </div>
         <div>
           <p className="text-xs text-slate-500">Чистая прибыль</p>
@@ -93,7 +93,7 @@ export default function InvestorCard({ investor, transactions, allInvestors, can
             'font-medium',
             stats.profit >= 0 ? 'text-green-400' : 'text-red-400'
           )}>
-            {fmt(stats.profit)} ₸
+            {money(stats.profit)}
           </p>
         </div>
         <div>
@@ -108,11 +108,11 @@ export default function InvestorCard({ investor, transactions, allInvestors, can
         <div className="flex items-center gap-4 pt-2 border-t border-slate-800">
           <div className="flex-1">
             <p className="text-[10px] text-slate-500 uppercase tracking-wider">{stats.currentYear} ср./мес</p>
-            <p className="text-sm font-mono text-blue-400">{stats.avgDivCurrent ? `${fmt(stats.avgDivCurrent)} ₸` : '—'}</p>
+            <p className="text-sm font-mono text-blue-400">{stats.avgDivCurrent ? `${money(stats.avgDivCurrent)}` : '—'}</p>
           </div>
           <div className="flex-1">
             <p className="text-[10px] text-slate-500 uppercase tracking-wider">{stats.currentYear - 1} ср./мес</p>
-            <p className="text-sm font-mono text-slate-400">{stats.avgDivPrev ? `${fmt(stats.avgDivPrev)} ₸` : '—'}</p>
+            <p className="text-sm font-mono text-slate-400">{stats.avgDivPrev ? `${money(stats.avgDivPrev)}` : '—'}</p>
           </div>
         </div>
       )}

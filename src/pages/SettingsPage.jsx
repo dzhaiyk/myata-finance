@@ -6,11 +6,12 @@ import { useAuthStore } from '@/lib/store'
 import DepartmentsSettings from '@/components/DepartmentsSettings'
 import BrandingSettings from '@/components/BrandingSettings'
 import { Save, Send, Bell, Bot, Moon } from 'lucide-react'
+import { money } from '@/lib/utils'
 
 // Только те типы, которые приложение действительно умеет отправлять.
 // Порог берётся из настроек, чтобы подпись не разошлась с логикой.
 const NOTIFICATION_LABELS = [
-  { key: 'cash_discrepancy', label: 'Расхождение кассы', desc: `При отправке отчёта, если касса не сошлась${THRESHOLDS.cashDiscrepancy > 0 ? ` больше чем на ${THRESHOLDS.cashDiscrepancy.toLocaleString('ru-RU')} ₸` : ''}` },
+  { key: 'cash_discrepancy', label: 'Расхождение кассы', desc: `При отправке отчёта, если касса не сошлась${THRESHOLDS.cashDiscrepancy > 0 ? ` больше чем на ${money(THRESHOLDS.cashDiscrepancy)}` : ''}` },
   { key: 'daily_report', label: 'Ежедневный отчёт сдан', desc: 'При каждой отправке отчёта менеджером' },
   { key: 'bank_import', label: 'Импорт банковской выписки', desc: 'При загрузке и обработке выписки' },
 ]

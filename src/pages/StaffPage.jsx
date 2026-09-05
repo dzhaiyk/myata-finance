@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
-import { cn, fmt } from '@/lib/utils'
+import { cn, fmt, money } from '@/lib/utils'
 import { formatLocalDate } from '@/lib/dates'
 import { Plus, Trash2, Edit3, Users, Briefcase } from 'lucide-react'
-import { departmentsFor, departmentLabel } from '@/lib/config'
+import { departmentsFor, departmentLabel, currencySymbol } from '@/lib/config'
 
 
 // Отдел по умолчанию — первый в справочнике, а не название из кода
@@ -152,7 +152,7 @@ export default function StaffPage() {
               <div><label className="label">Отдел</label>
                 <select value={form.department || defaultStaffDept()} onChange={e => setForm(f => ({...f, department: e.target.value}))} className="input text-sm w-full">
                   {departmentsFor('staff').map(d => <option key={d.code} value={d.code}>{d.name}</option>)}</select></div>
-              <div><label className="label">Ставка/день (₸)</label>
+              <div><label className="label">Ставка/день ({currencySymbol()})</label>
                 <input type="number" value={form.daily_rate || ''} onChange={e => setForm(f => ({...f, daily_rate: e.target.value}))} className="input text-sm w-full" placeholder="15000" /></div>
               <div><label className="label">% от продаж</label>
                 <input type="number" step="0.1" value={form.sales_pct || ''} onChange={e => setForm(f => ({...f, sales_pct: e.target.value}))} className="input text-sm w-full" placeholder="0.5" /></div>
@@ -200,7 +200,7 @@ export default function StaffPage() {
                     </td>
                     <td className="table-cell text-slate-400">{departmentLabel(s.department)}</td>
                     <td className="table-cell text-slate-400">{pos?.name || '—'}</td>
-                    <td className="table-cell text-right font-mono">{rate > 0 ? fmt(rate) + ' ₸' : '—'}</td>
+                    <td className="table-cell text-right font-mono">{rate > 0 ? money(rate) : '—'}</td>
                     <td className="table-cell text-right font-mono">{pct > 0 ? pct + '%' : '—'}</td>
                     <td className="table-cell text-center">
                       <span className={cn('badge', s.is_active ? 'badge-green' : 'badge-red')}>{s.is_active ? 'Активен' : 'Уволен'}</span>
@@ -242,7 +242,7 @@ export default function StaffPage() {
                 <tr key={p.id} className={cn('hover:bg-slate-800/30', !p.is_active && 'opacity-50')}>
                   <td className="table-cell font-medium">{p.name}</td>
                   <td className="table-cell text-slate-400">{departmentLabel(p.department)}</td>
-                  <td className="table-cell text-right font-mono">{p.daily_rate > 0 ? fmt(p.daily_rate) + ' ₸' : '—'}</td>
+                  <td className="table-cell text-right font-mono">{p.daily_rate > 0 ? money(p.daily_rate) : '—'}</td>
                   <td className="table-cell text-right font-mono">{p.sales_pct > 0 ? p.sales_pct + '%' : '—'}</td>
                   <td className="table-cell text-center">
                     <span className={cn('badge', p.is_active ? 'badge-green' : 'badge-red')}>{p.is_active ? 'Активна' : 'Неактивна'}</span>

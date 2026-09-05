@@ -1,9 +1,28 @@
+import { locale, currencySymbol, timezone, decimalSeparator } from './config.js'
+
 export const fmt = (n) => {
   if (n == null || isNaN(n)) return '—'
   const num = Number(n)
-  if (Number.isInteger(num)) return new Intl.NumberFormat('ru-RU').format(num)
-  return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num)
+  const loc = locale()
+  if (Number.isInteger(num)) return new Intl.NumberFormat(loc).format(num)
+  return new Intl.NumberFormat(loc, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num)
 }
+
+/**
+ * Деньги со знаком валюты. До TASK-020 символ ₸ был вписан строкой в 153 местах,
+ * поэтому приложение нельзя было продать заведению в другой валюте.
+ */
+export const money = (n) => (n == null || isNaN(n) ? '—' : `${fmt(n)} ${currencySymbol()}`)
+
+/**
+ * Ввод суммы: оставляем цифры и разделитель, приводим к разделителю локали.
+ * До TASK-020 везде принудительно ставилась запятая — русская нотация была
+ * вписана в компоненты ввода.
+ */
+export const amountInput = (raw, { allowMinus = false } = {}) =>
+  String(raw ?? '')
+    .replace(allowMinus ? /[^0-9.,-]/g : /[^0-9.,]/g, '')
+    .replace(/[.,]/g, decimalSeparator())
 
 export const fmtK = (n) => {
   if (n == null || isNaN(n)) return '—'
@@ -20,7 +39,7 @@ export const fmtPct = (n) => {
 export const fmtDate = (d) => {
   if (!d) return ''
   const date = new Date(d)
-  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return date.toLocaleDateString(locale(), { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: timezone() })
 }
 
 export const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']

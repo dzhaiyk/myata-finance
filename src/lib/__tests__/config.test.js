@@ -29,6 +29,11 @@ import {
   venueName,
   copyrightLine,
   documentTitle,
+  currencyCode,
+  currencySymbol,
+  locale,
+  timezone,
+  decimalSeparator,
 } from '../config.js'
 import { FIXTURE_DEPARTMENTS } from './fixtures.js'
 
@@ -237,13 +242,39 @@ describe('бренд заведения', () => {
     setBranding({ app_title: '   ', restaurant_name: '', company: null })
     assert.equal(appTitle(), 'Финансовый учёт')
     assert.equal(venueName(), '')
-    assert.deepEqual(Object.keys(getBranding()).sort(), ['app_title', 'company', 'logo_url', 'restaurant_name'])
+    assert.deepEqual(Object.keys(getBranding()).sort(),
+      ['app_title', 'company', 'currency', 'locale', 'logo_url', 'restaurant_name', 'timezone'])
   })
 
   // Год в копирайте был зашит как 2025 и устарел бы молча
   it('год в копирайте берётся текущий', () => {
     setBranding({ company: 'ТОО Тест' })
     assert.ok(copyrightLine().startsWith(`© ${new Date().getFullYear()}`))
+    setBranding({})
+  })
+})
+
+// TASK-020: символ валюты был вписан строкой в 153 местах
+describe('валюта, локаль и часовой пояс', () => {
+  it('по умолчанию тенге и русская локаль', () => {
+    setBranding({})
+    assert.equal(currencyCode(), 'KZT')
+    assert.equal(currencySymbol(), '₸')
+    assert.equal(locale(), 'ru-RU')
+    assert.equal(decimalSeparator(), ',')
+    assert.equal(timezone(), undefined)
+  })
+
+  it('валюта и локаль берутся из настроек', () => {
+    setBranding({ currency: 'USD', locale: 'en-US', timezone: 'Asia/Almaty' })
+    assert.equal(currencySymbol(), '$')
+    assert.equal(decimalSeparator(), '.')
+    assert.equal(timezone(), 'Asia/Almaty')
+  })
+
+  it('валюта без общепринятого знака показывается кодом', () => {
+    setBranding({ currency: 'UZS' })
+    assert.equal(currencySymbol(), 'UZS')
     setBranding({})
   })
 })

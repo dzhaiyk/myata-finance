@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
-import { getNotifications, setNotifications, isNotificationEnabled, departmentsFor, documentTitle } from './config.js'
+import { getNotifications, setNotifications, isNotificationEnabled, departmentsFor, documentTitle, locale } from './config.js'
+import { money } from './utils.js'
 
 const TELEGRAM_BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN
 const TELEGRAM_CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID
@@ -68,31 +69,31 @@ function departmentLines(departments) {
   const rows = departmentsFor('revenue')
   if (!rows.length) return ''
   return rows
-    .map(d => `${DEPARTMENT_ICONS[d.code] || '•'} ${d.name}: ${fmt(departments?.[d.code] || 0)} ₸`)
+    .map(d => `${DEPARTMENT_ICONS[d.code] || '•'} ${d.name}: ${money(departments?.[d.code] || 0)}`)
     .join('\n')
 }
 
 export function formatDailyReportNotification(report) {
   const { date, manager, revenue, withdrawals, cashExpected, cashActual, discrepancy, departments } = report
-  const disc = discrepancy !== 0 ? `\n⚠️ <b>РАСХОЖДЕНИЕ: ${fmt(discrepancy)} ₸</b>` : '\n✅ Расхождений нет'
+  const disc = discrepancy !== 0 ? `\n⚠️ <b>РАСХОЖДЕНИЕ: ${money(discrepancy)}</b>` : '\n✅ Расхождений нет'
 
   return `<b>${documentTitle('Ежедневный отчёт')}</b>
 📅 ${date}
 👤 Менеджер: ${manager}
 
-💰 <b>Выручка: ${fmt(revenue)} ₸</b>
+💰 <b>Выручка: ${money(revenue)}</b>
 ${departmentLines(departments)}
 
-📤 Изъятия: ${fmt(withdrawals)} ₸
-💵 Ожидаемый остаток: ${fmt(cashExpected)} ₸
-💵 Фактический остаток: ${fmt(cashActual)} ₸${disc}`
+📤 Изъятия: ${money(withdrawals)}
+💵 Ожидаемый остаток: ${money(cashExpected)}
+💵 Фактический остаток: ${money(cashActual)}${disc}`
 }
 
 export function formatCashDiscrepancyAlert(date, manager, amount) {
   return `🚨 <b>ALERT: Расхождение кассы!</b>
 📅 ${date}
 👤 ${manager}
-💸 Расхождение: <b>${fmt(amount)} ₸</b>
+💸 Расхождение: <b>${money(amount)}</b>
 Проверьте немедленно!`
 }
 
@@ -106,5 +107,5 @@ ${uncategorized > 0 ? '\n⚠️ Требуется ручная категори
 }
 
 function fmt(n) {
-  return new Intl.NumberFormat('ru-RU').format(Math.round(n))
+  return new Intl.NumberFormat(locale()).format(Math.round(n))
 }

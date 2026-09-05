@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { cn, fmt } from '@/lib/utils'
+import { cn, fmt, money } from '@/lib/utils'
 import { getCutoffHour } from '@/lib/dates'
 import {
   loadLastStatementDates, stageStatement, commitImport, summarizeImport,
@@ -8,8 +8,9 @@ import {
 } from '@/lib/bankImport'
 import { sendTelegramNotification } from '@/lib/telegram'
 import { Landmark, Upload, CheckCircle2, AlertTriangle, X } from 'lucide-react'
+import { locale } from '@/lib/config'
 
-const shortDate = (iso) => (iso ? new Date(iso + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '—')
+const shortDate = (iso) => (iso ? new Date(iso + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' }) : '—')
 
 // Ежедневная загрузка выписок из отчёта смены. Менеджер только загружает файл:
 // категории ставит учредитель или бухгалтер на странице «Импорт выписки».
@@ -139,11 +140,11 @@ export default function StatementUploadCard({ accounts, date, managerName, onFre
             <div><div className="text-slate-500">Уже были</div><div className="font-mono text-slate-300">{staged.duplicates}</div></div>
             <div><div className="text-slate-500">Без категории</div><div className={cn('font-mono', staged.summary.uncategorized ? 'text-amber-400' : 'text-slate-300')}>{staged.summary.uncategorized}</div></div>
           </div>
-          <div className="text-slate-400">Списания {fmt(staged.summary.debit)} ₸ · Поступления {fmt(staged.summary.credit)} ₸{staged.hidden ? ` · скрыто правилами ${staged.hidden}` : ''}</div>
+          <div className="text-slate-400">Списания {money(staged.summary.debit)} · Поступления {money(staged.summary.credit)}{staged.hidden ? ` · скрыто правилами ${staged.hidden}` : ''}</div>
           {staged.balanceCheck && (
             <div className={cn('flex items-center gap-1.5', staged.balanceCheck.ok ? 'text-green-400' : 'text-amber-400')}>
               {staged.balanceCheck.ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
-              {staged.balanceCheck.ok ? 'Остатки в файле сходятся' : `Остатки не сходятся на ${fmt(staged.balanceCheck.delta)} ₸ — сохраним с пометкой «к проверке», лучше выгрузить файл заново`}
+              {staged.balanceCheck.ok ? 'Остатки в файле сходятся' : `Остатки не сходятся на ${money(staged.balanceCheck.delta)} — сохраним с пометкой «к проверке», лучше выгрузить файл заново`}
             </div>
           )}
           {staged.parseIssues?.length > 0 && <div className="text-amber-400">{staged.parseIssues.slice(0, 3).join('; ')}</div>}

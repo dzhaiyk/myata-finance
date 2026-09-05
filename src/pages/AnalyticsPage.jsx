@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchAll } from '@/lib/fetchAll'
 import { useAuthStore } from '@/lib/store'
-import { cn, fmt, fmtK, MONTHS_RU, linearRegression } from '@/lib/utils'
+import { cn, fmt, fmtK, MONTHS_RU, linearRegression, money } from '@/lib/utils'
 import { getTxAmountForMonth } from '@/lib/pnl'
 import { yearsRange } from '@/lib/dates'
 import { BarChart2, TrendingUp, TrendingDown, ArrowRight, AlertTriangle, Calendar } from 'lucide-react'
@@ -10,7 +10,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ReferenceLine, Legend, ComposedChart, Area
 } from 'recharts'
-import { isCapexRow, isFoodCostAnomaly, FOOD_COST_BANDS, THRESHOLDS, PAYROLL_CATEGORIES } from '@/lib/config'
+import { isCapexRow, isFoodCostAnomaly, FOOD_COST_BANDS, THRESHOLDS, PAYROLL_CATEGORIES, currencySymbol, locale } from '@/lib/config'
 
 // Доля в подпись графика: 0.35 → «35%»
 const pctLabel = (v) => `${Math.round(v * 100)}%`
@@ -389,8 +389,8 @@ export default function AnalyticsPage() {
           </div>
         </div>
         <div className="flex gap-4 mb-4 text-xs text-slate-500">
-          <span>Средняя (30 дней): <b className="text-slate-300">{fmtK(revenueTrends.avgLast)} ₸/день</b></span>
-          <span>Предыдущие 30: <b className="text-slate-400">{fmtK(revenueTrends.avgPrev)} ₸/день</b></span>
+          <span>Средняя (30 дней): <b className="text-slate-300">{fmtK(revenueTrends.avgLast)} {currencySymbol()}/день</b></span>
+          <span>Предыдущие 30: <b className="text-slate-400">{fmtK(revenueTrends.avgPrev)} {currencySymbol()}/день</b></span>
         </div>
         {revenueTrends.data.length > 0 && (
           <ResponsiveContainer width="100%" height={280}>
@@ -398,7 +398,7 @@ export default function AnalyticsPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
               <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 9 }} interval={6} />
               <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => fmtK(v)} />
-              <Tooltip contentStyle={chartTooltipStyle} formatter={(v) => [fmt(v) + ' ₸']} labelStyle={{ color: '#94a3b8' }} />
+              <Tooltip contentStyle={chartTooltipStyle} formatter={(v) => [money(v)]} labelStyle={{ color: '#94a3b8' }} />
               <Bar dataKey="revenue" fill="#22c55e" opacity={0.4} radius={[2, 2, 0, 0]} name="Выручка" />
               <Line type="monotone" dataKey="avg7" stroke="#3b82f6" strokeWidth={2} dot={false} name="7-дн. среднее" />
             </ComposedChart>
@@ -420,7 +420,7 @@ export default function AnalyticsPage() {
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis dataKey="day" tick={{ fill: '#64748b', fontSize: 11 }} />
             <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => fmtK(v)} />
-            <Tooltip contentStyle={chartTooltipStyle} formatter={(v) => [fmt(v) + ' ₸']} labelStyle={{ color: '#94a3b8' }} />
+            <Tooltip contentStyle={chartTooltipStyle} formatter={(v) => [money(v)]} labelStyle={{ color: '#94a3b8' }} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar dataKey="allTime" fill="#22c55e" opacity={0.3} radius={[3, 3, 0, 0]} name="Всё время" />
             <Bar dataKey="d90" fill="#3b82f6" opacity={0.5} radius={[3, 3, 0, 0]} name="90 дней" />
@@ -515,8 +515,8 @@ export default function AnalyticsPage() {
               {anomalies.map(a => (
                 <tr key={a.label} className={cn('hover:bg-slate-800/30', a.isAnomaly && 'bg-red-500/5')}>
                   <td className="table-cell text-white font-medium">{a.label}</td>
-                  <td className="table-cell text-right font-mono text-slate-400">{fmt(a.mean)} ₸</td>
-                  <td className="table-cell text-right font-mono text-slate-300">{fmt(a.current)} ₸</td>
+                  <td className="table-cell text-right font-mono text-slate-400">{money(a.mean)}</td>
+                  <td className="table-cell text-right font-mono text-slate-300">{money(a.current)}</td>
                   <td className={cn('table-cell text-right font-mono', Number(a.deviation) > 1.5 ? 'text-red-400' : 'text-slate-400')}>
                     {a.deviation > 0 ? '+' : ''}{a.deviation}σ
                   </td>
@@ -554,7 +554,7 @@ export default function AnalyticsPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
               <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 9 }} interval={2} />
               <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => fmtK(v)} />
-              <Tooltip contentStyle={chartTooltipStyle} formatter={(v) => [fmt(v) + ' ₸']} labelStyle={{ color: '#94a3b8' }} />
+              <Tooltip contentStyle={chartTooltipStyle} formatter={(v) => [money(v)]} labelStyle={{ color: '#94a3b8' }} />
               <Bar dataKey="value" fill="#ef4444" opacity={0.6} radius={[3, 3, 0, 0]} name="|Расхождение|" />
             </BarChart>
           </ResponsiveContainer>
@@ -565,8 +565,8 @@ export default function AnalyticsPage() {
               <div className="space-y-1">
                 {discrepancyData.top10.map((d, i) => (
                   <div key={i} className="flex items-center justify-between text-xs bg-slate-900/50 rounded-lg px-3 py-1.5">
-                    <span className="text-slate-400">{new Date(d.date + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })} — {d.manager || '—'}</span>
-                    <span className="font-mono text-red-400 font-semibold">{fmt(d.discrepancy)} ₸</span>
+                    <span className="text-slate-400">{new Date(d.date + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' })} — {d.manager || '—'}</span>
+                    <span className="font-mono text-red-400 font-semibold">{money(d.discrepancy)}</span>
                   </div>
                 ))}
               </div>
@@ -604,7 +604,7 @@ export default function AnalyticsPage() {
                     const val = seasonality.grid[y]?.[mi] || 0
                     return (
                       <td key={y} className={cn('table-cell text-right font-mono text-xs', getHeatColor(val, seasonality.minVal, seasonality.maxVal))}
-                        title={val ? fmt(val) + ' ₸' : ''}>
+                        title={val ? money(val) : ''}>
                         {val > 0 ? fmtK(val) : '—'}
                       </td>
                     )

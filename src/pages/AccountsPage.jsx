@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchAll } from '@/lib/fetchAll'
 import { useAuthStore } from '@/lib/store'
-import { cn, fmt } from '@/lib/utils'
+import { cn, fmt, money, amountInput } from '@/lib/utils'
 import { getBusinessDate } from '@/lib/dates'
 import { THRESHOLDS } from '@/lib/config'
 import { Plus, Edit3, Trash2, ArrowRightLeft, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Save, RefreshCw, Eye, Power, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
@@ -319,7 +319,7 @@ export default function AccountsPage() {
                 {activeAccounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
               </select></div>
             <div><label className="label">Сумма</label>
-              <input type="text" inputMode="decimal" value={transferForm.amount} onChange={e => setTransferForm(f => ({...f, amount: e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',')}))} className="input text-sm w-full font-mono" placeholder="0" /></div>
+              <input type="text" inputMode="decimal" value={transferForm.amount} onChange={e => setTransferForm(f => ({...f, amount: amountInput(e.target.value)}))} className="input text-sm w-full font-mono" placeholder="0" /></div>
             <div><label className="label">Дата</label>
               <input type="date" value={transferForm.date} onChange={e => setTransferForm(f => ({...f, date: e.target.value}))} className="input text-sm w-full" /></div>
             <div><label className="label">Описание</label>
@@ -348,7 +348,7 @@ export default function AccountsPage() {
                 <option value="expense">Расход</option>
               </select></div>
             <div><label className="label">Сумма</label>
-              <input type="text" inputMode="decimal" value={manualTxForm.amount} onChange={e => setManualTxForm(f => ({...f, amount: e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',')}))} className="input text-sm w-full font-mono" placeholder="0" /></div>
+              <input type="text" inputMode="decimal" value={manualTxForm.amount} onChange={e => setManualTxForm(f => ({...f, amount: amountInput(e.target.value)}))} className="input text-sm w-full font-mono" placeholder="0" /></div>
             <div><label className="label">Дата</label>
               <input type="date" value={manualTxForm.date} onChange={e => setManualTxForm(f => ({...f, date: e.target.value}))} className="input text-sm w-full" /></div>
             <div><label className="label">Контрагент</label>
@@ -369,7 +369,7 @@ export default function AccountsPage() {
           {/* Total */}
           <div className="card bg-gradient-to-br from-brand-600/10 to-mint-600/5 border-brand-500/20">
             <div className="stat-label">ОБЩИЙ БАЛАНС</div>
-            <div className="stat-value text-3xl text-brand-400">{fmt(totalBalance)} ₸</div>
+            <div className="stat-value text-3xl text-brand-400">{money(totalBalance)}</div>
             <div className="text-xs text-slate-500 mt-1">{activeAccounts.length} активных счетов</div>
           </div>
 
@@ -391,11 +391,11 @@ export default function AccountsPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="text-xl font-mono font-bold" style={{ color: acct.color }}>{fmt(bal)} ₸</div>
+                  <div className="text-xl font-mono font-bold" style={{ color: acct.color }}>{money(bal)}</div>
                   {lastBalance && (
                     <div className="mt-2 text-[10px] text-slate-500">
                       Сверка {lastBalance.balance_date}: {lastBalance.actual_balance != null ? (
-                        hasDisc ? <span className="text-red-400">расхождение {fmt(lastBalance.discrepancy)} ₸</span>
+                        hasDisc ? <span className="text-red-400">расхождение {money(lastBalance.discrepancy)}</span>
                           : <span className="text-green-400">✓ сходится</span>
                       ) : 'не проведена'}
                     </div>
@@ -410,7 +410,7 @@ export default function AccountsPage() {
                               <span>{child.icon}</span>
                               <span>{child.name}</span>
                             </div>
-                            <span className="text-xs font-mono font-semibold" style={{ color: child.color }}>{fmt(cBal)} ₸</span>
+                            <span className="text-xs font-mono font-semibold" style={{ color: child.color }}>{money(cBal)}</span>
                           </div>
                         )
                       })}
@@ -440,7 +440,7 @@ export default function AccountsPage() {
                       </div>
                     </div>
                     <span className={cn('font-mono text-sm font-semibold', isIn ? 'text-green-400' : 'text-red-400')}>
-                      {isIn ? '+' : '−'}{fmt(tx.amount)} ₸
+                      {isIn ? '+' : '−'}{money(tx.amount)}
                     </span>
                   </div>
                 )
@@ -483,19 +483,19 @@ export default function AccountsPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
                       <div>
                         <div className="text-[10px] text-slate-500 uppercase mb-1">Ожидаемый</div>
-                        <div className="font-mono text-sm font-semibold">{fmt(expected)} ₸</div>
+                        <div className="font-mono text-sm font-semibold">{money(expected)}</div>
                       </div>
                       <div>
                         <div className="text-[10px] text-slate-500 uppercase mb-1">Фактический</div>
                         <input type="text" inputMode="decimal" value={actual}
-                          onChange={e => setReconcileInputs(prev => ({...prev, [acct.id]: e.target.value.replace(/[^0-9.,-]/g, '').replace('.', ',')}))}
+                          onChange={e => setReconcileInputs(prev => ({...prev, [acct.id]: amountInput(e.target.value, { allowMinus: true })}))}
                           className="input text-sm font-mono w-full" placeholder="Введите остаток" />
                       </div>
                       <div>
                         <div className="text-[10px] text-slate-500 uppercase mb-1">Расхождение</div>
                         {disc !== null ? (
                           <div className={cn('font-mono text-sm font-bold', Math.abs(disc) > THRESHOLDS.accountBalanceTolerance ? 'text-red-400' : 'text-green-400')}>
-                            {disc > 0 ? '+' : ''}{fmt(disc)} ₸
+                            {disc > 0 ? '+' : ''}{money(disc)}
                           </div>
                         ) : <div className="text-sm text-slate-600">—</div>}
                       </div>
@@ -527,7 +527,7 @@ export default function AccountsPage() {
                         return (
                           <div key={b.id} className="text-[10px] text-slate-500">
                             {acct?.icon} {acct?.name}: <span className={cn('font-mono', b.discrepancy && Math.abs(b.discrepancy) > THRESHOLDS.accountBalanceTolerance ? 'text-red-400' : 'text-green-400')}>
-                              {b.discrepancy != null ? (b.discrepancy > 0 ? '+' : '') + fmt(b.discrepancy) + ' ₸' : '✓'}
+                              {b.discrepancy != null ? (b.discrepancy > 0 ? '+' : '') + money(b.discrepancy) : '✓'}
                             </span>
                           </div>
                         )
@@ -568,7 +568,7 @@ export default function AccountsPage() {
                     <td className="table-cell text-xs">{tx.counterparty || tx.description || '—'}</td>
                     <td className="table-cell text-center"><span className={cn('badge text-[10px]', typeColors[tx.type])}>{typeLabels[tx.type]}</span></td>
                     <td className={cn('table-cell text-right font-mono text-xs font-semibold', isIn ? 'text-green-400' : 'text-red-400')}>
-                      {isIn ? '+' : '−'}{fmt(tx.amount)} ₸
+                      {isIn ? '+' : '−'}{money(tx.amount)}
                     </td>
                     <td className="table-cell text-center text-[10px] text-slate-500">{tx.reference_type || '—'}</td>
                     <td className="table-cell">
@@ -666,8 +666,8 @@ export default function AccountsPage() {
                     </td>
                     <td className="table-cell text-slate-400 text-xs">{TYPES[a.type]}</td>
                     <td className="table-cell text-slate-400 text-xs">{a.bank_name || '—'}</td>
-                    <td className="table-cell text-right font-mono text-xs">{fmt(a.initial_balance || 0)} ₸</td>
-                    <td className="table-cell text-right font-mono text-xs font-semibold">{fmt(calcBalance(a.id))} ₸</td>
+                    <td className="table-cell text-right font-mono text-xs">{money(a.initial_balance || 0)}</td>
+                    <td className="table-cell text-right font-mono text-xs font-semibold">{money(calcBalance(a.id))}</td>
                     <td className="table-cell text-center"><span className={cn('badge', a.is_active ? 'badge-green' : 'badge-red')}>{a.is_active ? 'Активен' : 'Неактивен'}</span></td>
                     <td className="table-cell text-center">
                       <div className="flex items-center justify-center gap-0.5">

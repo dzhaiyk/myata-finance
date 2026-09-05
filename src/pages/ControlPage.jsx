@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchAll } from '@/lib/fetchAll'
 import { useAuthStore } from '@/lib/store'
-import { cn, fmt, MONTHS_RU } from '@/lib/utils'
+import { cn, fmt, MONTHS_RU, money } from '@/lib/utils'
 import { yearsRange } from '@/lib/dates'
 import { THRESHOLDS, PAYROLL_CATEGORIES } from '@/lib/config'
 import {
@@ -242,24 +242,24 @@ export default function ControlPage() {
           <Check title="Выручка сходится" subtitle="Отделы ↔ типы оплат"
             state={revenue.length === 0 ? 'ok' : 'fail'}
             value={revenue.length === 0 ? 'сходится' : `${revenue.length} смен`}
-            detail={revenue.length > 0 ? `худшая: ${revenue[0].date}, ${fmt(revenue[0].delta)} ₸` : null} />
+            detail={revenue.length > 0 ? `худшая: ${revenue[0].date}, ${money(revenue[0].delta)}` : null} />
           <Check title="Касса" subtitle="Ожидаемый ↔ фактический остаток"
             state={cashDisc.length === 0 ? 'ok' : 'fail'}
             value={cashDisc.length === 0 ? 'без расхождений' : `${cashDisc.length} смен`}
-            detail={cashDisc.length > 0 ? `худшая: ${cashDisc[0].date}, ${fmt(cashDisc[0].discrepancy)} ₸` : null} />
+            detail={cashDisc.length > 0 ? `худшая: ${cashDisc[0].date}, ${money(cashDisc[0].discrepancy)}` : null} />
           <Check title="Эквайринг" subtitle="Терминалы ↔ зачисления банка"
             state={!acquiring.hasData ? 'none' : 'ok'}
             value={!acquiring.hasData ? 'нет данных' : acquiring.feePct == null ? '—' : `комиссия ${acquiring.feePct}%`}
             detail={acquiring.hasData
               ? (acquiring.banks?.length
-                ? acquiring.banks.map(b => `${b.bank}: ${fmt(b.base)} → ${fmt(b.settled)} ₸ (${b.feePct == null ? '—' : `${b.feePct}%`})`).join(' · ')
-                : `терминалы ${fmt(acquiring.terminalsTotal)} → зачислено ${fmt(acquiring.settled)} ₸`)
+                ? acquiring.banks.map(b => `${b.bank}: ${fmt(b.base)} → ${money(b.settled)} (${b.feePct == null ? '—' : `${b.feePct}%`})`).join(' · ')
+                : `терминалы ${fmt(acquiring.terminalsTotal)} → зачислено ${money(acquiring.settled)}`)
               : 'нужны терминалы в отчётах и выписка'} />
           <Check title="ФОТ" subtitle="Ведомость ↔ выдано из кассы и по банку"
             state={payroll.accrued === 0 ? 'none' : payroll.ok ? 'ok' : 'fail'}
-            value={payroll.accrued === 0 ? 'нет ведомости' : `${fmt(payroll.fromOwners)} ₸`}
+            value={payroll.accrued === 0 ? 'нет ведомости' : `${money(payroll.fromOwners)}`}
             detail={payroll.accrued > 0
-              ? `начислено ${fmt(payroll.accrued)} → из кассы/банка ${fmt(payroll.trackedPaid)} ₸; остаток выдан из наличных учредителей`
+              ? `начислено ${fmt(payroll.accrued)} → из кассы/банка ${money(payroll.trackedPaid)}; остаток выдан из наличных учредителей`
               : 'внесите ФОТ месяца в P&L (ведомость)'} />
         </div>
       </div>
@@ -270,8 +270,8 @@ export default function ControlPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
           <Check title="Необъяснённый остаток" subtitle="На 1 января + снято − возвращено − выдано на ЗП − дивиденды наличными"
             state={owners.ok ? 'ok' : 'fail'}
-            value={`${fmt(owners.unexplained)} ₸`}
-            detail={`на 1 янв ${fmt(owners.opening)} · снято ${fmt(owners.withdrawn)} · возвращено ${fmt(owners.returned)} · на ЗП ${fmt(owners.fromOwners)} · дивиденды ${fmt(owners.cashDiv)} ₸`} />
+            value={`${money(owners.unexplained)}`}
+            detail={`на 1 янв ${fmt(owners.opening)} · снято ${fmt(owners.withdrawn)} · возвращено ${fmt(owners.returned)} · на ЗП ${fmt(owners.fromOwners)} · дивиденды ${money(owners.cashDiv)}`} />
           <div className="card p-0 overflow-x-auto lg:col-span-2">
             <table className="w-full text-sm min-w-[680px]">
               <thead><tr>
@@ -315,14 +315,14 @@ export default function ControlPage() {
               {accountChecks.map(a => (
                 <tr key={a.account.id} className="hover:bg-slate-800/30">
                   <td className="table-cell">{a.account.icon} {a.account.name}</td>
-                  <td className="table-cell text-right font-mono text-xs">{fmt(a.expected)} ₸</td>
+                  <td className="table-cell text-right font-mono text-xs">{money(a.expected)}</td>
                   <td className="table-cell text-right font-mono text-xs">
-                    {a.actual != null ? `${fmt(a.actual)} ₸` : '—'}
+                    {a.actual != null ? `${money(a.actual)}` : '—'}
                     {a.date && <span className="text-slate-600 ml-1">({a.date})</span>}
                   </td>
                   <td className={cn('table-cell text-right font-mono text-xs font-bold',
                     a.ok === null ? 'text-slate-600' : a.ok ? 'text-green-400' : 'text-red-400')}>
-                    {a.delta != null ? `${a.delta > 0 ? '+' : ''}${fmt(a.delta)} ₸` : '—'}
+                    {a.delta != null ? `${a.delta > 0 ? '+' : ''}${money(a.delta)}` : '—'}
                   </td>
                   <td className="table-cell text-center">
                     {a.ok === null ? <span className="badge text-[10px] bg-slate-700/40 text-slate-500">не сверен</span>
@@ -361,7 +361,7 @@ export default function ControlPage() {
                 {revenue.map(r => (
                   <div key={r.date} className="flex justify-between text-xs">
                     <span className="text-slate-400">{r.date} — {r.manager}</span>
-                    <span className="font-mono text-red-400">{fmt(r.delta)} ₸</span>
+                    <span className="font-mono text-red-400">{money(r.delta)}</span>
                   </div>
                 ))}
               </div>
@@ -376,7 +376,7 @@ export default function ControlPage() {
                 {cashDisc.map(r => (
                   <div key={r.date} className="flex justify-between text-xs">
                     <span className="text-slate-400">{r.date} — {r.manager}</span>
-                    <span className="font-mono text-red-400">{fmt(r.discrepancy)} ₸</span>
+                    <span className="font-mono text-red-400">{money(r.discrepancy)}</span>
                   </div>
                 ))}
               </div>

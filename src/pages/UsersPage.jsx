@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { UserPlus, Trash2, Edit3, Check, X, Eye, EyeOff } from 'lucide-react'
+import { locale } from '@/lib/config'
 
 
 export default function UsersPage() {
@@ -187,7 +188,7 @@ export default function UsersPage() {
                   </button>
                 </td>
                 <td className="table-cell text-right text-xs text-slate-500">
-                  {u.last_login ? new Date(u.last_login).toLocaleDateString('ru-RU') : 'Никогда'}
+                  {u.last_login ? new Date(u.last_login).toLocaleDateString(locale()) : 'Никогда'}
                 </td>
                 {canManage && (
                   <td className="table-cell text-center">

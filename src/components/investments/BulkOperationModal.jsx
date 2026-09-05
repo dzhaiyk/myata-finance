@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { X } from 'lucide-react'
-import { fmt, cn } from '@/lib/utils'
+import { fmt, cn, money, amountInput } from '@/lib/utils'
 import { getBusinessDate } from '@/lib/dates'
+import { currencySymbol } from '@/lib/config'
 
 const today = () => getBusinessDate()
 
@@ -32,12 +33,12 @@ export default function BulkOperationModal({ open, onClose, onSave, investors, m
   const parseNum = (v) => Number(String(v).replace(',', '.')) || 0
 
   const handleUniformChange = (e) => {
-    const val = e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',')
+    const val = amountInput(e.target.value)
     setUniformAmount(val)
   }
 
   const handlePersonAmount = (id, e) => {
-    const val = e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',')
+    const val = amountInput(e.target.value)
     setAmounts(prev => ({ ...prev, [id]: val }))
   }
 
@@ -97,7 +98,7 @@ export default function BulkOperationModal({ open, onClose, onSave, investors, m
           {!perPerson ? (
             <div>
               <label className="block text-sm text-slate-400 mb-1">
-                Сумма на каждого, ₸
+                Сумма на каждого, {currencySymbol()}
               </label>
               <input
                 type="text"
@@ -107,7 +108,7 @@ export default function BulkOperationModal({ open, onClose, onSave, investors, m
                 onChange={handleUniformChange}
               />
               <p className="text-xs text-slate-500 mt-1">
-                Итого: {fmt(totalAmount)} ₸ ({activeInvestors.length} × сумма)
+                Итого: {money(totalAmount)} ({activeInvestors.length} × сумма)
               </p>
             </div>
           ) : (
@@ -125,7 +126,7 @@ export default function BulkOperationModal({ open, onClose, onSave, investors, m
                 </div>
               ))}
               <p className="text-xs text-slate-500 mt-1">
-                Итого: {fmt(totalAmount)} ₸
+                Итого: {money(totalAmount)}
               </p>
             </div>
           )}

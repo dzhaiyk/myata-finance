@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { X } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, amountInput } from '@/lib/utils'
 import { getBusinessDate } from '@/lib/dates'
+import { currencySymbol } from '@/lib/config'
 
 const today = () => getBusinessDate()
 
@@ -39,7 +40,7 @@ export default function ShareTransferModal({ open, onClose, onSave, investors })
   if (!open) return null
 
   const handleAmountChange = (e) => {
-    const val = e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',')
+    const val = amountInput(e.target.value)
     setAmount(val)
   }
 
@@ -132,7 +133,7 @@ export default function ShareTransferModal({ open, onClose, onSave, investors })
           </div>
 
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Сумма покупки, ₸</label>
+            <label className="block text-sm text-slate-400 mb-1">Сумма покупки, {currencySymbol()}</label>
             <input
               type="text"
               className="input w-full"

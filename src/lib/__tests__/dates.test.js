@@ -2,6 +2,7 @@
 // Запуск: npm test
 import { describe, it, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
+import { setBranding } from '../config.js'
 import {
   getBusinessDate, businessDateFromParts, formatLocalDate,
   setCutoffHour, getCutoffHour, yearsRange, DEFAULT_CUTOFF_HOUR,
@@ -92,5 +93,43 @@ describe('yearsRange', () => {
     const years = yearsRange(2024, 1)
     assert.equal(years[0], 2024)
     assert.equal(years[years.length - 1], current + 1)
+  })
+})
+
+// TASK-020: операционная дата считалась по времени браузера — менеджер в поездке
+// получил бы чужую смену
+describe('часовой пояс заведения', () => {
+  // 02:00 в Алматы (UTC+5) 5 сентября = 21:00 UTC 4 сентября
+  const nightInAlmaty = new Date('2026-09-04T21:00:00Z')
+
+  it('операционная дата считается в поясе заведения, а не браузера', () => {
+    setBranding({ timezone: 'Asia/Almaty' })
+    // 02:00 при отсечке 06:00 — это ещё смена 4 сентября
+    assert.equal(getBusinessDate(nightInAlmaty, 6), '2026-09-04')
+    setBranding({ timezone: 'UTC' })
+    // тот же момент в UTC — 21:00, отсечка пройдена, смена своего дня
+    assert.equal(getBusinessDate(nightInAlmaty, 6), '2026-09-04')
+  })
+
+  it('пояс меняет календарный день, а не только час', () => {
+    const noonUtc = new Date('2026-09-04T19:00:00Z')
+    setBranding({ timezone: 'UTC' })
+    assert.equal(getBusinessDate(noonUtc, 6), '2026-09-04')
+    setBranding({ timezone: 'Asia/Almaty' })  // там уже 00:00 пятого
+    assert.equal(getBusinessDate(noonUtc, 6), '2026-09-04')
+    assert.equal(formatLocalDate(noonUtc), '2026-09-05')
+  })
+
+  it('переход через границу месяца и года', () => {
+    setBranding({ timezone: 'Asia/Almaty' })
+    assert.equal(getBusinessDate(new Date('2026-08-31T22:00:00Z'), 6), '2026-08-31')
+    assert.equal(getBusinessDate(new Date('2025-12-31T22:00:00Z'), 6), '2025-12-31')
+    assert.equal(getBusinessDate(new Date('2026-03-01T00:30:00Z'), 6), '2026-02-28')
+  })
+
+  it('неизвестный пояс не роняет расчёт', () => {
+    setBranding({ timezone: 'Такого/Пояса-Нет' })
+    assert.match(getBusinessDate(nightInAlmaty, 6), /^\d{4}-\d{2}-\d{2}$/)
+    setBranding({})
   })
 })
