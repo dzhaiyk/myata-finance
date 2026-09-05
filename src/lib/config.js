@@ -159,6 +159,10 @@ export const THRESHOLDS = {
   ownerCashTolerance: 200000,
   // Допуск сверки ФОТ: ведомость против выдач
   payrollTolerance: 1000,
+  // Допуск сверки безнала смены с эквайрингом за день (BR-CTL-019).
+  // За январь–август 2026 из 243 дней 239 сошлись в пределах тысячи тенге,
+  // а ночная граница даёт пары по 8–9 тысяч — отсюда порог.
+  acquiringDay: 10000,
   // Доля ФОТ в выручке, выше которой аналитика поднимает тревогу
   payrollShareAlert: 0.35,
   // Ориентир доли ФОТ на графике
@@ -193,7 +197,7 @@ export function getThresholds() {
  */
 export function validateThresholds(t) {
   const errors = []
-  const money = ['cashDiscrepancy', 'accountBalanceTolerance', 'ownerCashTolerance', 'payrollTolerance']
+  const money = ['cashDiscrepancy', 'accountBalanceTolerance', 'ownerCashTolerance', 'payrollTolerance', 'acquiringDay']
   for (const k of money) {
     const v = finite(t?.[k])
     if (!Number.isFinite(v) || v < 0) errors.push(`${k}: нужна сумма 0 или больше`)

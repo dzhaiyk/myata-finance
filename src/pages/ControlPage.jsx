@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchAll } from '@/lib/fetchAll'
+import { loadAcquiringOps } from '@/lib/acquiringDb'
+import { reconcileAcquiring } from '@/lib/acquiring'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, MONTHS_RU, money } from '@/lib/utils'
 import { yearsRange } from '@/lib/dates'
@@ -43,6 +45,7 @@ export default function ControlPage() {
   const [year, setYear] = useState(CURRENT_YEAR)
   const [month, setMonth] = useState(CURRENT_MONTH)
   const [reports, setReports] = useState([])
+  const [acqOps, setAcqOps] = useState([])
   const [bankTx, setBankTx] = useState([])
   const [accounts, setAccounts] = useState([])
   const [acctTx, setAcctTx] = useState([])
@@ -62,7 +65,7 @@ export default function ControlPage() {
     const load = async () => {
       setLoading(true)
       const yearStart = `${year}-01-01`
-      const [repRes, btRes, accRes, atRes, balRes, pnlRes, trRes, divRes, setRes, openRes] = await Promise.all([
+      const [repRes, btRes, accRes, atRes, balRes, pnlRes, trRes, divRes, setRes, openRes, acqRes] = await Promise.all([
         fetchAll(() => supabase.from('daily_reports').select('*').gte('report_date', yearStart).lte('report_date', endDate).order('id')),
         fetchAll(() => supabase.from('bank_transactions').select('*').gte('transaction_date', startDate).lte('transaction_date', endDate).order('id')),
         fetchAll(() => supabase.from('accounts').select('*').eq('is_active', true).order('id')),
@@ -76,6 +79,7 @@ export default function ControlPage() {
           .gte('transaction_date', yearStart).lte('transaction_date', endDate).order('id')),
         supabase.from('settings').select('value').eq('key', 'closures').maybeSingle(),
         supabase.from('settings').select('value').eq('key', 'owner_cash_opening').maybeSingle(),
+        loadAcquiringOps(startDate, endDate),
       ])
       const allReports = repRes
       setYtdReports(allReports)
@@ -89,6 +93,7 @@ export default function ControlPage() {
       setDividendsYtd(divRes)
       setClosures(Array.isArray(setRes.data?.value) ? setRes.data.value : [])
       setOwnerOpening(num(openRes.data?.value?.[String(year)]))
+      setAcqOps(acqRes)
       setLoading(false)
     }
     load()
@@ -103,6 +108,9 @@ export default function ControlPage() {
     const revenue = checkRevenueConsistency(submitted)
     const cashDisc = checkCashDiscrepancies(submitted)
     const acquiring = checkAcquiring(submitted, bankTx, { accounts })
+    // Безнал смены против операций эквайрера (BR-CTL-019): если оплату пробили
+    // картой, а деньги взяли наличными, операции у эквайрера не будет
+    const acqDays = reconcileAcquiring({ reports: submitted, ops: acqOps, threshold: THRESHOLDS.acquiringDay })
 
     // ФОТ по ведомости (pnl_data) ↔ выплаты из кассы (авансы + инкассация «зп») и по банку.
     // Техперсонал платится ежедневно из кассы и в ведомость не входит.
@@ -155,8 +163,8 @@ export default function ControlPage() {
     })
 
     const review = bankTx.filter(t => t.review_note)
-    return { open, missing, freshness, revenue, cashDisc, acquiring, payroll, accountChecks, transitRows, owners, review }
-  }, [reports, submitted, bankTx, accounts, acctTx, balances, pnlRows, ytdReports, transitTx, dividendsYtd, closures, ownerOpening, year, month, startDate, endDate])
+    return { open, missing, freshness, revenue, cashDisc, acquiring, acqDays, payroll, accountChecks, transitRows, owners, review }
+  }, [reports, submitted, bankTx, accounts, acctTx, balances, pnlRows, ytdReports, transitTx, dividendsYtd, closures, ownerOpening, acqOps, year, month, startDate, endDate])
 
   if (!hasPermission('dashboard.view')) {
     return <div className="text-center text-slate-500 py-20">Нет доступа</div>
@@ -255,6 +263,18 @@ export default function ControlPage() {
                 ? acquiring.banks.map(b => `${b.bank}: ${fmt(b.base)} → ${money(b.settled)} (${b.feePct == null ? '—' : `${b.feePct}%`})`).join(' · ')
                 : `терминалы ${fmt(acquiring.terminalsTotal)} → зачислено ${money(acquiring.settled)}`)
               : 'нужны терминалы в отчётах и выписка'} />
+          <Check title="Безнал подтверждён" subtitle="Смены ↔ операции эквайрера"
+            state={!checks.acqDays.days.length ? 'none' : checks.acqDays.ok ? 'ok' : 'fail'}
+            value={!checks.acqDays.days.length ? 'нет выписок'
+              : checks.acqDays.ok ? 'сходится'
+              : `${checks.acqDays.totals.flagged} смен`}
+            detail={!checks.acqDays.days.length
+              ? 'загрузите выписки эквайринга на странице «Импорт выписки»'
+              : checks.acqDays.ok
+                ? `безнал ${money(checks.acqDays.totals.card)} ↔ эквайринг ${money(checks.acqDays.totals.acquiring)}`
+                : `худшая: ${checks.acqDays.worst.date}, ${checks.acqDays.worst.diff > 0
+                    ? `не пришло ${money(checks.acqDays.worst.diff)}`
+                    : `лишние ${money(-checks.acqDays.worst.diff)} без чека`}`} />
           <Check title="ФОТ" subtitle="Ведомость ↔ выдано из кассы и по банку"
             state={payroll.accrued === 0 ? 'none' : payroll.ok ? 'ok' : 'fail'}
             value={payroll.accrued === 0 ? 'нет ведомости' : `${money(payroll.fromOwners)}`}

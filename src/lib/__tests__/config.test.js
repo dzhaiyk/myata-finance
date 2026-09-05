@@ -146,6 +146,7 @@ describe('пороги и границы', () => {
       accountBalanceTolerance: 100,
       ownerCashTolerance: 200000,
       payrollTolerance: 1000,
+      acquiringDay: 10000,
       payrollShareAlert: 0.35,
       payrollShareTarget: 0.30,
     })

@@ -21,6 +21,7 @@ const notificationLabels = () => [
 const pct = (v) => String(Math.round(Number(v) * 1000) / 10)
 const toForm = (t) => ({
   cashDiscrepancy: String(t.cashDiscrepancy), accountBalanceTolerance: String(t.accountBalanceTolerance),
+  acquiringDay: String(t.acquiringDay),
   ownerCashTolerance: String(t.ownerCashTolerance), payrollTolerance: String(t.payrollTolerance),
   payrollShareTarget: pct(t.payrollShareTarget), payrollShareAlert: pct(t.payrollShareAlert),
   foodCost: { target: pct(t.foodCost.target), warn: pct(t.foodCost.warn), critical: pct(t.foodCost.critical) },
@@ -29,6 +30,7 @@ const toForm = (t) => ({
 const share = (v) => Number(String(v).replace(',', '.')) / 100
 const fromForm = (f) => ({
   cashDiscrepancy: Number(f.cashDiscrepancy), accountBalanceTolerance: Number(f.accountBalanceTolerance),
+  acquiringDay: Number(f.acquiringDay),
   ownerCashTolerance: Number(f.ownerCashTolerance), payrollTolerance: Number(f.payrollTolerance),
   payrollShareTarget: share(f.payrollShareTarget), payrollShareAlert: share(f.payrollShareAlert),
   foodCost: { target: share(f.foodCost.target), warn: share(f.foodCost.warn), critical: share(f.foodCost.critical) },
@@ -40,6 +42,7 @@ const MONEY_FIELDS = [
   ['accountBalanceTolerance', 'Допуск остатка счёта', 'сверка с выпиской (BR-CTL-017)'],
   ['ownerCashTolerance', 'Наличные у учредителей', 'необъяснённый остаток (BR-CTL-017)'],
   ['payrollTolerance', 'Допуск сверки ФОТ', 'ведомость против выдач'],
+  ['acquiringDay', 'Эквайринг за смену', 'безнал смены против операций эквайрера (BR-CTL-019)'],
 ]
 const SHARE_FIELDS = [
   ['foodCost.target', 'Food cost — ориентир', 'линия на графике'],

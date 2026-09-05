@@ -302,9 +302,34 @@ export async function extractPdfText(data) {
       const content = await streamOf(objs, ref)
       if (content) items = items.concat(runContent(content, fonts))
     }
-    pages.push({ items })
+    // Страница может быть повёрнута (/Rotate): у выписки Halyk по POS-договору
+    // это 90°, и без поворота строки таблицы читаются как столбцы.
+    pages.push({ items: rotateItems(items, rotationOf(body, objs)) })
   }
   return { pages }
+}
+
+/** Угол поворота страницы: у самой страницы или унаследованный от родителя. */
+export function rotationOf(body, objs) {
+  const own = /\/Rotate\s+(-?\d+)/.exec(body)
+  if (own) return ((Number(own[1]) % 360) + 360) % 360
+  const parent = /\/Parent\s+(\d+)\s+0\s+R/.exec(body)
+  if (parent && objs) {
+    const up = objs.get(Number(parent[1]))
+    if (up) return rotationOf(up, objs)
+  }
+  return 0
+}
+
+/** Поворачивает координаты так, чтобы строки снова стали строками. */
+export function rotateItems(items, angle) {
+  if (!angle) return items
+  return items.map(it => {
+    if (angle === 90) return { ...it, x: it.y, y: -it.x }
+    if (angle === 180) return { ...it, x: -it.x, y: -it.y }
+    if (angle === 270) return { ...it, x: -it.y, y: it.x }
+    return it
+  })
 }
 
 /**

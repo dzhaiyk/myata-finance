@@ -6,6 +6,7 @@ import { stageStatement, commitImport } from '@/lib/bankImport'
 import { getCutoffHour, yearsRange } from '@/lib/dates'
 import { Upload, Trash2, Settings, Plus, X, Save, Calendar, Pencil, Check, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { categoryLabel } from '@/lib/config'
+import AcquiringUploadCard from '@/components/AcquiringUploadCard'
 
 const MONTHS_SHORT = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек']
 
@@ -517,6 +518,8 @@ export default function BankImportPage() {
           </label>
         </div>
       </div>
+
+      <AcquiringUploadCard canUpload={hasPermission('bank_import.upload')} />
 
       {/* RULES PANEL */}
       {showRules && canManage && (
