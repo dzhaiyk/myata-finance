@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn, fmt, MONTHS_RU, money } from '@/lib/utils'
 import { formatLocalDate, yearsRange } from '@/lib/dates'
+import { timesheetTotals } from '@/lib/timesheetDb'
 import { Calculator, Save, CheckCircle2, DollarSign, Calendar, Users } from 'lucide-react'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -165,6 +166,26 @@ export default function PayrollPage() {
     notes: '',
   })
 
+  // Смены и штрафы из табеля (TASK-038): подставляются, расчёт пересчитывается,
+  // ручная правка остаётся возможной — как с выручкой из iiko
+  const [tsStatus, setTsStatus] = useState('')
+  const fillFromTimesheet = async () => {
+    setTsStatus('Читаю табель...')
+    const { shifts, fine } = await timesheetTotals({ year, month, period })
+    let touched = 0
+    setRows(prev => prev.map(r => {
+      if (!r.staff_id || (shifts[r.staff_id] === undefined && fine[r.staff_id] === undefined)) return r
+      touched += 1
+      const u = { ...r, days_worked: shifts[r.staff_id] ?? r.days_worked, deductions: fine[r.staff_id] ?? r.deductions }
+      u.daily_total = u.days_worked * u.daily_rate
+      u.sales_bonus = Math.round(u.sales_amount * u.sales_pct / 100)
+      u.total_earned = u.daily_total + u.sales_bonus
+      u.total_payout = u.total_earned - u.advances - u.deductions
+      return u
+    }))
+    setTsStatus(touched ? `✅ Из табеля: ${touched} чел.` : 'В табеле за этот период пусто')
+  }
+
   const updateRow = (idx, field, value) => {
     setRows(prev => prev.map((r, i) => {
       if (i !== idx) return r
@@ -261,6 +282,12 @@ export default function PayrollPage() {
             <button onClick={() => setPeriod(1)} className={cn('px-3 py-1.5 rounded-md text-xs font-medium transition-all', period === 1 ? 'bg-slate-700 text-white' : 'text-slate-500')}>1–15</button>
             <button onClick={() => setPeriod(2)} className={cn('px-3 py-1.5 rounded-md text-xs font-medium transition-all', period === 2 ? 'bg-slate-700 text-white' : 'text-slate-500')}>16–конец</button>
           </div>
+          {canManage && periodStatus !== 'paid' && (
+            <button onClick={fillFromTimesheet} className="btn-secondary text-sm flex items-center gap-2" title="Смены и штрафы за период из табеля; поля остаются редактируемыми">
+              <Calendar className="w-4 h-4" /> Из табеля
+            </button>
+          )}
+          {tsStatus && <span className="text-xs text-slate-400">{tsStatus}</span>}
         </div>
       </div>
 

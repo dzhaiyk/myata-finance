@@ -12,6 +12,7 @@ import UsersPage from '@/pages/UsersPage'
 import RolesPage from '@/pages/RolesPage'
 import SettingsPage from '@/pages/SettingsPage'
 import DictionariesPage from '@/pages/DictionariesPage'
+import TimesheetPage from '@/pages/TimesheetPage'
 import StaffPage from '@/pages/StaffPage'
 import PayrollPage from '@/pages/PayrollPage'
 import SuppliersPage from '@/pages/SuppliersPage'
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="staff" element={<StaffPage />} />
           <Route path="suppliers" element={<SuppliersPage />} />
           <Route path="payroll" element={<PayrollPage />} />
+          <Route path="timesheet" element={<TimesheetPage />} />
           <Route path="investments" element={<InvestmentsPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="control" element={<ControlPage />} />

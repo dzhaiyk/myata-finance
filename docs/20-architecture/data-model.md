@@ -29,7 +29,8 @@ updated: 2026-09-05
 | `pnl_data` | reporting | `type='historical'` — импорт Excel 2022–2025 (заменяет расчёт); иначе ручная корректировка (прибавляется) | UNIQUE снят в 020: historical и корректировка сосуществуют |
 | `cashflow_data` | reporting | создана в 001, кодом не используется | UNIQUE(year, month, category) |
 | `positions`, `staff` | payroll | должности (ставка, %), сотрудники (override, увольнение) | `department` → `departments.code` (до 025 был CHECK со списком названий) |
-| `payroll_periods`, `payroll_details` | payroll | ведомость за половину месяца; строки по сотрудникам | period IN (1,2); status draft/calculated/paid; UNIQUE(period_id, staff_id) |
+| `timesheet_entries`, `timesheet_fines` | payroll | табель: смена сотрудника за день долей 1 / 0.7 / 0.5; штраф за полумесяц. Кормят `days_worked` и `deductions` расчёта зарплаты (миграция 031) | UNIQUE(staff_id, work_date); UNIQUE(staff_id, year, month, period); экран «Табель», импорт из Excel |
+| `payroll_periods`, `payroll_details` | payroll | ведомость за половину месяца; строки по сотрудникам; `days_worked` дробный с 031 | period IN (1,2); status draft/calculated/paid; UNIQUE(period_id, staff_id) |
 | `investors`, `investor_transactions` | investors | учредители, доли; операции investment/dividend/share_purchase/share_sale | status active/exited |
 | `roles`, `permissions`, `app_users` | access | роли, права (role_id × key), пользователи с паролем в открытом виде | username UNIQUE; UNIQUE(role_id, permission_key) |
 | `profiles` | — | наследие Supabase Auth, не используется | — |

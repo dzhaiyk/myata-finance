@@ -128,6 +128,8 @@ export const ALL_PERMISSIONS = {
   'suppliers.view': 'Просмотр поставщиков',
   'suppliers.manage': 'Управление поставщиками',
   'accounts.manage': 'Счета: переводы и ручные операции',
+  'timesheet.view': 'Просмотр табеля',
+  'timesheet.manage': 'Заполнение табеля и импорт',
   'payroll.view': 'Просмотр зарплат',
   'payroll.manage': 'Расчёт и выплата зарплат',
   'users.view': 'Просмотр пользователей',

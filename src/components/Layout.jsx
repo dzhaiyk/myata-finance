@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/lib/store'
-import { LayoutDashboard, FileText, TrendingUp, Wallet, Upload, Users, Shield, Settings, LogOut, Menu, X, Leaf, UserCheck, Calculator, Package, Landmark, HandCoins, BarChart2, ShieldCheck, ListTree } from 'lucide-react'
+import { LayoutDashboard, FileText, TrendingUp, Wallet, Upload, Users, Shield, Settings, LogOut, Menu, X, Leaf, UserCheck, Calculator, Package, Landmark, HandCoins, BarChart2, ShieldCheck, ListTree, CalendarDays } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { appTitle, venueName, getBranding } from '@/lib/config'
@@ -18,6 +18,7 @@ const NAV = [
   { divider: true },
   { to: '/staff', icon: UserCheck, label: 'Персонал', perm: 'staff.view' },
   { to: '/suppliers', icon: Package, label: 'Поставщики', perm: 'suppliers.view' },
+  { to: '/timesheet', icon: CalendarDays, label: 'Табель', perm: 'timesheet.view' },
   { to: '/payroll', icon: Calculator, label: 'Зарплата', perm: 'payroll.view' },
   { divider: true },
   { to: '/users', icon: Users, label: 'Пользователи', perm: 'users.view' },
