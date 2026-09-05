@@ -157,8 +157,7 @@ export default function DailyReportPage() {
   const [withdrawals, setWithdrawals] = useState(emptyWithdrawals())
   const [iikoLoading, setIikoLoading] = useState(false)
   const [iikoError, setIikoError] = useState('')
-  const [iikoCashLoading, setIikoCashLoading] = useState(false)
-  const [iikoCashInfo, setIikoCashInfo] = useState(null)
+  const [iikoInfo, setIikoInfo] = useState(null)
   // Приложение обновилось — вкладка перезагрузится сама; заполненный черновик
   // при этом сохраняется, иначе менеджер потерял бы введённое (staleReload.js).
   const staleSaveRef = useRef(null)
@@ -737,51 +736,69 @@ export default function DailyReportPage() {
   const isSubmitted = status === 'submitted'
   const isLocked = isSubmitted
 
-  // Выручка из iiko: заполняет отделы и типы оплат за дату отчёта.
-  // Кассу, терминалы и изъятия по-прежнему вводит менеджер — на этом и держится сверка.
+  // Одна кнопка на весь отчёт: выручка по отделам и типам оплат плюс изъятия
+  // из кассы, разложенные по секциям расходов (BR-SHF-016, BR-SHF-021).
+  // Запросы идут по очереди: у iiko одно соединение на сервер, параллельные
+  // вызовы заняли бы два слота лицензии. Кассу и терминалы вводит менеджер —
+  // на этом держится сверка.
   const fillFromIiko = async () => {
     setIikoError('')
     setIikoLoading(true)
     try {
-      const { fetchSales, toDailyReportShape } = await loadModule(() => import('@/lib/iiko'))
-      const days = await fetchSales({ from: date, to: date })
-      const shape = toDailyReportShape(days[date])
-      if (!shape) throw new Error(`за ${date} нет продаж`)
-      const filled = departments.some(d => d.amount) || revenue.some(r => r.amount)
-      if (filled && !confirm('Выручка уже заполнена. Заменить данными из iiko?')) return
-      setDepartments(shape.departments)
-      setRevenue(prev => shape.revenue.map(r => ({ ...r, checks: prev.find(p => p.type === r.type)?.checks || r.checks })))
+      const [iiko, cash, rulesMod] = await Promise.all([
+        loadModule(() => import('@/lib/iiko')), loadModule(() => import('@/lib/iikoCash')),
+        loadModule(() => import('@/lib/iikoWithdrawalRules')),
+      ])
+
+      // Выручка. Ошибка одной половины не отменяет вторую: день без продаж или
+      // без изъятий — обычное дело, отчёт всё равно надо заполнить.
+      let shape = null, salesError = null
+      try {
+        const days = await iiko.fetchSales({ from: date, to: date })
+        shape = iiko.toDailyReportShape(days[date])
+        if (!shape) salesError = 'за эту дату нет продаж'
+      } catch (err) { salesError = String(err.message || err) }
+
+      // Расходы
+      let split = null, cashInfo = null, cashError = null
+      try {
+        const rules = await rulesMod.loadWithdrawalRules()
+        const { payments, fields, rows } = await iiko.fetchCashPayments({ date })
+        if (!rows) cashError = 'за эту дату нет кассовых операций'
+        else {
+          split = cash.splitPayments(payments, rules)
+          cashInfo = {
+            ...cash.summarize(split), rows,
+            discovered: fields.discovered,
+            usedFields: [fields.date, fields.type, fields.comment, fields.account, fields.out, fields.in, fields.sum].filter(Boolean),
+          }
+        }
+      } catch (err) { cashError = String(err.message || err) }
+
+      if (!shape && !split) throw new Error([salesError, cashError].filter(Boolean).join('; '))
+
+      // Одно подтверждение на всё, что перезапишется
+      const warnings = []
+      const revenueFilled = departments.some(d => d.amount) || revenue.some(r => r.amount)
+      const hasManual = SECTIONS.some(sec => (withdrawals[sec.key] || []).some(r => num(r.amount) > 0 && r.source !== 'iiko'))
+      if (shape && revenueFilled) warnings.push('выручка уже заполнена — будет заменена данными из iiko')
+      if (split && hasManual) warnings.push('расходы введены вручную — строки из iiko добавятся поверх, ручные не тронутся')
+      if (warnings.length && !confirm(`${warnings.join(';\n')}.\n\nПродолжить?`)) return
+
+      if (shape) {
+        setDepartments(shape.departments)
+        setRevenue(prev => shape.revenue.map(r => ({ ...r, checks: prev.find(p => p.type === r.type)?.checks || r.checks })))
+      }
+      if (split) setWithdrawals(prev => cash.mergeWithdrawals(prev, split.rows))
+      setIikoInfo({
+        revenue: shape ? shape.total : null,
+        checks: shape ? shape.checks : null,
+        salesError, cashError, cash: cashInfo,
+      })
     } catch (err) {
       setIikoError(String(err.message || err))
     } finally {
       setIikoLoading(false)
-    }
-  }
-
-  // Расходы из iiko: изъятия кассовой смены раскладываются по секциям по правилам
-  // справочника; менеджер проверяет и правит (BR-SHF-021). Повтор не дублирует.
-  const fillExpensesFromIiko = async () => {
-    setIikoError('')
-    setIikoCashLoading(true)
-    try {
-      const [{ fetchCashPayments }, { splitPayments, mergeWithdrawals, summarize }, { loadWithdrawalRules }] = await Promise.all([
-        loadModule(() => import('@/lib/iiko')), loadModule(() => import('@/lib/iikoCash')),
-        loadModule(() => import('@/lib/iikoWithdrawalRules')),
-      ])
-      const rules = await loadWithdrawalRules()
-      const { payments, fields, rows } = await fetchCashPayments({ date })
-      if (!rows) throw new Error(`за ${date} в iiko нет кассовых операций`)
-      const split = splitPayments(payments, rules)
-      const usedFields = [fields.date, fields.type, fields.comment, fields.account, fields.out, fields.in, fields.sum].filter(Boolean)
-      const info = { ...summarize(split), rows, payments: payments.length, discovered: fields.discovered, usedFields }
-      const hasManual = SECTIONS.some(sec => (withdrawals[sec.key] || []).some(r => num(r.amount) > 0 && r.source !== 'iiko'))
-      if (hasManual && !confirm('Расходы уже введены вручную. Добавить строки из iiko поверх? Ручные строки не тронутся.')) return
-      setWithdrawals(prev => mergeWithdrawals(prev, split.rows))
-      setIikoCashInfo(info)
-    } catch (err) {
-      setIikoError(String(err.message || err))
-    } finally {
-      setIikoCashLoading(false)
     }
   }
 
@@ -930,8 +947,37 @@ export default function DailyReportPage() {
           )}
           <input type="date" value={date} onChange={e => { if (!isLocked) setDate(e.target.value) }} disabled={isLocked}
             className="input text-sm font-medium min-w-[160px]" />
+          {!isLocked && (
+            <button onClick={fillFromIiko} disabled={iikoLoading}
+              className="btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50 shrink-0">
+              <Download className="w-3.5 h-3.5" />{iikoLoading ? 'Загрузка из iiko...' : 'Заполнить из iiko'}
+            </button>
+          )}
         </div>
       </div>
+
+      {iikoError && <p className="text-xs text-red-400">iiko: {iikoError}</p>}
+      {iikoInfo && (
+        <div className="card border border-amber-500/20 bg-amber-500/5 text-xs space-y-1">
+          <div>
+            {iikoInfo.revenue != null
+              ? <>Выручка из iiko: {money(iikoInfo.revenue)}{iikoInfo.checks ? `, чеков ${iikoInfo.checks}` : ''}.</>
+              : <span className="text-slate-400">Выручка не заполнена: {iikoInfo.salesError}.</span>}
+          </div>
+          <div>
+            {iikoInfo.cash
+              ? <>Расходы: операций {iikoInfo.cash.rows}, подставлено строк {iikoInfo.cash.added} на {money(iikoInfo.cash.total)};
+                  не распознано {iikoInfo.cash.unmatched} (в «Прочих расходах» с пометкой); пропущено внесений {iikoInfo.cash.skipped}.</>
+              : <span className="text-slate-400">Расходы не заполнены: {iikoInfo.cashError}.</span>}
+          </div>
+          {iikoInfo.cash && (
+            <div className="text-slate-500">
+              Поля отчёта: {iikoInfo.cash.usedFields.join(', ')}{iikoInfo.cash.discovered ? '' : ' (список полей iiko не отдал — взяты по умолчанию)'}
+            </div>
+          )}
+          <div className="text-slate-500">Проверьте суммы и секции — касса и терминалы вводятся вручную, отправка за вами.</div>
+        </div>
+      )}
 
       {/* Submitted banner */}
       {isSubmitted && (
@@ -960,16 +1006,7 @@ export default function DailyReportPage() {
 
       {/* ══════════ БЛОК 1: ДОХОДЫ ══════════ */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="text-lg font-display font-bold text-green-400 flex items-center gap-2">💰 Доходы</h2>
-          {!isLocked && (
-            <button onClick={fillFromIiko} disabled={iikoLoading}
-              className="btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50">
-              <Download className="w-3.5 h-3.5" />{iikoLoading ? 'Загрузка из iiko...' : 'Заполнить из iiko'}
-            </button>
-          )}
-        </div>
-        {iikoError && <p className="text-xs text-red-400">iiko: {iikoError}</p>}
+        <h2 className="text-lg font-display font-bold text-green-400 flex items-center gap-2">💰 Доходы</h2>
 
         {/* Выручка по отделам */}
         <div className="card border-green-500/20 bg-green-500/5">
@@ -1092,28 +1129,7 @@ export default function DailyReportPage() {
 
       {/* ══════════ БЛОК 2: РАСХОДЫ ══════════ */}
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-display font-bold text-red-400 flex items-center gap-2">📤 Расходы</h2>
-          {!isLocked && (
-            <button onClick={fillExpensesFromIiko} disabled={iikoCashLoading}
-              className="btn-secondary text-xs flex items-center gap-1.5">
-              <Download className="w-3.5 h-3.5" />{iikoCashLoading ? 'Загрузка из iiko...' : 'Расходы из iiko'}
-            </button>
-          )}
-        </div>
-        {iikoCashInfo && (
-          <div className="card border border-amber-500/20 bg-amber-500/5 text-xs space-y-1">
-            <div>
-              iiko: операций {iikoCashInfo.rows}; подставлено строк {iikoCashInfo.added} на {money(iikoCashInfo.total)};
-              не распознано {iikoCashInfo.unmatched} (в «Прочих расходах» с пометкой); пропущено внесений {iikoCashInfo.skipped}.
-            </div>
-            <div className="text-slate-500">
-              Поля отчёта: {iikoCashInfo.usedFields.join(', ')}{iikoCashInfo.discovered ? '' : ' (список полей iiko не отдал — взяты по умолчанию)'}
-            </div>
-            <div className="text-slate-500">Проверьте суммы и секции — отправка отчёта остаётся за вами.</div>
-          </div>
-        )}
-
+        <h2 className="text-lg font-display font-bold text-red-400 flex items-center gap-2">📤 Расходы</h2>
         {SECTIONS.map(sec => {
           const isOpen = expanded[sec.key]
           const total = sectionTotal(sec.key)
