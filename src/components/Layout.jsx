@@ -5,7 +5,8 @@ import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { appTitle, venueName, getBranding } from '@/lib/config'
 
-const NAV = [
+// Один список на меню и маршруты: право пункта — право страницы (BR-ACS-004)
+export const NAV = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', perm: 'dashboard.view' },
   { to: '/daily-report', icon: FileText, label: 'Отчёт дня', perm: 'daily_report.view' },
   { to: '/accounts', icon: Landmark, label: 'Счета', perm: 'dashboard.view' },

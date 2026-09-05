@@ -1,7 +1,8 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useAuthStore } from '@/lib/store'
-import Layout from '@/components/Layout'
+import Layout, { NAV } from '@/components/Layout'
+import { canOpenPath, firstAllowedPath } from '@/lib/routeAccess'
 import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
 import DailyReportPage from '@/pages/DailyReportPage'
@@ -33,6 +34,26 @@ function ProtectedRoute({ children }) {
   return children
 }
 
+// Маршрут закрыт тем же правом, что и пункт меню: без него — на первую
+// доступную страницу; без единого права — сообщение (BR-ACS-004, TASK-007).
+function RouteGuard({ children }) {
+  const { hasPermission } = useAuthStore()
+  const { pathname } = useLocation()
+  if (canOpenPath(NAV, pathname, hasPermission)) return children
+  const fallback = firstAllowedPath(NAV, hasPermission)
+  if (fallback) return <Navigate to={fallback} replace />
+  return (
+    <div className="min-h-screen flex items-center justify-center text-sm text-slate-500">
+      У вашей роли нет доступа ни к одному разделу — обратитесь к администратору
+    </div>
+  )
+}
+
+function IndexRedirect() {
+  const { hasPermission } = useAuthStore()
+  return <Navigate to={firstAllowedPath(NAV, hasPermission) || '/dashboard'} replace />
+}
+
 export default function App() {
   const { initialize } = useAuthStore()
   const branding = useAuthStore(st => st.branding)
@@ -52,8 +73,8 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-          <Route index element={<Navigate to="/dashboard" />} />
+        <Route path="/" element={<ProtectedRoute><RouteGuard><Layout /></RouteGuard></ProtectedRoute>}>
+          <Route index element={<IndexRedirect />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="daily-report" element={<DailyReportPage />} />
           <Route path="pnl" element={<PnLPage />} />

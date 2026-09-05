@@ -23,6 +23,7 @@ const CURRENT_MONTH = new Date().getMonth() + 1
 export default function PnLPage() {
   // структура из базы; скрытые строки остаются в расчёте, но не рисуются
   const STRUCTURE = getPnlStructure().filter(l => !l.hidden)
+  // Просмотр закрыт маршрутом (pnl.view), ручные корректировки — правом pnl.edit (BR-ACS-004)
   const { hasPermission, profile } = useAuthStore()
   const [year, setYear] = useState(CURRENT_YEAR)
   const [month, setMonth] = useState(CURRENT_MONTH)
@@ -276,7 +277,7 @@ export default function PnLPage() {
           <button onClick={toggleAll} className="btn-secondary text-xs flex items-center gap-1.5" title={allExpanded ? 'Свернуть всё' : 'Развернуть всё'}>
             <ChevronsUpDown className="w-4 h-4" />{allExpanded ? 'Свернуть' : 'Развернуть'}
           </button>
-          {viewMode === 'month' && (
+          {viewMode === 'month' && hasPermission('pnl.edit') && (
             !editMode ? (
               <button onClick={startEdit} className="btn-secondary text-xs flex items-center gap-1.5">
                 <Pencil className="w-3.5 h-3.5" /> Редактировать

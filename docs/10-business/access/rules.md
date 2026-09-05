@@ -4,7 +4,7 @@ summary: 8 правил BR-ACS-*: вход и сессия, роли, ключи
 read_when: меняешь вход, роли, права, настройки или уведомления
 domain: access
 status: partial
-updated: 2026-09-04
+updated: 2026-09-05
 ---
 
 # Правила BR-ACS-*
@@ -20,14 +20,15 @@ updated: 2026-09-04
 **Реализация.** `store.js`, `UsersPage.jsx`, `RolesPage.jsx`
 
 ### BR-ACS-003 · Ключи прав
-**Правило.** 30 ключей (`store.js:91-121`): daily_report.view/create/edit, pnl.view/edit, cashflow.view/edit, bank_import.view/upload/categorize, dashboard.view/kpi, staff.view/manage, suppliers.view/manage, accounts.manage, payroll.view/manage, users.view/manage, roles.view/manage, investments.view/edit/manage, settings.view/edit, telegram.manage. Права роли — строки `permissions (role_id, permission_key, allowed)`; проверка `hasPermission(key)`.
+**Правило.** 29 ключей (`ALL_PERMISSIONS` в `store.js`): daily_report.view/edit, pnl.view/edit, cashflow.view, bank_import.view/upload/categorize, dashboard.view, staff.view/manage, suppliers.view/manage, accounts.manage, timesheet.view/manage, payroll.view/manage, users.view/manage, roles.view/manage, investments.view/edit/manage, dictionaries.view/manage, settings.view/edit. Каждый ключ что-то ограничивает; ключ без проверки в коде не заводится. Права роли — строки `permissions (role_id, permission_key, allowed)`; проверка `hasPermission(key)`; суперроль получает все.
+**Основание.** 05.09.2026 (Жайык) удалены четыре ключа, которые ничего не ограничивали: `dashboard.kpi`, `daily_report.create`, `telegram.manage` покрыты `dashboard.view`, `daily_report.edit`, `settings.edit`; у `cashflow.edit` не было действия — страница Cash Flow только для чтения. Строки `permissions` с ними удалены миграцией 032.
 **Статус.** INFERRED · источник: `store.js:47-67,91-121`
 **Реализация.** `store.js`, `RolesPage.jsx`
 
 ### BR-ACS-004 · Где проверяются права
-**Правило.** Маршруты проверяют только наличие сессии; права проверяются в меню (`Layout.jsx`) и внутри страниц/действий. Не проверяются нигде: `dashboard.kpi`, `pnl.edit`, `cashflow.edit`, `daily_report.create`, `telegram.manage`. Страница P&L не проверяет право внутри.
-**Статус.** INFERRED · источник: `App.jsx:22-31`, `Layout.jsx:8-24,60`, `PnLPage.jsx:19`
-**Реализация.** `App.jsx`, `Layout.jsx` — см. TASK-007
+**Правило.** Маршрут закрыт тем же правом, что и пункт меню (`NAV` в `Layout.jsx`): без права просмотра прямая ссылка ведёт на первую доступную страницу, без единого права — сообщение. Действия внутри страниц проверяются своими ключами: ручные корректировки P&L — `pnl.edit`.
+**Статус.** CONFIRMED · 2026-09-05 · Жайык · вопрос #2 `open-questions.md`
+**Реализация.** `src/lib/routeAccess.js` (`canOpenPath`, `firstAllowedPath`), `RouteGuard` в `App.jsx`, `PnLPage.jsx` · тест `routeAccess.test.js`
 
 ### BR-ACS-005 · Кто ставит категории выпискам
 **Правило.** Категории строкам выписок ставят только учредитель или бухгалтер (`bank_import.categorize`); менеджеры получают только `bank_import.upload`.

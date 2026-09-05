@@ -112,19 +112,18 @@ export const useAuthStore = create((set, get) => ({
   },
 }))
 
+// Каждый ключ что-то ограничивает: меню и маршрут (`.view`), действие на
+// странице (`.edit`/`.manage`). Ключ без проверки в коде не заводится (TASK-007).
 export const ALL_PERMISSIONS = {
   'daily_report.view': 'Просмотр ежедневных отчётов',
-  'daily_report.create': 'Создание ежедневных отчётов',
   'daily_report.edit': 'Редактирование отчётов',
   'pnl.view': 'Просмотр P&L',
   'pnl.edit': 'Редактирование P&L',
   'cashflow.view': 'Просмотр Cash Flow',
-  'cashflow.edit': 'Редактирование Cash Flow',
   'bank_import.view': 'Просмотр импорта выписки',
   'bank_import.upload': 'Загрузка банковской выписки',
   'bank_import.categorize': 'Категоризация транзакций',
   'dashboard.view': 'Просмотр Dashboard',
-  'dashboard.kpi': 'Просмотр KPI и маржи',
   'staff.view': 'Просмотр персонала',
   'staff.manage': 'Управление персоналом',
   'suppliers.view': 'Просмотр поставщиков',
@@ -145,5 +144,4 @@ export const ALL_PERMISSIONS = {
   'dictionaries.manage': 'Управление справочниками',
   'settings.view': 'Просмотр настроек',
   'settings.edit': 'Редактирование настроек',
-  'telegram.manage': 'Управление Telegram уведомлениями',
 }
