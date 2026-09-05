@@ -16,9 +16,18 @@ const FIELDS = [
   { value: 'amount', label: 'Сумма' },
   { value: 'is_debit', label: 'Дебет/Кредит' },
 ]
+// «по шаблону» — регулярное выражение. Нужен в списке, потому что правила,
+// перенесённые из кода (миграция 027), используют именно его: без этого пункта
+// редактирование такого правила молча сбросило бы его на «содержит».
+const TEXT_OPERATORS = [
+  { value: 'contains', label: 'содержит' }, { value: 'not_contains', label: 'не содержит' },
+  { value: 'equals', label: 'равно' }, { value: 'not_equals', label: 'не равно' },
+  { value: 'starts_with', label: 'начинается с' }, { value: 'matches', label: 'по шаблону' },
+]
+
 const OPERATORS = {
-  beneficiary: [{ value: 'contains', label: 'содержит' }, { value: 'not_contains', label: 'не содержит' }, { value: 'equals', label: 'равно' }, { value: 'not_equals', label: 'не равно' }, { value: 'starts_with', label: 'начинается с' }],
-  purpose: [{ value: 'contains', label: 'содержит' }, { value: 'not_contains', label: 'не содержит' }, { value: 'equals', label: 'равно' }, { value: 'not_equals', label: 'не равно' }, { value: 'starts_with', label: 'начинается с' }],
+  beneficiary: TEXT_OPERATORS,
+  purpose: TEXT_OPERATORS,
   knp: [{ value: 'equals', label: 'равно' }, { value: 'not_equals', label: 'не равно' }, { value: 'contains', label: 'содержит' }],
   amount: [{ value: 'gt', label: '>' }, { value: 'gte', label: '≥' }, { value: 'lt', label: '<' }, { value: 'lte', label: '≤' }, { value: 'equals', label: '=' }, { value: 'between', label: 'между' }],
   is_debit: [{ value: 'equals', label: 'равно' }],
